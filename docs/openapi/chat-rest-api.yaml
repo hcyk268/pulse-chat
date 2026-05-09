@@ -1,0 +1,960 @@
+openapi: 3.0.3
+info:
+  title: Chat Realtime REST API
+  version: 1.0.0-mvp
+  description: |
+    REST API contract cho ung dung chat realtime co ban.
+
+    Pham vi contract:
+    - Auth bang JWT access token va refresh token
+    - Ho so nguoi dung
+    - Tim kiem user
+    - Tao/mo hoi thoai 1-1
+    - Danh sach hoi thoai
+    - Lich su va gui tin nhan text
+    - Danh dau da doc
+
+    Realtime event contract duoc mo ta tai:
+    docs/api-contract-chat-realtime-mvp.md
+servers:
+  - url: http://localhost:8080
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Users
+  - name: Conversations
+  - name: Messages
+paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created and authenticated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login with username or email
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Account is inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: ACCOUNT_INACTIVE
+                message: Account is inactive
+                timestamp: '2026-05-08T16:00:00Z'
+                path: /api/v1/auth/login
+        '423':
+          description: Account is suspended or banned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: ACCOUNT_LOCKED
+                message: Account is suspended or banned
+                timestamp: '2026-05-08T16:00:00Z'
+                path: /api/v1/auth/login
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user profile
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      tags:
+        - Users
+      summary: Update current user profile
+      operationId: updateMe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/users/search:
+    get:
+      tags:
+        - Users
+      summary: Search active users
+      operationId: searchUsers
+      parameters:
+        - $ref: '#/components/parameters/SearchQueryParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSearchResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/conversations:
+    get:
+      tags:
+        - Conversations
+      summary: List conversations for current user
+      operationId: listConversations
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Conversation summaries ordered by lastMessageAt descending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/conversations/direct:
+    post:
+      tags:
+        - Conversations
+      summary: Create or open a direct conversation
+      operationId: createOrOpenDirectConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDirectConversationRequest'
+      responses:
+        '200':
+          description: Existing conversation returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '201':
+          description: New conversation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /api/v1/conversations/{conversationId}:
+    get:
+      tags:
+        - Conversations
+      summary: Get conversation detail
+      operationId: getConversationById
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      responses:
+        '200':
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/conversations/{conversationId}/messages:
+    get:
+      tags:
+        - Messages
+      summary: Get message history for a conversation
+      operationId: listMessages
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Message page sorted by createdAt ascending within a page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      tags:
+        - Messages
+      summary: Send a text message
+      operationId: sendMessage
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: Duplicate clientMessageId or conversation conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: MESSAGE_DUPLICATE
+                message: Message with clientMessageId already exists
+                timestamp: '2026-05-08T16:00:00Z'
+                path: /api/v1/conversations/1001/messages
+  /api/v1/conversations/{conversationId}/read:
+    post:
+      tags:
+        - Messages
+      summary: Mark messages as read up to a message id
+      operationId: markConversationRead
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+      responses:
+        '200':
+          description: Read position updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ConversationIdParam:
+      name: conversationId
+      in: path
+      required: true
+      description: Persistent conversation id
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Page size. Default 20, max 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by previous page response.
+      schema:
+        type: string
+    SearchQueryParam:
+      name: q
+      in: query
+      required: true
+      description: Search text matched against username, displayName or email.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: VALIDATION_ERROR
+            message: Request validation failed
+            timestamp: '2026-05-08T16:00:00Z'
+            path: /api/v1/auth/register
+            fieldErrors:
+              - field: email
+                message: Email is invalid
+    UnauthorizedError:
+      description: Missing, invalid or expired access token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: UNAUTHORIZED
+            message: Access token is invalid or expired
+            timestamp: '2026-05-08T16:00:00Z'
+            path: /api/v1/users/me
+    ForbiddenError:
+      description: Authenticated user is not allowed to access the resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: FORBIDDEN
+            message: You are not allowed to access this resource
+            timestamp: '2026-05-08T16:00:00Z'
+            path: /api/v1/conversations/1001
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: NOT_FOUND
+            message: Resource not found
+            timestamp: '2026-05-08T16:00:00Z'
+            path: /api/v1/conversations/1001
+    ConflictError:
+      description: Conflict with current state of the resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: CONFLICT
+            message: Resource already exists
+            timestamp: '2026-05-08T16:00:00Z'
+            path: /api/v1/auth/register
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+        - path
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Request validation failed
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:00:00Z'
+        path:
+          type: string
+          example: /api/v1/auth/register
+        fieldErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          example: email
+        message:
+          type: string
+          example: Email already exists
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - displayName
+        - password
+        - confirmPassword
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          example: alice
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: alice@example.com
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Alice
+        password:
+          type: string
+          minLength: 8
+          maxLength: 255
+          example: Secret123!
+        confirmPassword:
+          type: string
+          minLength: 8
+          maxLength: 255
+          example: Secret123!
+    LoginRequest:
+      type: object
+      required:
+        - usernameOrEmail
+        - password
+      properties:
+        usernameOrEmail:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: alice
+        password:
+          type: string
+          minLength: 8
+          maxLength: 255
+          example: Secret123!
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          example: jwt-refresh-token
+    UpdateMeRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Alice Nguyen
+        avatarUrl:
+          type: string
+          format: uri
+          maxLength: 500
+          nullable: true
+          example: https://cdn.example.com/avatars/alice.png
+        bio:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: Building a realtime chat app
+      additionalProperties: false
+    AuthTokenResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - tokenType
+        - accessTokenExpiresInMs
+        - refreshTokenExpiresInMs
+        - user
+      properties:
+        accessToken:
+          type: string
+          example: jwt-access-token
+        refreshToken:
+          type: string
+          example: jwt-refresh-token
+        tokenType:
+          type: string
+          example: Bearer
+        accessTokenExpiresInMs:
+          type: integer
+          format: int64
+          example: 3600000
+        refreshTokenExpiresInMs:
+          type: integer
+          format: int64
+          example: 604800000
+        user:
+          $ref: '#/components/schemas/UserProfile'
+    AccountStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - SUSPENDED
+        - BANNED
+    PresenceSnapshot:
+      type: object
+      required:
+        - isOnline
+      properties:
+        isOnline:
+          type: boolean
+          example: true
+        lastActiveAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-05-08T16:05:00Z'
+    UserProfile:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - displayName
+        - accountStatus
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        username:
+          type: string
+          example: alice
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        displayName:
+          type: string
+          example: Alice
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://cdn.example.com/avatars/alice.png
+        bio:
+          type: string
+          nullable: true
+          example: Building a realtime chat app
+        accountStatus:
+          $ref: '#/components/schemas/AccountStatus'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T15:42:10Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:03:55Z'
+    PublicUser:
+      type: object
+      required:
+        - id
+        - username
+        - displayName
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 2
+        username:
+          type: string
+          example: bob
+        displayName:
+          type: string
+          example: Bob
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://cdn.example.com/avatars/bob.png
+    ConversationUser:
+      allOf:
+        - $ref: '#/components/schemas/PublicUser'
+        - type: object
+          properties:
+            presence:
+              $ref: '#/components/schemas/PresenceSnapshot'
+    UserSearchItem:
+      allOf:
+        - $ref: '#/components/schemas/ConversationUser'
+        - type: object
+          properties:
+            directConversationId:
+              type: integer
+              format: int64
+              nullable: true
+              example: 1001
+    Paging:
+      type: object
+      required:
+        - limit
+        - hasMore
+      properties:
+        limit:
+          type: integer
+          example: 20
+        nextCursor:
+          type: string
+          nullable: true
+          example: opaque-next-cursor
+        hasMore:
+          type: boolean
+          example: true
+    UserSearchResponse:
+      type: object
+      required:
+        - items
+        - paging
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSearchItem'
+        paging:
+          $ref: '#/components/schemas/Paging'
+    ConversationType:
+      type: string
+      enum:
+        - DIRECT
+    MessageStatus:
+      type: string
+      enum:
+        - SENT
+        - DELIVERED
+        - READ
+    MessageType:
+      type: string
+      enum:
+        - TEXT
+    LastMessagePreview:
+      type: object
+      required:
+        - id
+        - senderId
+        - contentPreview
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 9001
+        senderId:
+          type: integer
+          format: int64
+          example: 2
+        contentPreview:
+          type: string
+          maxLength: 200
+          example: Are you free today?
+        status:
+          $ref: '#/components/schemas/MessageStatus'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:04:22Z'
+    ConversationSummary:
+      type: object
+      required:
+        - id
+        - type
+        - otherParticipant
+        - unreadCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1001
+        type:
+          $ref: '#/components/schemas/ConversationType'
+        otherParticipant:
+          $ref: '#/components/schemas/ConversationUser'
+        unreadCount:
+          type: integer
+          minimum: 0
+          example: 2
+        lastMessage:
+          allOf:
+            - $ref: '#/components/schemas/LastMessagePreview'
+          nullable: true
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-05-08T16:04:22Z'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T15:10:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:04:22Z'
+    ConversationParticipant:
+      allOf:
+        - $ref: '#/components/schemas/ConversationUser'
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/ConversationSummary'
+        - type: object
+          required:
+            - participants
+          properties:
+            participants:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                $ref: '#/components/schemas/ConversationParticipant'
+    ConversationListResponse:
+      type: object
+      required:
+        - items
+        - paging
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationSummary'
+        paging:
+          $ref: '#/components/schemas/Paging'
+    CreateDirectConversationRequest:
+      type: object
+      required:
+        - targetUserId
+      properties:
+        targetUserId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 2
+    MessageSender:
+      $ref: '#/components/schemas/PublicUser'
+    Message:
+      type: object
+      required:
+        - id
+        - conversationId
+        - sender
+        - content
+        - messageType
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 9001
+        clientMessageId:
+          type: string
+          nullable: true
+          example: c8c4c246-0bb4-4d4f-94e7-512e8d6b6f6b
+        conversationId:
+          type: integer
+          format: int64
+          example: 1001
+        sender:
+          $ref: '#/components/schemas/MessageSender'
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: Hello Bob
+        messageType:
+          $ref: '#/components/schemas/MessageType'
+        status:
+          $ref: '#/components/schemas/MessageStatus'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:02:00Z'
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-05-08T16:02:03Z'
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-05-08T16:02:05Z'
+    MessageListResponse:
+      type: object
+      required:
+        - conversationId
+        - items
+        - paging
+      properties:
+        conversationId:
+          type: integer
+          format: int64
+          example: 1001
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        paging:
+          $ref: '#/components/schemas/Paging'
+    SendMessageRequest:
+      type: object
+      required:
+        - clientMessageId
+        - content
+      properties:
+        clientMessageId:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: c8c4c246-0bb4-4d4f-94e7-512e8d6b6f6b
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: Hello Bob
+        messageType:
+          $ref: '#/components/schemas/MessageType'
+      additionalProperties: false
+    MarkReadRequest:
+      type: object
+      required:
+        - lastReadMessageId
+      properties:
+        lastReadMessageId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 9001
+    MarkReadResponse:
+      type: object
+      required:
+        - conversationId
+        - lastReadMessageId
+        - readAt
+        - unreadCount
+      properties:
+        conversationId:
+          type: integer
+          format: int64
+          example: 1001
+        lastReadMessageId:
+          type: integer
+          format: int64
+          example: 9001
+        readAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T16:02:05Z'
+        unreadCount:
+          type: integer
+          minimum: 0
+          example: 0
