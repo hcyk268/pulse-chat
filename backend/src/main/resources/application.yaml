@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: chat
+  profiles:
+    default: dev
+
+  jpa:
+    open-in-view: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+jwt:
+  access-token-secret: ${JWT_ACCESS_TOKEN_SECRET:${JWT_SECRET:change-me-access-token-secret-at-least-32-characters}}
+  refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET:change-me-refresh-token-secret-at-least-32-characters}
+  access-token-expiration-ms: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:${JWT_EXPIRATION_MS:86400000}}
+  refresh-token-expiration-ms: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:864000000}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
