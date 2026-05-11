@@ -37,8 +37,10 @@ OpenAPI cho phần REST được lưu tại:
 
 ### 2.5. Phân trang
 
-- Danh sách hội thoại, kết quả tìm kiếm và lịch sử tin nhắn dùng cursor pagination
+- `GET /api/v1/conversations` dùng snapshot cursor pagination
+- `GET /api/v1/users/search` và `GET /api/v1/conversations/{conversationId}/messages` dùng cursor pagination thông thường
 - `cursor` là chuỗi opaque, client không tự parse
+- `snapshotAt` là mốc thời gian do server trả về ở page đầu của danh sách hội thoại; client phải gửi lại nguyên giá trị đó cho mọi request load-more tiếp theo
 - `limit` mặc định `20`, tối đa `100`
 
 ### 2.6. Trạng thái tin nhắn
@@ -68,6 +70,12 @@ Các thao tác sau phải gọi REST để đảm bảo dễ retry, dễ audit v
 - Gửi tin nhắn
 - Đánh dấu đã đọc
 
+
+Quy tac hien thi hoi thoai direct trong MVP:
+
+- Khi tao direct conversation moi ma chua co tin nhan nao, chi nguoi tao nhin thay hoi thoai trong danh sach chat
+- Nguoi con lai chi nhin thay hoi thoai sau khi co tin nhan dau tien, hoac khi chinh ho chu dong mo lai direct conversation do
+- `GET /api/v1/conversations` chi tra cac hoi thoai co `isVisibleInList = true` doi voi participant hien tai
 ### 3.2. Hành động tạm thời đi qua WebSocket
 
 Các tín hiệu sau đi qua WebSocket/STOMP:
@@ -85,6 +93,15 @@ Các tín hiệu sau đi qua WebSocket/STOMP:
 - REST là nguồn sự thật cuối cùng cho dữ liệu bền vững
 - Realtime chỉ dùng để giảm độ trễ hiển thị
 - Nếu client bỏ lỡ event realtime, client phải đồng bộ lại bằng REST
+
+### 3.4. Quy tắc snapshot cho danh sách hội thoại
+
+- Danh sách hội thoại được sắp xếp theo `sortAt DESC, conversationId DESC`
+- `sortAt` được xác định là `COALESCE(lastMessageAt, createdAt)`
+- Ở page đầu của `GET /api/v1/conversations`, server trả thêm `snapshotAt`
+- Mọi request load-more của cùng một phiên phân trang phải gửi lại đúng `snapshotAt` đó
+- Nếu một hội thoại có tin nhắn mới sau `snapshotAt`, hội thoại đó không còn thuộc snapshot cũ và không bắt buộc xuất hiện ở các page tiếp theo
+- Các thay đổi mới phát sinh sau `snapshotAt` phải đi vào UI qua realtime event hoặc bằng cách reload page đầu
 
 ## 4. Danh sách endpoint REST
 
@@ -267,6 +284,7 @@ Response `200`:
 - Endpoint: `POST /api/v1/conversations/direct`
 - Nếu hội thoại đã tồn tại, server trả `200`
 - Nếu hội thoại mới được tạo, server trả `201`
+- Khi tao moi ma chua co tin nhan, participant cua nguoi goi hien tai co `isVisibleInList = true`, participant con lai co `isVisibleInList = false`
 
 Request:
 
@@ -291,7 +309,8 @@ Response:
       "presence": {
         "isOnline": true,
         "lastActiveAt": "2026-05-08T16:05:00Z"
-      }
+      },
+      "isVisibleInList": true
     },
     {
       "id": 2,
@@ -301,7 +320,8 @@ Response:
       "presence": {
         "isOnline": false,
         "lastActiveAt": "2026-05-08T15:58:00Z"
-      }
+      },
+      "isVisibleInList": false
     }
   ],
   "otherParticipant": {
@@ -324,8 +344,11 @@ Response:
 
 ### 5.7. Danh sách hội thoại
 
-- Endpoint: `GET /api/v1/conversations?limit=20&cursor=opaque-token`
-- Trả danh sách theo `lastMessageAt` giảm dần
+- Endpoint page đầu: `GET /api/v1/conversations?limit=20`
+- Endpoint load-more: `GET /api/v1/conversations?limit=20&cursor=opaque-token&snapshotAt=2026-05-11T08:00:00Z`
+- Chi tra cac hoi thoai ma participant hien tai co `isVisibleInList = true`
+- Trả danh sách theo `sortAt DESC, conversationId DESC`
+- `sortAt = COALESCE(lastMessageAt, createdAt)`
 
 Response `200`:
 
@@ -361,10 +384,20 @@ Response `200`:
   "paging": {
     "limit": 20,
     "nextCursor": "opaque-next-cursor",
-    "hasMore": true
+    "hasMore": true,
+    "snapshotAt": "2026-05-11T08:00:00Z"
   }
 }
 ```
+
+Quy tắc phân trang:
+
+- Request đầu tiên không cần gửi `cursor` và `snapshotAt`
+- Response đầu tiên phải trả `paging.snapshotAt`
+- Từ request load-more thứ hai trở đi, nếu có `cursor` thì bắt buộc phải gửi lại đúng `snapshotAt` đã nhận ở page đầu
+- `nextCursor` được tạo từ hội thoại cuối cùng của page hiện tại, dựa trên cặp giá trị `sortAt` và `conversationId`, sau đó encode thành chuỗi opaque
+- Backend phải query page tiếp theo trong cùng snapshot, tức là chỉ lấy các hội thoại có `sortAt <= snapshotAt`
+- Nếu trước khi load-more có hội thoại nhận tin nhắn mới và nhảy lên đầu danh sách, hội thoại đó không đi vào page tiếp theo của snapshot cũ; client nhận nó qua realtime event `conversation.updated` hoặc reload page đầu
 
 ### 5.8. Chi tiết hội thoại
 
@@ -415,6 +448,7 @@ Response `200`:
 
 - Endpoint: `POST /api/v1/conversations/{conversationId}/messages`
 - `clientMessageId` là bắt buộc để chống duplicate
+- Neu day la tin nhan dau tien cua hoi thoai direct, server phai chuyen `isVisibleInList = true` cho participant con lai truoc khi phat event realtime
 
 Request:
 
@@ -451,6 +485,7 @@ Response `201`:
 Lưu ý:
 
 - Sau khi REST trả `201`, server phải đồng thời phát event realtime `message.created`
+- Neu tin nhan dau tien lam hoi thoai direct tu trang thai an sang hien voi nguoi nhan, server phai phat them `conversation.updated` de danh sach chat phia nguoi nhan xuat hien hoi thoai
 - Nếu client gửi lại cùng `clientMessageId` trong cùng hội thoại, server nên trả lại message đã tồn tại thay vì tạo bản ghi mới
 
 ### 5.11. Đánh dấu đã đọc

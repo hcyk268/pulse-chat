@@ -187,10 +187,11 @@ paths:
       operationId: listConversations
       parameters:
         - $ref: '#/components/parameters/LimitParam'
-        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/ConversationCursorParam'
+        - $ref: '#/components/parameters/ConversationSnapshotAtParam'
       responses:
         '200':
-          description: Conversation summaries ordered by lastMessageAt descending
+          description: Conversation summaries visible to the current participant, ordered by sortAt DESC where sortAt = COALESCE(lastMessageAt, createdAt). The first page returns snapshotAt; every subsequent load-more request must reuse that same snapshotAt.
           content:
             application/json:
               schema:
@@ -211,13 +212,13 @@ paths:
               $ref: '#/components/schemas/CreateDirectConversationRequest'
       responses:
         '200':
-          description: Existing conversation returned
+          description: Existing conversation returned. If the current participant had it hidden, the server may mark that participant as visible again.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConversationDetail'
         '201':
-          description: New conversation created
+          description: New conversation created. The creator sees it immediately; the target participant stays hidden until the first message is sent or they open it themselves.
           content:
             application/json:
               schema:
@@ -289,7 +290,7 @@ paths:
               $ref: '#/components/schemas/SendMessageRequest'
       responses:
         '201':
-          description: Message created successfully
+          description: Message created successfully. If this is the first message in a direct conversation, the target participant becomes visible in the conversation list.
           content:
             application/json:
               schema:
@@ -375,6 +376,22 @@ components:
       description: Opaque cursor returned by previous page response.
       schema:
         type: string
+    ConversationCursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by the previous /api/v1/conversations page. If provided, snapshotAt from the first page must also be provided unchanged.
+      schema:
+        type: string
+    ConversationSnapshotAtParam:
+      name: snapshotAt
+      in: query
+      required: false
+      description: Snapshot timestamp returned by the first /api/v1/conversations page. Omit on the first page; required when cursor is provided.
+      schema:
+        type: string
+        format: date-time
+        example: '2026-05-11T08:00:00Z'
     SearchQueryParam:
       name: q
       in: query
@@ -708,6 +725,18 @@ components:
         hasMore:
           type: boolean
           example: true
+    ConversationPaging:
+      allOf:
+        - $ref: '#/components/schemas/Paging'
+        - type: object
+          required:
+            - snapshotAt
+          properties:
+            snapshotAt:
+              type: string
+              format: date-time
+              description: Frozen snapshot timestamp for the current conversation list pagination session. Reuse it unchanged for every load-more request.
+              example: '2026-05-11T08:00:00Z'
     UserSearchResponse:
       type: object
       required:
@@ -803,6 +832,14 @@ components:
     ConversationParticipant:
       allOf:
         - $ref: '#/components/schemas/ConversationUser'
+        - type: object
+          required:
+            - isVisibleInList
+          properties:
+            isVisibleInList:
+              type: boolean
+              description: Whether this participant currently sees the conversation in their chat list.
+              example: true
     ConversationDetail:
       allOf:
         - $ref: '#/components/schemas/ConversationSummary'
@@ -827,7 +864,7 @@ components:
           items:
             $ref: '#/components/schemas/ConversationSummary'
         paging:
-          $ref: '#/components/schemas/Paging'
+          $ref: '#/components/schemas/ConversationPaging'
     CreateDirectConversationRequest:
       type: object
       required:
@@ -838,6 +875,7 @@ components:
           format: int64
           minimum: 1
           example: 2
+      additionalProperties: false
     MessageSender:
       $ref: '#/components/schemas/PublicUser'
     Message:

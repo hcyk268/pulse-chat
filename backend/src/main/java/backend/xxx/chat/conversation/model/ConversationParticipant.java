@@ -51,12 +51,24 @@ public class ConversationParticipant {
     @Column(name = "unread_count", nullable = false)
     private long unreadCount;
 
+    @Column(name = "is_visible_in_list", nullable = false)
+    private boolean isVisibleInList;
+
     public static ConversationParticipant create(Conversation conversation, User user) {
+        return create(conversation, user, false);
+    }
+
+    public static ConversationParticipant create(
+            Conversation conversation,
+            User user,
+            boolean isVisibleInList
+    ) {
         ConversationParticipant participant = new ConversationParticipant();
         participant.id = new ConversationParticipantId(conversation.getId(), user.getId());
         participant.conversation = conversation;
         participant.user = user;
         participant.unreadCount = 0L;
+        participant.isVisibleInList = isVisibleInList;
         return participant;
     }
 
@@ -67,5 +79,13 @@ public class ConversationParticipant {
 
     public void incrementUnreadCount() {
         this.unreadCount++;
+    }
+
+    public void markVisibleInList() {
+        this.isVisibleInList = true;
+    }
+
+    public void hideFromList() {
+        this.isVisibleInList = false;
     }
 }

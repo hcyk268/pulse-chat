@@ -1,12 +1,12 @@
 package backend.xxx.chat.user.service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
-import backend.xxx.chat.common.exception.UnauthorizedException;
 import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.user.dto.UpdateMyProfileRequest;
@@ -34,28 +34,24 @@ public class UserService {
     private final PresenceRepository presenceRepository;
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final UserMapper userMapper;
+    private final UserLookupService userLookupService;
 
     @Transactional(readOnly = true)
     public UserResponse getMyProfile(String username) {
-        User user = findCurrentUser(username);
+        User user = userLookupService.getCurrentUser(username);
         return userMapper.toResponse(user);
     }
 
     @Transactional
     public UserResponse updateMyProfile(String username, UpdateMyProfileRequest request) {
-        User user = findCurrentUser(username);
+        User user = userLookupService.getCurrentUser(username);
         user.updateProfile(request.displayName(), request.avatarUrl(), request.bio());
         return userMapper.toResponse(user);
     }
 
-    private User findCurrentUser(String username) {
-        return userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-    }
-
     @Transactional(readOnly = true)
     public UserSearchResponse search(String currentUsername, String keyword, Short limit) {
-        User currentUser = findCurrentUser(currentUsername);
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
         String normalizedKeyword = normalizeSearchKeyword(keyword);
         int normalizedLimit = normalizeSearchLimit(limit);
 
@@ -84,7 +80,7 @@ public class UserService {
 
         return new UserSearchResponse(
                 items,
-                new CursorPageResponse(normalizedLimit, null, hasMore)
+                new CursorPageResponse(normalizedLimit, null, hasMore, Instant.now())
         );
     }
 
