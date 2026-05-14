@@ -7,7 +7,7 @@ import StatusPill from "../components/ui/StatusPill";
 import { useChatStore } from "../hooks/useChatStore";
 
 export default function ProfilePage() {
-  const { currentUser, stats, updateProfile } = useChatStore();
+  const { currentUser, signOut, stats, updateProfile } = useChatStore();
   const [form, setForm] = useState({
     displayName: currentUser.displayName,
     email: currentUser.email,
@@ -65,6 +65,7 @@ export default function ProfilePage() {
 
             <Link
               to="/login"
+              onClick={() => signOut()}
               className="mt-7 flex w-full items-center justify-center gap-2 rounded-lg border border-rose-400/20 bg-rose-400/10 px-4 py-3 font-medium text-rose-100 transition hover:bg-rose-400/20"
             >
               <LogOut size={18} />

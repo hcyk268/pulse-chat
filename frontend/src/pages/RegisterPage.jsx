@@ -1,15 +1,70 @@
-import { ArrowRight, LockKeyhole, Mail, UserRound } from "lucide-react";
+import { AlertCircle, ArrowRight, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthChatArtwork from "../components/assets/AuthChatArtwork";
 import BrandMark from "../components/assets/BrandMark";
 import StatusPill from "../components/ui/StatusPill";
+import { useChatStore } from "../hooks/useChatStore";
+import { register } from "../services/authApi";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { setAuthenticatedSession } = useChatStore();
+  const [form, setForm] = useState({
+    displayName: "",
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [rememberSession, setRememberSession] = useState(true);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event) {
+  function updateField(field, value) {
+    setError("");
+    setForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
-    navigate("/chat");
+
+    const payload = {
+      displayName: form.displayName.trim(),
+      username: form.username.trim(),
+      email: form.email.trim(),
+      password: form.password,
+      confirmPassword: form.confirmPassword,
+    };
+
+    if (
+      !payload.displayName ||
+      !payload.username ||
+      !payload.email ||
+      !payload.password ||
+      !payload.confirmPassword
+    ) {
+      setError("Please fill in all account fields.");
+      return;
+    }
+
+    if (payload.password !== payload.confirmPassword) {
+      setError("Password confirmation does not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      const authSession = await register(payload);
+      setAuthenticatedSession(authSession, rememberSession);
+      navigate("/chat", { replace: true });
+    } catch (registerError) {
+      setError(registerError.message || "Registration failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -27,33 +82,86 @@ export default function RegisterPage() {
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="block sm:col-span-2">
               <span className="text-sm font-medium text-slate-300">Display name</span>
-              <Field icon={UserRound} defaultValue="Maya Nguyen" placeholder="Your public name" />
+              <Field
+                icon={UserRound}
+                value={form.displayName}
+                onChange={(value) => updateField("displayName", value)}
+                autoComplete="name"
+                placeholder="Your public name"
+              />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-300">Username</span>
-              <Field icon={UserRound} defaultValue="maya" placeholder="maya" />
+              <Field
+                icon={UserRound}
+                value={form.username}
+                onChange={(value) => updateField("username", value)}
+                autoComplete="username"
+                placeholder="maya"
+              />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-300">Email</span>
-              <Field icon={Mail} defaultValue="maya@pulse.local" placeholder="name@company.com" />
+              <Field
+                icon={Mail}
+                value={form.email}
+                onChange={(value) => updateField("email", value)}
+                autoComplete="email"
+                placeholder="name@company.com"
+              />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-300">Password</span>
-              <Field icon={LockKeyhole} type="password" defaultValue="secret123" />
+              <Field
+                icon={LockKeyhole}
+                type="password"
+                value={form.password}
+                onChange={(value) => updateField("password", value)}
+                autoComplete="new-password"
+              />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-300">Confirm</span>
-              <Field icon={LockKeyhole} type="password" defaultValue="secret123" />
+              <Field
+                icon={LockKeyhole}
+                type="password"
+                value={form.confirmPassword}
+                onChange={(value) => updateField("confirmPassword", value)}
+                autoComplete="new-password"
+              />
             </label>
           </div>
 
+          <label className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+            <input
+              type="checkbox"
+              checked={rememberSession}
+              onChange={(event) => setRememberSession(event.target.checked)}
+              className="h-4 w-4 rounded border-white/20 bg-slate-900 accent-cyan-300"
+            />
+            Remember session
+          </label>
+
+          {error ? (
+            <div className="mt-5 flex items-start gap-3 rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-sm leading-5 text-rose-100">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
           <button
             type="submit"
-            className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg bg-[#2aabee] px-5 py-3.5 font-semibold text-white shadow-[0_8px_22px_rgba(42,171,238,0.22)] transition hover:bg-[#37b7f4]"
+            disabled={isSubmitting}
+            className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg bg-[#2aabee] px-5 py-3.5 font-semibold text-white shadow-[0_8px_22px_rgba(42,171,238,0.22)] transition hover:bg-[#37b7f4] disabled:cursor-not-allowed disabled:bg-[#242f3d] disabled:text-slate-500 disabled:shadow-none"
           >
-            Start chatting
+            {isSubmitting ? "Creating account..." : "Start chatting"}
             <ArrowRight size={19} />
           </button>
+
+          <div className="mt-6 flex items-center gap-3 rounded-lg bg-[#242f3d] p-3 text-sm text-slate-300">
+            <ShieldCheck size={18} className="shrink-0" />
+            Your session starts after account creation.
+          </div>
 
           <p className="mt-5 text-center text-sm text-slate-400">
             Already have an account?{" "}
@@ -87,14 +195,23 @@ export default function RegisterPage() {
   );
 }
 
-function Field({ icon: Icon, type = "text", defaultValue = "", placeholder = "" }) {
+function Field({
+  icon: Icon,
+  type = "text",
+  value,
+  onChange,
+  placeholder = "",
+  autoComplete = undefined,
+}) {
   return (
     <div className="mt-2 flex items-center gap-3 rounded-lg bg-[#242f3d] px-4 py-3 transition focus-within:bg-[#2b3948]">
       <Icon size={18} className="text-slate-500" />
       <input
         type={type}
-        defaultValue={defaultValue}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        autoComplete={autoComplete}
         className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
       />
     </div>

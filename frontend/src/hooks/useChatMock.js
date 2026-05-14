@@ -1,16 +1,27 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   contactsMock,
   conversationsMock,
   currentUserMock,
   suggestedReplies,
 } from "../data/mockData";
+import {
+  clearAuthSession,
+  getAuthSession,
+  hasValidAuthSession,
+  isPersistentSession,
+  saveAuthSession,
+} from "../utils/authStorage";
+import { setAuthEventHandlers } from "../services/apiClient";
+import { getMe } from "../services/userApi";
 
 const statusRank = {
   SENT: 1,
   DELIVERED: 2,
   READ: 3,
 };
+
+const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
 
 function cloneConversations() {
   return conversationsMock.map((conversation) => ({
@@ -25,6 +36,26 @@ function createClientId() {
   }
 
   return `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function toCurrentUser(user) {
+  return {
+    ...currentUserMock,
+    ...user,
+    id: currentUserMock.id,
+    backendId: user?.id ?? currentUserMock.id,
+    bio: user?.bio ?? currentUserMock.bio,
+    accent: user?.accent ?? currentUserMock.accent,
+  };
+}
+
+function getStoredAuthSession() {
+  if (!hasValidAuthSession()) {
+    clearAuthSession();
+    return null;
+  }
+
+  return getAuthSession();
 }
 
 function nextNumericId(items, fallback) {
@@ -47,7 +78,14 @@ function upgradeStatus(message, nextStatus) {
 }
 
 export function useChatMock() {
-  const [currentUser, setCurrentUser] = useState(currentUserMock);
+  const [authSession, setAuthSession] = useState(getStoredAuthSession);
+  const [currentUser, setCurrentUser] = useState(() => {
+    return authSession?.user ? toCurrentUser(authSession.user) : currentUserMock;
+  });
+  const [authStatus, setAuthStatus] = useState(() =>
+    authSession ? "checking" : "unauthenticated",
+  );
+  const [authMessage, setAuthMessage] = useState("");
   const [contacts] = useState(contactsMock);
   const [conversations, setConversations] = useState(cloneConversations);
   const [typingByConversation, setTypingByConversation] = useState({
@@ -93,6 +131,75 @@ export function useChatMock() {
       activeConversations: conversations.length,
     };
   }, [contacts, conversations]);
+
+  const applyAuthenticatedSession = useCallback((nextAuthSession, rememberSession = true) => {
+    saveAuthSession(nextAuthSession, rememberSession);
+    setAuthSession(nextAuthSession);
+    setCurrentUser(toCurrentUser(nextAuthSession.user));
+    setAuthStatus("authenticated");
+    setAuthMessage("");
+  }, []);
+
+  const clearAuthenticatedSession = useCallback((message = "") => {
+    clearAuthSession();
+    setAuthSession(null);
+    setCurrentUser(currentUserMock);
+    setAuthStatus("unauthenticated");
+    setAuthMessage(message);
+  }, []);
+
+  useEffect(() => {
+    setAuthEventHandlers({
+      onAuthFailure: (message) => {
+        clearAuthenticatedSession(message || SESSION_EXPIRED_MESSAGE);
+      },
+      onAuthRefresh: (nextAuthSession) => {
+        applyAuthenticatedSession(nextAuthSession, isPersistentSession());
+      },
+    });
+
+    return () => setAuthEventHandlers();
+  }, [applyAuthenticatedSession, clearAuthenticatedSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function verifyStoredSession() {
+      const storedAuthSession = getStoredAuthSession();
+
+      if (!storedAuthSession) {
+        if (!cancelled) {
+          setAuthStatus("unauthenticated");
+        }
+        return;
+      }
+
+      try {
+        setAuthStatus("checking");
+        const user = await getMe();
+        if (cancelled) return;
+
+        const latestAuthSession = getAuthSession() ?? storedAuthSession;
+        applyAuthenticatedSession(
+          {
+            ...latestAuthSession,
+            user,
+          },
+          isPersistentSession(),
+        );
+      } catch (error) {
+        if (cancelled) return;
+
+        clearAuthenticatedSession(error.message || SESSION_EXPIRED_MESSAGE);
+      }
+    }
+
+    verifyStoredSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyAuthenticatedSession, clearAuthenticatedSession]);
 
   function getConversationById(conversationId) {
     const conversation = conversations.find(
@@ -261,7 +368,22 @@ export function useChatMock() {
     }));
   }
 
+  function setAuthenticatedUser(user) {
+    setCurrentUser(toCurrentUser(user));
+  }
+
+  function setAuthenticatedSession(nextAuthSession, rememberSession = true) {
+    applyAuthenticatedSession(nextAuthSession, rememberSession);
+  }
+
+  function signOut(message = "") {
+    clearAuthenticatedSession(message);
+  }
+
   return {
+    authSession,
+    authMessage,
+    authStatus,
     contacts,
     conversations,
     conversationSummaries,
@@ -271,6 +393,11 @@ export function useChatMock() {
     sendMessage,
     startConversation,
     stats,
+    isAuthenticated: authStatus === "authenticated" && Boolean(authSession),
+    isAuthLoading: authStatus === "checking",
+    setAuthenticatedSession,
+    setAuthenticatedUser,
+    signOut,
     typingByConversation,
     updateProfile,
   };

@@ -454,7 +454,7 @@ Request:
 
 ```json
 {
-  "conversationId": 1001,
+    "conversationId": 1001,
   "clientMessageId": "c8c4c246-0bb4-4d4f-94e7-512e8d6b6f6b",
   "content": "Hello Bob",
   "messageType": "TEXT"
