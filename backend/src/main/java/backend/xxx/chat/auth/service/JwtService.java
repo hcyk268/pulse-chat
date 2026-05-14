@@ -8,9 +8,12 @@ import backend.xxx.chat.auth.model.JwtTokenType;
 import javax.crypto.SecretKey;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.DecodingException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.WeakKeyException;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -51,8 +54,7 @@ public class JwtService {
     }
 
     public JwtTokenType extractTokenType(String token) {
-        String tokenType = extractAllClaims(token).get(TOKEN_TYPE_CLAIM, String.class);
-        return JwtTokenType.valueOf(tokenType);
+        return extractTokenType(extractAllClaims(token));
     }
 
     public boolean isAccessTokenValid(String token, UserDetails userDetails) {
@@ -85,19 +87,31 @@ public class JwtService {
     }
 
     private boolean isTokenValid(String token, UserDetails userDetails, JwtTokenType expectedTokenType) {
-        String username = extractUsername(token);
-        JwtTokenType tokenType = extractTokenType(token);
-        return username.equals(userDetails.getUsername())
-                && tokenType == expectedTokenType
-                && !isTokenExpired(token);
+        try {
+            Claims claims = extractAllClaims(token, expectedTokenType);
+            String username = claims.getSubject();
+            JwtTokenType tokenType = extractTokenType(claims);
+            return username.equals(userDetails.getUsername())
+                    && tokenType == expectedTokenType
+                    && !isTokenExpired(claims);
+        } catch (JwtException | IllegalArgumentException ex) {
+            return false;
+        }
     }
 
-    private boolean isTokenExpired(String token) {
-        return extractAllClaims(token).getExpiration().before(new Date());
+    private boolean isTokenExpired(Claims claims) {
+        return claims.getExpiration().before(new Date());
     }
 
     private Claims extractAllClaims(String token) {
-        JwtTokenType tokenType = extractUnsignedTokenType(token);
+        try {
+            return extractAllClaims(token, JwtTokenType.ACCESS);
+        } catch (JwtException | IllegalArgumentException ex) {
+            return extractAllClaims(token, JwtTokenType.REFRESH);
+        }
+    }
+
+    private Claims extractAllClaims(String token, JwtTokenType tokenType) {
         return Jwts.parser()
                 .verifyWith(getSigningKey(tokenType))
                 .build()
@@ -105,12 +119,7 @@ public class JwtService {
                 .getPayload();
     }
 
-    private JwtTokenType extractUnsignedTokenType(String token) {
-        Claims claims = Jwts.parser()
-                .unsecured()
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+    private JwtTokenType extractTokenType(Claims claims) {
         String tokenType = claims.get(TOKEN_TYPE_CLAIM, String.class);
         return JwtTokenType.valueOf(tokenType);
     }
@@ -120,7 +129,7 @@ public class JwtService {
         try {
             byte[] keyBytes = Decoders.BASE64.decode(secret);
             return Keys.hmacShaKeyFor(keyBytes);
-        } catch (IllegalArgumentException ex) {
+        } catch (DecodingException | WeakKeyException ex) {
             return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         }
     }

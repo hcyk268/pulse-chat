@@ -2,6 +2,7 @@ package backend.xxx.chat.message.model;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 import backend.xxx.chat.common.model.AbstractBaseEntity;
 import backend.xxx.chat.conversation.model.Conversation;
@@ -14,6 +15,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,12 +24,23 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "messages")
+@Table(
+        name = "messages",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_messages_conversation_client_message_id",
+                        columnNames = {"conversation_id", "client_message_id"}
+                )
+        }
+)
 @NoArgsConstructor
 @AllArgsConstructor
 public class Message extends AbstractBaseEntity<Long> {
 
     private static final int CONTENT_MAX_LENGTH = 4000;
+
+    @Column(name = "client_message_id", nullable = false)
+    private UUID clientMessageId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "conversation_id", nullable = false)
@@ -54,10 +67,16 @@ public class Message extends AbstractBaseEntity<Long> {
     @Column(name = "read_at")
     private Instant readAt;
 
-    public static Message createTextMessage(Conversation conversation, User sender, String content) {
+    public static Message createTextMessage(
+            Conversation conversation,
+            User sender,
+            UUID clientMessageId,
+            String content
+    ) {
         Message message = new Message();
         message.conversation = Objects.requireNonNull(conversation, "conversation must not be null");
         message.sender = Objects.requireNonNull(sender, "sender must not be null");
+        message.clientMessageId = Objects.requireNonNull(clientMessageId, "clientMessageId must not be null");
         message.content = requireContent(content);
         message.messageType = MessageType.TEXT;
         message.status = MessageStatus.SENT;

@@ -1,0 +1,78 @@
+package backend.xxx.chat.realtime.listener;
+
+import backend.xxx.chat.conversation.dto.ConversationResponse;
+import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
+import backend.xxx.chat.conversation.service.ConversationResponseBuilder;
+import backend.xxx.chat.message.dto.MessageResponse;
+import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.message.service.MessageMapper;
+import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
+import backend.xxx.chat.realtime.model.ConversationUpdatedEventData;
+import backend.xxx.chat.realtime.model.MessageCreatedEventData;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
+import backend.xxx.chat.realtime.service.RealtimeEventPublisher;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+import java.util.List;
+import java.util.Map;
+
+@Component
+@RequiredArgsConstructor
+public class MessageRealtimeEventListener {
+
+    private final MessageRepository messageRepository;
+    private final ConversationParticipantRepository participantRepository;
+    private final MessageMapper messageMapper;
+    private final ConversationResponseBuilder conversationResponseBuilder;
+    private final RealtimeEventPublisher realtimeEventPublisher;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public void onMessageCreated(MessageCreatedDomainEvent event) {
+        Message message = messageRepository.findByIdInWithSender(List.of(event.messageId()))
+                .stream()
+                .findFirst()
+                .orElseThrow();
+
+        MessageResponse messageResponse = messageMapper.toResponse(message);
+
+        List<ConversationParticipant> participants =
+                participantRepository.findByConversationIdWithUser(event.conversationId());
+        Map<String, ConversationResponse> conversationByUsername =
+                conversationResponseBuilder.buildByUsernameForParticipants(participants);
+
+        MessageCreatedEventData messageData = new MessageCreatedEventData(messageResponse);
+
+        for (ConversationParticipant participant : participants) {
+            String username = participant.getUser().getUsername();
+
+            realtimeEventPublisher.sendToUser(
+                    username,
+                    RealtimeEventType.MESSAGE_CREATED,
+                    event.conversationId(),
+                    messageData
+            );
+
+            ConversationResponse conversationResponse = conversationByUsername.get(username);
+            if (conversationResponse == null) {
+                continue;
+            }
+
+            ConversationUpdatedEventData conversationData = new ConversationUpdatedEventData(conversationResponse);
+
+            realtimeEventPublisher.sendToUser(
+                    username,
+                    RealtimeEventType.CONVERSATION_UPDATED,
+                    event.conversationId(),
+                    conversationData
+            );
+        }
+    }
+}

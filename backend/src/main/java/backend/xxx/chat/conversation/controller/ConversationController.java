@@ -41,4 +41,9 @@ public class ConversationController {
                         limit, cursor, snapshotAt, currentUserProvider.getCurrentUsername()));
     }
 
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<DirectConversationResponse> getDetailConversation(@PathVariable Long conversationId) {
+        return ResponseEntity.ok(conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
+    }
+
 }

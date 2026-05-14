@@ -252,14 +252,14 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
-  /api/v1/conversations/{conversationId}/messages:
+  /api/v1/messages:
     get:
       tags:
         - Messages
       summary: Get message history for a conversation
       operationId: listMessages
       parameters:
-        - $ref: '#/components/parameters/ConversationIdParam'
+        - $ref: '#/components/parameters/ConversationIdQueryParam'
         - $ref: '#/components/parameters/LimitParam'
         - $ref: '#/components/parameters/CursorParam'
       responses:
@@ -280,8 +280,6 @@ paths:
         - Messages
       summary: Send a text message
       operationId: sendMessage
-      parameters:
-        - $ref: '#/components/parameters/ConversationIdParam'
       requestBody:
         required: true
         content:
@@ -313,15 +311,13 @@ paths:
                 code: MESSAGE_DUPLICATE
                 message: Message with clientMessageId already exists
                 timestamp: '2026-05-08T16:00:00Z'
-                path: /api/v1/conversations/1001/messages
-  /api/v1/conversations/{conversationId}/read:
+                path: /api/v1/messages
+  /api/v1/messages/read:
     post:
       tags:
         - Messages
       summary: Mark messages as read up to a message id
-      operationId: markConversationRead
-      parameters:
-        - $ref: '#/components/parameters/ConversationIdParam'
+      operationId: markMessagesRead
       requestBody:
         required: true
         content:
@@ -355,6 +351,15 @@ components:
       in: path
       required: true
       description: Persistent conversation id
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ConversationIdQueryParam:
+      name: conversationId
+      in: query
+      required: true
+      description: Persistent conversation id used to scope message operations.
       schema:
         type: integer
         format: int64
@@ -946,9 +951,15 @@ components:
     SendMessageRequest:
       type: object
       required:
+        - conversationId
         - clientMessageId
         - content
       properties:
+        conversationId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1001
         clientMessageId:
           type: string
           minLength: 1
@@ -965,8 +976,14 @@ components:
     MarkReadRequest:
       type: object
       required:
+        - conversationId
         - lastReadMessageId
       properties:
+        conversationId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1001
         lastReadMessageId:
           type: integer
           format: int64

@@ -1,6 +1,7 @@
 package backend.xxx.chat.conversation.service;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import backend.xxx.chat.common.exception.UserNotFoundException;
 import backend.xxx.chat.conversation.dto.ConversationBoxResponse;
@@ -173,7 +174,9 @@ class ConversationServiceTest {
                         new CreateDirectConversationRequest(otherUser.getId())
                 );
         Conversation conversation = conversationRepository.findById(result.response().id()).orElseThrow();
-        Message message = messageRepository.saveAndFlush(Message.createTextMessage(conversation, otherUser, content));
+        Message message = messageRepository.saveAndFlush(
+                Message.createTextMessage(conversation, otherUser, UUID.randomUUID(), content)
+        );
 
         conversation.updateLastMessage(message.getId(), lastMessageAt);
         return conversationRepository.saveAndFlush(conversation);

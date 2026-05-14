@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,6 +47,7 @@ public class ConversationService {
     private final MessageRepository messageRepository;
     private final PresenceRepository presenceRepository;
     private final ConversationMapper conversationMapper;
+    private final ConversationResponseBuilder conversationResponseBuilder;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -133,16 +133,6 @@ public class ConversationService {
             );
         }
 
-        Map<Long, List<ConversationParticipant>> participantsByConversationId =
-                findParticipantsByConversationId(page);
-
-        Map<Long, Presence> presenceByUserId = findPresenceByUserId(
-                participantsByConversationId.values().stream()
-                        .flatMap(List::stream)
-                        .toList()
-        );
-        Map<Long, Message> lastMessageById = findLastMessageById(page);
-
         String nextCursor = null;
         if (hasMore) {
             ConversationParticipant lastConversation = page.get(page.size() - 1);
@@ -152,28 +142,55 @@ public class ConversationService {
         }
         CursorPageResponse cursorPageResponse = new CursorPageResponse(pageLimit, nextCursor, hasMore, snapshot);
 
-        List<ConversationResponse> items = page.stream()
-                .map(cp -> {
-                    Conversation conversation = cp.getConversation();
-                    List<ConversationParticipant> participants = participantsByConversationId.getOrDefault(
-                            conversation.getId(),
-                            List.of()
-                    );
-                    return conversationMapper.toConversationResponse(
-                            cp,
-                            currentUser,
-                            participants,
-                            presenceByUserId,
-                            lastMessageById
-                    );
-                })
-                .toList();
+        List<ConversationResponse> items = conversationResponseBuilder.buildForCurrentUser(page, currentUser);
 
         return new ConversationBoxResponse(
                 items,
                 cursorPageResponse
         );
     }
+
+    @Transactional(readOnly = true)
+    public DirectConversationResponse getDetailConversation(Long conversationId, String currentUsername) {
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    ErrorCode.NOT_FOUND,
+                    "Conversation not found"
+        ));
+
+        if (conversation.getType() != ConversationType.DIRECT) {
+            throw new ValidationException("Conversation is not a direct conversation");
+        }
+
+        List<ConversationParticipant> participants = conversationParticipantRepository.findByConversationIdWithUser(conversationId);
+
+        boolean isUserInConversation = participants.stream()
+                .anyMatch(cp -> cp.getUser().getId().equals(currentUser.getId()));
+
+        if (!isUserInConversation) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    ErrorCode.FORBIDDEN,
+                    "You are not allowed to access this conversation"
+            );
+        }
+
+        User targetUser = participants.stream()
+                .map(ConversationParticipant::getUser)
+                .filter(u -> !u.getId().equals(currentUser.getId()))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "User chat not found"
+                ));
+
+        return buildDirectConversationResponse(conversation, currentUser, targetUser);
+    }
+
 
     private String buildConversationNextCursor(ConversationCursor conversationCursor) {
         try {
@@ -219,37 +236,6 @@ public class ConversationService {
         return conversation.getLastMessageAt() == null
                 ? conversation.getCreatedAt()
                 : conversation.getLastMessageAt();
-    }
-
-    private Map<Long, List<ConversationParticipant>> findParticipantsByConversationId(
-            List<ConversationParticipant> conversationParticipants
-    ) {
-        List<Long> conversationIds = conversationParticipants.stream()
-                .map(participant -> participant.getConversation().getId())
-                .toList();
-
-        if (conversationIds.isEmpty()) {
-            return Map.of();
-        }
-
-        return conversationParticipantRepository.findByConversationIdInWithUser(conversationIds)
-                .stream()
-                .collect(Collectors.groupingBy(participant -> participant.getConversation().getId()));
-    }
-
-    private Map<Long, Message> findLastMessageById(List<ConversationParticipant> conversationParticipants) {
-        List<Long> lastMessageIds = conversationParticipants.stream()
-                .map(participant -> participant.getConversation().getLastMessageId())
-                .filter(Objects::nonNull)
-                .toList();
-
-        if (lastMessageIds.isEmpty()) {
-            return Map.of();
-        }
-
-        return messageRepository.findByIdInWithSender(lastMessageIds)
-                .stream()
-                .collect(Collectors.toMap(Message::getId, Function.identity()));
     }
 
     public record CreateOrOpenDirectConversationResult(

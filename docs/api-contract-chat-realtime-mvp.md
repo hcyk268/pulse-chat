@@ -38,7 +38,7 @@ OpenAPI cho phần REST được lưu tại:
 ### 2.5. Phân trang
 
 - `GET /api/v1/conversations` dùng snapshot cursor pagination
-- `GET /api/v1/users/search` và `GET /api/v1/conversations/{conversationId}/messages` dùng cursor pagination thông thường
+- `GET /api/v1/users/search` và `GET /api/v1/messages?conversationId={conversationId}` dùng cursor pagination thông thường
 - `cursor` là chuỗi opaque, client không tự parse
 - `snapshotAt` là mốc thời gian do server trả về ở page đầu của danh sách hội thoại; client phải gửi lại nguyên giá trị đó cho mọi request load-more tiếp theo
 - `limit` mặc định `20`, tối đa `100`
@@ -116,9 +116,9 @@ Các tín hiệu sau đi qua WebSocket/STOMP:
 | `POST` | `/api/v1/conversations/direct` | Tạo hoặc mở hội thoại 1-1 | Có |
 | `GET` | `/api/v1/conversations` | Lấy danh sách hội thoại | Có |
 | `GET` | `/api/v1/conversations/{conversationId}` | Lấy chi tiết một hội thoại | Có |
-| `GET` | `/api/v1/conversations/{conversationId}/messages` | Lấy lịch sử tin nhắn | Có |
-| `POST` | `/api/v1/conversations/{conversationId}/messages` | Gửi tin nhắn text | Có |
-| `POST` | `/api/v1/conversations/{conversationId}/read` | Đánh dấu đã đọc đến một mốc tin | Có |
+| `GET` | `/api/v1/messages?conversationId={conversationId}` | Lấy lịch sử tin nhắn | Có |
+| `POST` | `/api/v1/messages` | Gửi tin nhắn text | Có |
+| `POST` | `/api/v1/messages/read` | Đánh dấu đã đọc đến một mốc tin | Có |
 
 ## 5. Contract chi tiết phần REST
 
@@ -408,7 +408,7 @@ Response `200`: dùng cùng schema như `POST /conversations/direct`
 
 ### 5.9. Lịch sử tin nhắn
 
-- Endpoint: `GET /api/v1/conversations/{conversationId}/messages?limit=50&cursor=opaque-token`
+- Endpoint: `GET /api/v1/messages?conversationId=1001&limit=50&cursor=opaque-token`
 - Khi không có `cursor`, server trả page gần nhất
 - Mỗi page trả `items` theo thứ tự tăng dần của `createdAt` để client render trực tiếp
 
@@ -446,7 +446,7 @@ Response `200`:
 
 ### 5.10. Gửi tin nhắn
 
-- Endpoint: `POST /api/v1/conversations/{conversationId}/messages`
+- Endpoint: `POST /api/v1/messages`
 - `clientMessageId` là bắt buộc để chống duplicate
 - Neu day la tin nhan dau tien cua hoi thoai direct, server phai chuyen `isVisibleInList = true` cho participant con lai truoc khi phat event realtime
 
@@ -454,6 +454,7 @@ Request:
 
 ```json
 {
+  "conversationId": 1001,
   "clientMessageId": "c8c4c246-0bb4-4d4f-94e7-512e8d6b6f6b",
   "content": "Hello Bob",
   "messageType": "TEXT"
@@ -490,13 +491,14 @@ Lưu ý:
 
 ### 5.11. Đánh dấu đã đọc
 
-- Endpoint: `POST /api/v1/conversations/{conversationId}/read`
+- Endpoint: `POST /api/v1/messages/read`
 - Dùng để cập nhật mốc read mới nhất của người dùng hiện tại
 
 Request:
 
 ```json
 {
+  "conversationId": 1001,
   "lastReadMessageId": 9001
 }
 ```

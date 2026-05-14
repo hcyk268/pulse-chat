@@ -46,6 +46,7 @@ erDiagram
         BIGINT id PK
         TIMESTAMP created_at
         TIMESTAMP updated_at
+        UUID client_message_id
         BIGINT conversation_id FK
         BIGINT sender_id FK
         VARCHAR_4000 content
@@ -66,6 +67,7 @@ erDiagram
 
 - `conversation_participants` uses a composite primary key: `(conversation_id, user_id)`.
 - `presences.user_id` is both the primary key and a foreign key to `users.id`.
+- `messages` has a unique constraint on `(conversation_id, client_message_id)` to make client-side retry idempotency safe at the database layer.
 - `conversations.last_message_id` and `conversation_participants.last_read_message_id` are plain `BIGINT` columns in the current JPA model. They are logical references to `messages.id`, but there is no `@ManyToOne` / `@JoinColumn`, so Hibernate will not create foreign key constraints for them.
 - Enum columns are stored as strings:
   - `users.account_status`: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `BANNED`
