@@ -117,11 +117,20 @@ public class ConversationService {
 
         ConversationCursor conversationCursor = this.decodeCursor(cursor);
 
-        List<ConversationParticipant> conversations = conversationParticipantRepository.findVisiblePageByUserId(
-                currentUser.getId(), snapshot,
-                conversationCursor != null ? conversationCursor.cursorAt() : null,
-                conversationCursor != null ? conversationCursor.conversationId() : null,
-                PageRequest.of(0, pageLimit + 1));
+        PageRequest pageRequest = PageRequest.of(0, pageLimit + 1);
+        List<ConversationParticipant> conversations = conversationCursor == null
+                ? conversationParticipantRepository.findVisibleFirstPageByUserId(
+                        currentUser.getId(),
+                        snapshot,
+                        pageRequest
+                )
+                : conversationParticipantRepository.findVisiblePageByUserIdAfterCursor(
+                        currentUser.getId(),
+                        snapshot,
+                        conversationCursor.cursorAt(),
+                        conversationCursor.conversationId(),
+                        pageRequest
+                );
 
         boolean hasMore = conversations.size() > pageLimit;
         List<ConversationParticipant> page = hasMore ? conversations.subList(0, pageLimit) : conversations;

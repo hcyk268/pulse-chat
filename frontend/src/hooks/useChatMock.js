@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  contactsMock,
-  conversationsMock,
-  currentUserMock,
-  suggestedReplies,
-} from "../data/mockData";
+import { currentUserMock } from "../data/mockData";
 import {
   clearAuthSession,
   getAuthSession,
@@ -13,29 +8,28 @@ import {
   saveAuthSession,
 } from "../utils/authStorage";
 import { setAuthEventHandlers } from "../services/apiClient";
-import { getMe } from "../services/userApi";
-
-const statusRank = {
-  SENT: 1,
-  DELIVERED: 2,
-  READ: 3,
-};
+import {
+  createDirectConversation,
+  getConversation,
+  listConversations,
+} from "../services/conversationApi";
+import {
+  listMessages,
+  markMessagesRead,
+  sendMessage as sendMessageApi,
+} from "../services/messageApi";
+import { getMe, searchUsers as searchUsersApi, updateMe } from "../services/userApi";
 
 const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
-
-function cloneConversations() {
-  return conversationsMock.map((conversation) => ({
-    ...conversation,
-    messages: conversation.messages.map((message) => ({ ...message })),
-  }));
-}
 
 function createClientId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
 
-  return `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (Number(char) ^ ((Math.random() * 16) >> (Number(char) / 4))).toString(16),
+  );
 }
 
 function toCurrentUser(user) {
@@ -49,6 +43,35 @@ function toCurrentUser(user) {
   };
 }
 
+function toContact(user) {
+  return {
+    id: user.id,
+    backendId: user.id,
+    username: user.username,
+    email: user.email ?? "",
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl ?? null,
+    role: user.role ?? (user.directConversationId ? "Existing direct chat" : "Active user"),
+    bio: user.bio ?? "",
+    accent: user.accent ?? "from-sky-300 to-blue-500",
+    presence: user.presence ?? { isOnline: false, lastActiveAt: null },
+    directConversationId: user.directConversationId ?? null,
+  };
+}
+
+function mergeContacts(previousContacts, nextContacts) {
+  const byId = new Map(previousContacts.map((contact) => [String(contact.id), contact]));
+
+  nextContacts.forEach((contact) => {
+    byId.set(String(contact.id), {
+      ...byId.get(String(contact.id)),
+      ...contact,
+    });
+  });
+
+  return Array.from(byId.values());
+}
+
 function getStoredAuthSession() {
   if (!hasValidAuthSession()) {
     clearAuthSession();
@@ -58,23 +81,37 @@ function getStoredAuthSession() {
   return getAuthSession();
 }
 
-function nextNumericId(items, fallback) {
-  return items.reduce((max, item) => Math.max(max, Number(item.id) || 0), fallback) + 1;
+function mapBackendUserId(backendUserId, currentUser) {
+  return Number(backendUserId) === Number(currentUser.backendId) ? currentUser.id : backendUserId;
 }
 
-function upgradeStatus(message, nextStatus) {
-  if ((statusRank[message.status] || 0) >= statusRank[nextStatus]) {
-    return message;
-  }
+function normalizeMessage(message, currentUser) {
+  return {
+    id: message.id,
+    clientMessageId: message.clientMessageId,
+    conversationId: message.conversationId,
+    senderId: mapBackendUserId(message.sender?.id, currentUser),
+    sender: message.sender,
+    content: message.content,
+    messageType: message.messageType,
+    status: message.status,
+    createdAt: message.createdAt,
+    deliveredAt: message.deliveredAt,
+    readAt: message.readAt,
+  };
+}
 
-  const now = new Date().toISOString();
+function normalizeLastMessage(lastMessage, currentUser) {
+  if (!lastMessage) return null;
 
   return {
-    ...message,
-    status: nextStatus,
-    deliveredAt: nextStatus === "DELIVERED" ? now : message.deliveredAt,
-    readAt: nextStatus === "READ" ? now : message.readAt,
+    ...lastMessage,
+    senderId: mapBackendUserId(lastMessage.senderId, currentUser),
   };
+}
+
+function dedupeById(items) {
+  return Array.from(new Map(items.map((item) => [String(item.id), item])).values());
 }
 
 export function useChatMock() {
@@ -86,19 +123,44 @@ export function useChatMock() {
     authSession ? "checking" : "unauthenticated",
   );
   const [authMessage, setAuthMessage] = useState("");
-  const [contacts] = useState(contactsMock);
-  const [conversations, setConversations] = useState(cloneConversations);
-  const [typingByConversation, setTypingByConversation] = useState({
-    1001: true,
-  });
+  const [contacts, setContacts] = useState([]);
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [userSearchError, setUserSearchError] = useState("");
+  const [conversations, setConversations] = useState([]);
+  const [conversationPaging, setConversationPaging] = useState(null);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
+  const [conversationError, setConversationError] = useState("");
+  const [messagePagingByConversation, setMessagePagingByConversation] = useState({});
+  const [loadingMessagesByConversation, setLoadingMessagesByConversation] = useState({});
+  const [loadingOlderMessagesByConversation, setLoadingOlderMessagesByConversation] = useState({});
+  const [messageErrorByConversation, setMessageErrorByConversation] = useState({});
+  const [chatActionError, setChatActionError] = useState("");
+  const [typingByConversation] = useState({});
+  const [isStartingConversation, setIsStartingConversation] = useState(false);
+  const [startConversationError, setStartConversationError] = useState("");
+  const [sendingByConversation, setSendingByConversation] = useState({});
+
+  const isLoadingSelectedConversation = (conversationId) =>
+    Boolean(conversationId && loadingMessagesByConversation[conversationId]);
+  const isLoadingOlderMessages = (conversationId) =>
+    Boolean(conversationId && loadingOlderMessagesByConversation[conversationId]);
+  const getMessageError = (conversationId) =>
+    (conversationId && messageErrorByConversation[conversationId]) || "";
+  const getMessagePaging = (conversationId) =>
+    (conversationId && messagePagingByConversation[conversationId]) || null;
+  const hasMoreMessages = (conversationId) => Boolean(getMessagePaging(conversationId)?.hasMore);
+  const isSendingMessage = (conversationId) =>
+    Boolean(conversationId && sendingByConversation[conversationId]);
 
   const conversationSummaries = useMemo(() => {
     return conversations
       .map((conversation) => {
         const otherParticipant = contacts.find(
           (contact) => contact.id === conversation.otherParticipantId,
-        );
-        const lastMessage = conversation.messages.at(-1) ?? null;
+        ) ?? conversation.otherParticipant;
+        const lastMessage = conversation.messages.at(-1) ?? conversation.lastMessage ?? null;
 
         return {
           ...conversation,
@@ -132,6 +194,58 @@ export function useChatMock() {
     };
   }, [contacts, conversations]);
 
+  function normalizeConversation(conversation, existingMessages = []) {
+    const otherParticipant = toContact(conversation.otherParticipant);
+
+    return {
+      id: conversation.id,
+      type: conversation.type,
+      otherParticipantId: otherParticipant.id,
+      otherParticipant,
+      participants: conversation.participants ?? [],
+      unreadCount: conversation.unreadCount ?? 0,
+      pinned: false,
+      muted: false,
+      lastMessage: normalizeLastMessage(conversation.lastMessage, currentUser),
+      lastMessageAt: conversation.lastMessageAt,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      messages: existingMessages,
+    };
+  }
+
+  function mergeConversationList(previous, nextItems) {
+    const previousById = new Map(previous.map((conversation) => [String(conversation.id), conversation]));
+
+    nextItems.forEach((conversation) => {
+      const existing = previousById.get(String(conversation.id));
+      previousById.set(String(conversation.id), {
+        ...existing,
+        ...conversation,
+        messages: conversation.messages?.length ? conversation.messages : existing?.messages ?? [],
+      });
+    });
+
+    return Array.from(previousById.values()).sort((a, b) => {
+      const left = new Date(a.lastMessageAt ?? a.updatedAt ?? a.createdAt).getTime();
+      const right = new Date(b.lastMessageAt ?? b.updatedAt ?? b.createdAt).getTime();
+      return right - left;
+    });
+  }
+
+  function updateConversationMessages(conversationId, updater) {
+    setConversations((previous) =>
+      previous.map((conversation) =>
+        String(conversation.id) === String(conversationId)
+          ? {
+              ...conversation,
+              messages: updater(conversation.messages ?? []),
+            }
+          : conversation,
+      ),
+    );
+  }
+
   const applyAuthenticatedSession = useCallback((nextAuthSession, rememberSession = true) => {
     saveAuthSession(nextAuthSession, rememberSession);
     setAuthSession(nextAuthSession);
@@ -144,6 +258,11 @@ export function useChatMock() {
     clearAuthSession();
     setAuthSession(null);
     setCurrentUser(currentUserMock);
+    setConversations([]);
+    setConversationPaging(null);
+    setContacts([]);
+    setUserSearchResults([]);
+    setMessagePagingByConversation({});
     setAuthStatus("unauthenticated");
     setAuthMessage(message);
   }, []);
@@ -201,6 +320,120 @@ export function useChatMock() {
     };
   }, [applyAuthenticatedSession, clearAuthenticatedSession]);
 
+  async function loadConversations({ append = false } = {}) {
+    const paging = append ? conversationPaging : null;
+
+    if (append && !paging?.hasMore) return;
+
+    if (append) {
+      setIsLoadingMoreConversations(true);
+    } else {
+      setIsLoadingConversations(true);
+    }
+    setConversationError("");
+
+    try {
+      const response = await listConversations({
+        limit: 20,
+        cursor: append ? paging?.nextCursor : null,
+        snapshotAt: append ? paging?.snapshotAt : null,
+      });
+      const normalized = (response.items ?? []).map((conversation) => {
+        const existing = conversations.find((item) => String(item.id) === String(conversation.id));
+        return normalizeConversation(conversation, existing?.messages ?? []);
+      });
+      const nextContacts = normalized.map((conversation) => conversation.otherParticipant);
+
+      setContacts((previous) => mergeContacts(previous, nextContacts));
+      setConversations((previous) =>
+        append ? mergeConversationList(previous, normalized) : mergeConversationList([], normalized),
+      );
+      setConversationPaging(response.paging ?? null);
+    } catch (error) {
+      setConversationError(error.message || "Could not load conversations.");
+    } finally {
+      setIsLoadingConversations(false);
+      setIsLoadingMoreConversations(false);
+    }
+  }
+
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      loadConversations();
+    }
+  }, [authStatus]);
+
+  async function loadConversation(conversationId) {
+    if (!conversationId) return null;
+
+    setLoadingMessagesByConversation((previous) => ({ ...previous, [conversationId]: true }));
+    setMessageErrorByConversation((previous) => ({ ...previous, [conversationId]: "" }));
+
+    try {
+      const [conversationResponse, messageResponse] = await Promise.all([
+        getConversation(conversationId),
+        listMessages({ conversationId, limit: 20 }),
+      ]);
+      const messages = (messageResponse.items ?? []).map((message) =>
+        normalizeMessage(message, currentUser),
+      );
+      const normalizedConversation = normalizeConversation(conversationResponse, messages);
+
+      setContacts((previous) => mergeContacts(previous, [normalizedConversation.otherParticipant]));
+      setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
+      setMessagePagingByConversation((previous) => ({
+        ...previous,
+        [conversationId]: messageResponse.paging ?? null,
+      }));
+
+      return normalizedConversation;
+    } catch (error) {
+      setMessageErrorByConversation((previous) => ({
+        ...previous,
+        [conversationId]: error.message || "Could not load messages.",
+      }));
+      return null;
+    } finally {
+      setLoadingMessagesByConversation((previous) => ({ ...previous, [conversationId]: false }));
+    }
+  }
+
+  async function loadMoreMessages(conversationId) {
+    const paging = getMessagePaging(conversationId);
+    if (!conversationId || !paging?.hasMore || !paging.nextCursor) return;
+
+    setLoadingOlderMessagesByConversation((previous) => ({ ...previous, [conversationId]: true }));
+
+    try {
+      const response = await listMessages({
+        conversationId,
+        limit: 20,
+        cursor: paging.nextCursor,
+      });
+      const olderMessages = (response.items ?? []).map((message) =>
+        normalizeMessage(message, currentUser),
+      );
+
+      updateConversationMessages(conversationId, (messages) =>
+        dedupeById([...olderMessages, ...messages]),
+      );
+      setMessagePagingByConversation((previous) => ({
+        ...previous,
+        [conversationId]: response.paging ?? null,
+      }));
+    } catch (error) {
+      setMessageErrorByConversation((previous) => ({
+        ...previous,
+        [conversationId]: error.message || "Could not load older messages.",
+      }));
+    } finally {
+      setLoadingOlderMessagesByConversation((previous) => ({
+        ...previous,
+        [conversationId]: false,
+      }));
+    }
+  }
+
   function getConversationById(conversationId) {
     const conversation = conversations.find(
       (item) => String(item.id) === String(conversationId),
@@ -215,158 +448,174 @@ export function useChatMock() {
     return { ...conversation, otherParticipant };
   }
 
-  function markConversationRead(conversationId) {
-    const now = new Date().toISOString();
+  async function markConversationRead(conversationId, explicitLastReadMessageId = null) {
+    const conversation = conversations.find((item) => String(item.id) === String(conversationId));
+    const lastReadMessageId =
+      explicitLastReadMessageId ?? conversation?.messages?.at(-1)?.id ?? conversation?.lastMessage?.id;
 
-    setConversations((previous) =>
-      previous.map((conversation) => {
-        if (String(conversation.id) !== String(conversationId)) return conversation;
+    if (!conversationId || !lastReadMessageId) return;
 
-        return {
-          ...conversation,
-          unreadCount: 0,
-          messages: conversation.messages.map((message) =>
-            message.senderId === currentUser.id
-              ? message
-              : { ...message, status: "READ", readAt: message.readAt ?? now },
-          ),
-        };
-      }),
-    );
+    try {
+      const response = await markMessagesRead({ conversationId, lastReadMessageId });
+      const readAt = response.readAt ?? new Date().toISOString();
+
+      setConversations((previous) =>
+        previous.map((item) => {
+          if (String(item.id) !== String(conversationId)) return item;
+
+          return {
+            ...item,
+            unreadCount: response.unreadCount ?? 0,
+            messages: (item.messages ?? []).map((message) =>
+              message.senderId === currentUser.id
+                ? message
+                : { ...message, status: "READ", readAt: message.readAt ?? readAt },
+            ),
+          };
+        }),
+      );
+    } catch {
+      // Read receipts are best-effort in the REST-only UI.
+    }
   }
 
-  function updateMessageStatus(conversationId, messageId, nextStatus) {
-    setConversations((previous) =>
-      previous.map((conversation) => {
-        if (String(conversation.id) !== String(conversationId)) return conversation;
-
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) =>
-            String(message.id) === String(messageId) ? upgradeStatus(message, nextStatus) : message,
-          ),
-        };
-      }),
-    );
-  }
-
-  function sendMessage(conversationId, content) {
+  async function sendMessage(conversationId, content) {
     const trimmed = content.trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
 
-    const now = new Date().toISOString();
-    const messageId = Date.now();
+    setSendingByConversation((previous) => ({ ...previous, [conversationId]: true }));
+    setChatActionError("");
 
-    const message = {
-      id: messageId,
-      clientMessageId: createClientId(),
-      conversationId: Number(conversationId),
-      senderId: currentUser.id,
-      content: trimmed,
-      messageType: "TEXT",
-      status: "SENT",
-      createdAt: now,
-      deliveredAt: null,
-      readAt: null,
-    };
+    try {
+      const response = await sendMessageApi({
+        conversationId: Number(conversationId),
+        clientMessageId: createClientId(),
+        content: trimmed,
+        messageType: "TEXT",
+      });
+      const message = normalizeMessage(response, currentUser);
+      const lastMessage = {
+        id: message.id,
+        senderId: message.senderId,
+        contentPreview: message.content,
+        status: message.status,
+        createdAt: message.createdAt,
+      };
 
-    setConversations((previous) =>
-      previous.map((conversation) =>
-        String(conversation.id) === String(conversationId)
-          ? {
-              ...conversation,
-              messages: [...conversation.messages, message],
-              lastMessageAt: now,
-              updatedAt: now,
-              unreadCount: 0,
-            }
-          : conversation,
-      ),
-    );
+      setConversations((previous) =>
+        mergeConversationList(
+          previous.map((conversation) =>
+            String(conversation.id) === String(conversationId)
+              ? {
+                  ...conversation,
+                  messages: dedupeById([...(conversation.messages ?? []), message]),
+                  lastMessage,
+                  lastMessageAt: message.createdAt,
+                  updatedAt: message.createdAt,
+                  unreadCount: 0,
+                }
+              : conversation,
+          ),
+          [],
+        ),
+      );
 
-    window.setTimeout(() => updateMessageStatus(conversationId, messageId, "DELIVERED"), 650);
-    window.setTimeout(() => updateMessageStatus(conversationId, messageId, "READ"), 1500);
-    window.setTimeout(() => {
-      setTypingByConversation((previous) => ({ ...previous, [conversationId]: true }));
-    }, 850);
-    window.setTimeout(() => addMockReply(conversationId), 2300);
+      return message;
+    } catch (error) {
+      setChatActionError(error.message || "Could not send message.");
+      return null;
+    } finally {
+      setSendingByConversation((previous) => ({ ...previous, [conversationId]: false }));
+    }
   }
 
-  function addMockReply(conversationId) {
-    const now = new Date().toISOString();
-    const reply = suggestedReplies[Math.floor(Math.random() * suggestedReplies.length)];
-
-    setConversations((previous) =>
-      previous.map((conversation) => {
-        if (String(conversation.id) !== String(conversationId)) return conversation;
-
-        const otherParticipant = contacts.find(
-          (contact) => contact.id === conversation.otherParticipantId,
-        );
-
-        return {
-          ...conversation,
-          messages: [
-            ...conversation.messages,
-            {
-              id: Date.now() + 7,
-              clientMessageId: `mock-${Date.now()}`,
-              conversationId: Number(conversationId),
-              senderId: otherParticipant?.id ?? 0,
-              content: reply,
-              messageType: "TEXT",
-              status: "READ",
-              createdAt: now,
-              deliveredAt: now,
-              readAt: now,
-            },
-          ],
-          lastMessageAt: now,
-          updatedAt: now,
-          unreadCount: 0,
-        };
-      }),
-    );
-
-    setTypingByConversation((previous) => ({ ...previous, [conversationId]: false }));
-  }
-
-  function startConversation(targetUserId) {
+  async function startConversation(targetUserId) {
     const existing = conversations.find(
-      (conversation) => conversation.otherParticipantId === targetUserId,
+      (conversation) => String(conversation.otherParticipantId) === String(targetUserId),
     );
 
     if (existing) return existing.id;
 
-    const now = new Date().toISOString();
-    const conversationId = nextNumericId(conversations, 1000);
+    setIsStartingConversation(true);
+    setStartConversationError("");
 
-    setConversations((previous) => [
-      {
-        id: conversationId,
-        type: "DIRECT",
-        otherParticipantId: targetUserId,
-        unreadCount: 0,
-        pinned: false,
-        muted: false,
-        createdAt: now,
-        updatedAt: now,
-        lastMessageAt: null,
-        messages: [],
-      },
-      ...previous,
-    ]);
+    try {
+      const response = await createDirectConversation(Number(targetUserId));
+      const normalizedConversation = normalizeConversation(response, []);
 
-    return conversationId;
+      setContacts((previous) => mergeContacts(previous, [normalizedConversation.otherParticipant]));
+      setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
+      setMessagePagingByConversation((previous) => ({
+        ...previous,
+        [normalizedConversation.id]: null,
+      }));
+
+      return normalizedConversation.id;
+    } catch (error) {
+      setStartConversationError(error.message || "Could not start conversation.");
+      return null;
+    } finally {
+      setIsStartingConversation(false);
+    }
   }
 
-  function updateProfile(nextProfile) {
-    setCurrentUser((previous) => ({
-      ...previous,
-      ...nextProfile,
-      updatedAt: new Date().toISOString(),
-    }));
+  async function updateProfile(nextProfile) {
+    const user = await updateMe({
+      displayName: nextProfile.displayName?.trim() || null,
+      avatarUrl: nextProfile.avatarUrl ?? currentUser.avatarUrl ?? null,
+      bio: nextProfile.bio?.trim() || null,
+    });
+
+    setCurrentUser(toCurrentUser(user));
+
+    setAuthSession((previous) => {
+      if (!previous) return previous;
+
+      const nextAuthSession = {
+        ...previous,
+        user,
+      };
+
+      saveAuthSession(nextAuthSession, isPersistentSession());
+      return nextAuthSession;
+    });
+
+    return user;
   }
+
+  const searchUsers = useCallback(async (query) => {
+    const normalized = query.trim();
+
+    if (!normalized) {
+      setUserSearchResults([]);
+      setUserSearchError("");
+      setIsSearchingUsers(false);
+      return [];
+    }
+
+    setIsSearchingUsers(true);
+    setUserSearchError("");
+
+    try {
+      const response = await searchUsersApi(normalized, { limit: 20 });
+      const results = (response.items ?? []).map(toContact);
+      setUserSearchResults(results);
+      setContacts((previous) => mergeContacts(previous, results));
+      return results;
+    } catch (error) {
+      setUserSearchError(error.message || "Could not search users.");
+      setUserSearchResults([]);
+      return [];
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  }, []);
+
+  const clearUserSearch = useCallback(() => {
+    setUserSearchResults([]);
+    setUserSearchError("");
+    setIsSearchingUsers(false);
+  }, []);
 
   function setAuthenticatedUser(user) {
     setCurrentUser(toCurrentUser(user));
@@ -385,13 +634,30 @@ export function useChatMock() {
     authMessage,
     authStatus,
     contacts,
+    chatActionError,
+    clearUserSearch,
     conversations,
+    conversationError,
+    conversationPaging,
     conversationSummaries,
     currentUser,
     getConversationById,
+    hasMoreMessages,
+    isSearchingUsers,
+    isLoadingConversations,
+    isLoadingMoreConversations,
+    isLoadingOlderMessages,
+    isLoadingSelectedConversation,
+    isSendingMessage,
+    isStartingConversation,
+    loadConversation,
+    loadConversations,
+    loadMoreMessages,
     markConversationRead,
     sendMessage,
+    searchUsers,
     startConversation,
+    startConversationError,
     stats,
     isAuthenticated: authStatus === "authenticated" && Boolean(authSession),
     isAuthLoading: authStatus === "checking",
@@ -400,5 +666,8 @@ export function useChatMock() {
     signOut,
     typingByConversation,
     updateProfile,
+    getMessageError,
+    userSearchError,
+    userSearchResults,
   };
 }

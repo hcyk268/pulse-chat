@@ -1,12 +1,12 @@
 import { SendHorizontal } from "lucide-react";
 import { useState } from "react";
 
-export default function Composer({ onSend }) {
+export default function Composer({ disabled = false, onSend }) {
   const [value, setValue] = useState("");
 
   function submit() {
     const text = value.trim();
-    if (!text) return;
+    if (!text || disabled) return;
 
     onSend(text);
     setValue("");
@@ -27,16 +27,17 @@ export default function Composer({ onSend }) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={disabled}
             rows={1}
             maxLength={2000}
-            placeholder="Message"
-            className="max-h-32 min-h-8 flex-1 resize-none bg-transparent py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-400"
+            placeholder={disabled ? "Sending..." : "Message"}
+            className="max-h-32 min-h-8 flex-1 resize-none bg-transparent py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-500"
           />
         </div>
         <button
           type="button"
           onClick={submit}
-          disabled={!value.trim()}
+          disabled={disabled || !value.trim()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2aabee] text-white shadow-[0_8px_22px_rgba(42,171,238,0.22)] transition hover:bg-[#37b7f4] disabled:cursor-not-allowed disabled:bg-[#242f3d] disabled:text-slate-500 disabled:shadow-none"
           title="Send"
         >

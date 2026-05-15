@@ -11,15 +11,35 @@ export default function ChatPage() {
   const [query, setQuery] = useState("");
   const [showPeople, setShowPeople] = useState(false);
   const {
+    chatActionError,
     contacts,
+    conversationError,
+    conversationPaging,
     conversationSummaries,
     currentUser,
+    clearUserSearch,
     getConversationById,
+    getMessageError,
+    hasMoreMessages,
+    isLoadingConversations,
+    isLoadingMoreConversations,
+    isLoadingOlderMessages,
+    isLoadingSelectedConversation,
+    isSendingMessage,
+    isStartingConversation,
+    isSearchingUsers,
+    loadConversation,
+    loadConversations,
+    loadMoreMessages,
     markConversationRead,
+    searchUsers,
     sendMessage,
     startConversation,
+    startConversationError,
     stats,
     typingByConversation,
+    userSearchError,
+    userSearchResults,
   } = useChatStore();
 
   const selectedConversation = conversationId ? getConversationById(conversationId) : null;
@@ -46,12 +66,17 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (conversationId) {
-      markConversationRead(conversationId);
+      loadConversation(conversationId).then((conversation) => {
+        const lastReadMessageId = conversation?.messages?.at(-1)?.id ?? conversation?.lastMessage?.id;
+        markConversationRead(conversationId, lastReadMessageId);
+      });
     }
   }, [conversationId]);
 
-  function handleStartConversation(contact) {
-    const nextConversationId = startConversation(contact.id);
+  async function handleStartConversation(contact) {
+    const nextConversationId = await startConversation(contact.backendId ?? contact.id);
+    if (!nextConversationId) return;
+
     setShowPeople(false);
     navigate(`/chat/${nextConversationId}`);
   }
@@ -62,8 +87,13 @@ export default function ChatPage() {
         <div className={`${conversationId ? "hidden md:flex" : "flex"} min-h-0 w-full md:w-[380px]`}>
           <ConversationList
             conversations={filteredConversations}
+            error={conversationError}
+            hasMore={Boolean(conversationPaging?.hasMore)}
+            isLoading={isLoadingConversations}
+            isLoadingMore={isLoadingMoreConversations}
             currentUser={currentUser}
             query={query}
+            onLoadMore={() => loadConversations({ append: true })}
             onOpenPeople={() => setShowPeople(true)}
             onQueryChange={setQuery}
             selectedId={conversationId}
@@ -75,8 +105,15 @@ export default function ChatPage() {
           <ChatWindow
             conversation={selectedConversation}
             currentUser={currentUser}
+            error={conversationId ? getMessageError(conversationId) : ""}
+            hasMoreMessages={hasMoreMessages(conversationId)}
+            isLoading={isLoadingSelectedConversation(conversationId)}
+            isLoadingMoreMessages={isLoadingOlderMessages(conversationId)}
+            isSending={isSendingMessage(conversationId)}
             isTyping={Boolean(conversationId && typingByConversation[conversationId])}
+            onLoadMoreMessages={() => loadMoreMessages(conversationId)}
             onSendMessage={sendMessage}
+            sendError={chatActionError}
           />
         </div>
       </main>
@@ -86,8 +123,14 @@ export default function ChatPage() {
           <div className="ml-auto h-full w-full max-w-md border-l border-black/30 bg-[#17212b] shadow-panel">
             <ContactPanel
               contacts={contacts}
+              isSearching={isSearchingUsers}
+              isStartingConversation={isStartingConversation}
+              onClearSearch={clearUserSearch}
               onClose={() => setShowPeople(false)}
+              onSearchUsers={searchUsers}
               onStartConversation={handleStartConversation}
+              searchError={userSearchError || startConversationError}
+              searchResults={userSearchResults}
             />
           </div>
         </div>

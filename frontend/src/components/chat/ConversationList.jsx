@@ -13,7 +13,12 @@ import Avatar from "../ui/Avatar";
 export default function ConversationList({
   conversations,
   currentUser,
+  error = "",
+  hasMore = false,
+  isLoading = false,
+  isLoadingMore = false,
   query,
+  onLoadMore,
   onOpenPeople,
   onQueryChange,
   selectedId,
@@ -61,7 +66,15 @@ export default function ConversationList({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {conversations.length > 0 ? (
+        {isLoading ? (
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-400">
+            Loading conversations...
+          </div>
+        ) : error ? (
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm leading-6 text-rose-100">
+            {error}
+          </div>
+        ) : conversations.length > 0 ? (
           <div>
             {conversations.map((conversation) => {
               const participant = conversation.otherParticipant;
@@ -107,7 +120,7 @@ export default function ConversationList({
                           conversation.unreadCount > 0 ? "font-medium text-slate-100" : "text-slate-400",
                         ].join(" ")}
                       >
-                        {conversation.lastMessage?.senderId === 1 ? "You: " : ""}
+                        {conversation.lastMessage?.senderId === currentUser.id ? "You: " : ""}
                         {preview}
                       </p>
                       {conversation.unreadCount > 0 ? (
@@ -120,6 +133,18 @@ export default function ConversationList({
                 </Link>
               );
             })}
+            {hasMore ? (
+              <div className="p-3">
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="w-full rounded-lg bg-[#242f3d] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-[#2b3948] disabled:cursor-not-allowed disabled:text-slate-500"
+                >
+                  {isLoadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">

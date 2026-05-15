@@ -11,11 +11,18 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     properties:
       hibernate:
         format_sql: ${HIBERNATE_FORMAT_SQL:true}
 
+  flyway:
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+
 jwt:
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET:${JWT_SECRET:dev-only-access-token-secret-change-before-production}}
   refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET:dev-only-refresh-token-secret-change-before-production}
+
+logging:
+  level:
+    backend.xxx.chat.common.logging.LoggingAspect: DEBUG

@@ -27,9 +27,19 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         from Message m
         join fetch m.sender
         where m.conversation.id = :conversationId
+        order by m.createdAt desc, m.id desc
+        """)
+    List<Message> findFirstPageByConversationId(
+            @Param("conversationId") Long conversationId,
+            Pageable pageable
+    );
+
+    @Query("""
+        from Message m
+        join fetch m.sender
+        where m.conversation.id = :conversationId
           and (
-              :cursorCreatedAt is null
-              or m.createdAt < :cursorCreatedAt
+              m.createdAt < :cursorCreatedAt
               or (
                   m.createdAt = :cursorCreatedAt
                   and m.id < :cursorMessageId
@@ -37,7 +47,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
           )
         order by m.createdAt desc, m.id desc
         """)
-    List<Message> findPageByConversationId(
+    List<Message> findPageByConversationIdAfterCursor(
             @Param("conversationId") Long conversationId,
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorMessageId") Long cursorMessageId,

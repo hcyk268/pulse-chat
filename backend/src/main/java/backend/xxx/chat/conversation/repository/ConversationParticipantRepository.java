@@ -12,7 +12,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.web.bind.annotation.RequestParam;
 
 public interface ConversationParticipantRepository
         extends JpaRepository<ConversationParticipant, ConversationParticipantId> {
@@ -68,9 +67,23 @@ public interface ConversationParticipantRepository
         where cp.user.id = :userId
             and cp.isVisibleInList = true
             and coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) <= :snapshotAt
+        order by coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) desc,
+                 cp.conversation.id desc
+        """)
+    List<ConversationParticipant> findVisibleFirstPageByUserId(
+            @Param("userId") Long userId,
+            @Param("snapshotAt") Instant snapshotAt,
+            Pageable pageable
+    );
+
+    @Query("""
+        from ConversationParticipant cp
+        join fetch cp.conversation
+        where cp.user.id = :userId
+            and cp.isVisibleInList = true
+            and coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) <= :snapshotAt
             and (
-                :cursorAt is null
-                or coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) < :cursorAt
+                coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) < :cursorAt
                 or (
                     coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) = :cursorAt
                     and cp.conversation.id < :cursorId
@@ -79,7 +92,7 @@ public interface ConversationParticipantRepository
         order by coalesce(cp.conversation.lastMessageAt, cp.conversation.createdAt) desc,
                  cp.conversation.id desc
         """)
-    List<ConversationParticipant> findVisiblePageByUserId(
+    List<ConversationParticipant> findVisiblePageByUserIdAfterCursor(
             @Param("userId") Long userId,
             @Param("snapshotAt") Instant snapshotAt,
             @Param("cursorAt") Instant cursorAt,

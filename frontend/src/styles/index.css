@@ -61,3 +61,197 @@ textarea {
 .text-balance {
   text-wrap: balance;
 }
+
+.empty-physics-scene {
+  perspective: 1200px;
+}
+
+.empty-physics-panel {
+  overflow: hidden;
+  transform:
+    translate3d(calc(var(--mx) * 6px), calc(var(--my) * 5px), 0)
+    rotateX(calc(var(--my) * -3.5deg))
+    rotateY(calc(var(--mx) * 4.5deg))
+    scale(var(--press));
+  transform-style: preserve-3d;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.9, 0.18, 1),
+    border-color 180ms ease,
+    background-color 180ms ease;
+  will-change: transform;
+}
+
+.empty-physics-panel:hover {
+  border-color: rgba(103, 232, 249, 0.28);
+  background-color: rgba(23, 33, 43, 0.98);
+}
+
+.empty-physics-sheen {
+  background:
+    linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(103, 232, 249, 0.08) 42%,
+      rgba(52, 211, 153, 0.1) 50%,
+      transparent 62%
+    );
+  background-size: 240% 100%;
+  mix-blend-mode: screen;
+  opacity: 0.65;
+  transform: translateZ(28px);
+  animation: empty-sheen 5.8s ease-in-out infinite;
+}
+
+.empty-physics-orbit {
+  border: 1px solid rgba(103, 232, 249, 0.08);
+  box-shadow:
+    inset 0 0 34px rgba(34, 211, 238, 0.04),
+    0 0 34px rgba(34, 211, 238, 0.04);
+  transform: translateZ(18px);
+  animation: empty-orbit-breathe 4.8s ease-in-out infinite;
+}
+
+.empty-physics-chip {
+  transform:
+    translate3d(
+      calc(var(--mx) * var(--depth) * 0.8px),
+      calc(var(--my) * var(--depth) * -0.55px),
+      48px
+    )
+    rotate(calc(var(--mx) * var(--depth) * 0.055deg))
+    scale(var(--press));
+  transition:
+    transform 160ms cubic-bezier(0.2, 0.9, 0.18, 1),
+    border-color 160ms ease,
+    background-color 160ms ease;
+  will-change: transform;
+  animation: empty-chip-float 5.2s ease-in-out infinite;
+}
+
+.empty-physics-chip:nth-of-type(2) {
+  animation-delay: -1.3s;
+}
+
+.empty-physics-chip:nth-of-type(3) {
+  animation-delay: -2.1s;
+}
+
+.empty-physics-chip:hover {
+  border-color: rgba(103, 232, 249, 0.3);
+  background-color: rgba(24, 37, 51, 0.98);
+}
+
+@keyframes empty-sheen {
+  0%,
+  100% {
+    background-position: 140% 0;
+  }
+  50% {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes empty-chip-float {
+  0%,
+  100% {
+    margin-top: 0;
+  }
+  50% {
+    margin-top: -8px;
+  }
+}
+
+@keyframes empty-orbit-breathe {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: translateZ(18px) scale(0.985);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateZ(18px) scale(1);
+  }
+}
+
+.chat-backdrop-grid {
+  transform-origin: center;
+  animation: chat-grid-drift 18s linear infinite;
+}
+
+.chat-backdrop-wave {
+  stroke-dasharray: 18 20;
+  animation:
+    chat-wave-flow 8.5s linear infinite,
+    chat-wave-float 7s ease-in-out infinite;
+}
+
+.chat-backdrop-wave-amber {
+  animation-delay: -2s, -1s;
+}
+
+.chat-backdrop-card,
+.chat-backdrop-card-line {
+  animation: chat-card-breathe 5.6s ease-in-out infinite;
+}
+
+.chat-backdrop-card-two {
+  animation-delay: -2.4s;
+}
+
+@keyframes chat-grid-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-96px, -96px, 0);
+  }
+}
+
+@keyframes chat-wave-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -152;
+  }
+}
+
+@keyframes chat-wave-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes chat-card-breathe {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.68;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-physics-panel,
+  .empty-physics-chip {
+    transform: none;
+    transition: none;
+  }
+
+  .empty-physics-sheen,
+  .empty-physics-chip,
+  .empty-physics-orbit,
+  .chat-backdrop-grid,
+  .chat-backdrop-wave,
+  .chat-backdrop-card,
+  .chat-backdrop-card-line {
+    animation: none;
+  }
+}

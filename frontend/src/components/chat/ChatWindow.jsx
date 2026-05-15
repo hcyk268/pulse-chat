@@ -6,14 +6,22 @@ import ChatBackdrop from "../assets/ChatBackdrop";
 import EmptyChatArtwork from "../assets/EmptyChatArtwork";
 import Avatar from "../ui/Avatar";
 import Composer from "./Composer";
+import InteractiveEmptyState from "./InteractiveEmptyState";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 
 export default function ChatWindow({
   conversation,
   currentUser,
+  error = "",
+  hasMoreMessages = false,
+  isLoading = false,
+  isLoadingMoreMessages = false,
+  isSending = false,
   isTyping,
+  onLoadMoreMessages,
   onSendMessage,
+  sendError = "",
 }) {
   const bottomRef = useRef(null);
 
@@ -21,17 +29,22 @@ export default function ChatWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [conversation?.messages.length, isTyping]);
 
+  if (!conversation && isLoading) {
+    return (
+      <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0e1621] p-6">
+        <ChatBackdrop />
+        <div className="relative rounded-lg border border-black/25 bg-[#17212b]/90 px-5 py-4 text-sm font-medium text-slate-200 shadow-panel">
+          Loading messages...
+        </div>
+      </section>
+    );
+  }
+
   if (!conversation) {
     return (
       <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0e1621] p-6">
         <ChatBackdrop />
-        <div className="relative max-w-lg rounded-lg border border-black/25 bg-[#17212b]/90 p-8 text-center shadow-panel">
-          <EmptyChatArtwork />
-          <h2 className="mt-4 text-2xl font-semibold text-white">No conversation selected</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Open a recent chat or start a new direct conversation from the people panel.
-          </p>
-        </div>
+        <InteractiveEmptyState />
       </section>
     );
   }
@@ -69,6 +82,25 @@ export default function ChatWindow({
 
       <div className="relative min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-5">
+          {hasMoreMessages ? (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={onLoadMoreMessages}
+                disabled={isLoadingMoreMessages}
+                className="rounded-lg bg-[#17212b]/90 px-4 py-2 text-sm font-medium text-slate-200 shadow-panel transition hover:bg-[#202b36] disabled:cursor-not-allowed disabled:text-slate-500"
+              >
+                {isLoadingMoreMessages ? "Loading..." : "Load earlier messages"}
+              </button>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="mx-auto max-w-sm rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-center text-sm leading-5 text-rose-100">
+              {error}
+            </div>
+          ) : null}
+
           {conversation.messages.length === 0 ? (
             <div className="mx-auto mt-12 max-w-sm rounded-lg border border-black/25 bg-[#17212b]/90 p-6 text-center shadow-panel">
               <EmptyChatArtwork compact />
@@ -95,11 +127,19 @@ export default function ChatWindow({
           )}
 
           {isTyping ? <TypingIndicator user={participant} /> : null}
+          {sendError ? (
+            <div className="ml-auto max-w-sm rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-sm leading-5 text-rose-100">
+              {sendError}
+            </div>
+          ) : null}
           <div ref={bottomRef} />
         </div>
       </div>
 
-      <Composer onSend={(content) => onSendMessage(conversation.id, content)} />
+      <Composer
+        disabled={isSending}
+        onSend={(content) => onSendMessage(conversation.id, content)}
+      />
     </section>
   );
 }

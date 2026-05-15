@@ -11,10 +11,13 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO}
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     properties:
       hibernate:
-        format_sql: ${HIBERNATE_FORMAT_SQL}
+        format_sql: ${HIBERNATE_FORMAT_SQL:false}
+
+  flyway:
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
 
 jwt:
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}

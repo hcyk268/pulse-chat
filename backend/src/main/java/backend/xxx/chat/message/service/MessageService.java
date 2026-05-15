@@ -79,12 +79,18 @@ public class MessageService {
         int pageLimit = normalizeLimit(limit);
         MessageCursor messageCursor = decodeCursor(cursor);
 
-        List<Message> messages = messageRepository.findPageByConversationId(
-                conversation.getId(),
-                messageCursor != null ? messageCursor.createdAt() : null,
-                messageCursor != null ? messageCursor.messageId() : null,
-                PageRequest.of(0, pageLimit + 1)
-        );
+        PageRequest pageRequest = PageRequest.of(0, pageLimit + 1);
+        List<Message> messages = messageCursor == null
+                ? messageRepository.findFirstPageByConversationId(
+                        conversation.getId(),
+                        pageRequest
+                )
+                : messageRepository.findPageByConversationIdAfterCursor(
+                        conversation.getId(),
+                        messageCursor.createdAt(),
+                        messageCursor.messageId(),
+                        pageRequest
+                );
 
         boolean hasMore = messages.size() > pageLimit;
         List<Message> page = hasMore ? messages.subList(0, pageLimit) : messages;
