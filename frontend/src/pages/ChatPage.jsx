@@ -32,8 +32,12 @@ export default function ChatPage() {
     loadConversations,
     loadMoreMessages,
     markConversationRead,
+    realtimeStatus,
     searchUsers,
     sendMessage,
+    sendTypingStatus,
+    setActiveConversationId,
+    signOut,
     startConversation,
     startConversationError,
     stats,
@@ -63,6 +67,12 @@ export default function ChatPage() {
       return searchable.includes(normalized);
     });
   }, [conversationSummaries, query]);
+
+  useEffect(() => {
+    setActiveConversationId(conversationId ?? null);
+
+    return () => setActiveConversationId(null);
+  }, [conversationId, setActiveConversationId]);
 
   useEffect(() => {
     if (conversationId) {
@@ -96,6 +106,8 @@ export default function ChatPage() {
             onLoadMore={() => loadConversations({ append: true })}
             onOpenPeople={() => setShowPeople(true)}
             onQueryChange={setQuery}
+            onSignOut={signOut}
+            realtimeStatus={realtimeStatus}
             selectedId={conversationId}
             stats={stats}
           />
@@ -113,6 +125,7 @@ export default function ChatPage() {
             isTyping={Boolean(conversationId && typingByConversation[conversationId])}
             onLoadMoreMessages={() => loadMoreMessages(conversationId)}
             onSendMessage={sendMessage}
+            onTypingChange={(typing) => sendTypingStatus(conversationId, typing)}
             sendError={chatActionError}
           />
         </div>

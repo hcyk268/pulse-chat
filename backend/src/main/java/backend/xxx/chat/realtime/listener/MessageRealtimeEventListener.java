@@ -6,11 +6,16 @@ import backend.xxx.chat.conversation.repository.ConversationParticipantRepositor
 import backend.xxx.chat.conversation.service.ConversationResponseBuilder;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.service.MessageMapper;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
+import backend.xxx.chat.realtime.event.MessageDeliveredDomainEvent;
+import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
 import backend.xxx.chat.realtime.model.ConversationUpdatedEventData;
 import backend.xxx.chat.realtime.model.MessageCreatedEventData;
+import backend.xxx.chat.realtime.model.MessageDeliveredEventData;
+import backend.xxx.chat.realtime.model.MessageReadEventData;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.realtime.service.RealtimeEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -74,5 +79,60 @@ public class MessageRealtimeEventListener {
                     conversationData
             );
         }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public void onMessageRead(MessageReadDomainEvent event) {
+        List<ConversationParticipant> participants =
+                participantRepository.findByConversationIdWithUser(event.conversationId());
+
+        ConversationParticipant readParticipant = participants.stream()
+                .filter(p -> p.getUser().getId().equals(event.readerId()))
+                .findFirst()
+                .orElseThrow();
+
+        MessageReadEventData data = new MessageReadEventData(
+                event.readerId(),
+                readParticipant.getUser().getUsername(),
+                event.lastReadMessageId(),
+                event.readAt()
+        );
+
+        for (ConversationParticipant participant : participants) {
+            String username = participant.getUser().getUsername();
+
+            realtimeEventPublisher.sendToUser(
+                    username,
+                    RealtimeEventType.MESSAGE_READ,
+                    event.conversationId(),
+                    data
+            );
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public void onMessageDelivered(MessageDeliveredDomainEvent event) {
+        List<ConversationParticipant> participants =
+                participantRepository.findByConversationIdWithUser(event.conversationId());
+
+        ConversationParticipant senderParticipant = participants.stream()
+                .filter(p -> p.getUser().getId().equals(event.senderId()))
+                .findFirst()
+                .orElseThrow();
+
+        MessageDeliveredEventData data = new MessageDeliveredEventData(
+                event.lastDeliveredMessageId(),
+                MessageStatus.DELIVERED,
+                event.deliveredAt()
+        );
+
+        realtimeEventPublisher.sendToUser(
+                senderParticipant.getUser().getUsername(),
+                RealtimeEventType.MESSAGE_STATUS_UPDATED,
+                event.conversationId(),
+                data
+        );
     }
 }

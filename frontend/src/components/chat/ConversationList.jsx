@@ -1,14 +1,22 @@
 import {
   BellOff,
+  LogOut,
   Menu,
   MessageCircle,
+  MessageSquarePlus,
   Pin,
   Plus,
   Search,
+  UserRound,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { clampPreview, formatShortTime } from "../../utils/formatters";
 import Avatar from "../ui/Avatar";
+
+function isSameId(left, right) {
+  return left != null && right != null && String(left) === String(right);
+}
 
 export default function ConversationList({
   conversations,
@@ -21,25 +29,110 @@ export default function ConversationList({
   onLoadMore,
   onOpenPeople,
   onQueryChange,
+  onSignOut,
+  realtimeStatus = "idle",
   selectedId,
   stats,
 }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const realtimeTone =
+    realtimeStatus === "connected"
+      ? "bg-emerald-400"
+      : realtimeStatus === "connecting" || realtimeStatus === "reconnecting"
+        ? "bg-amber-300"
+        : "bg-slate-500";
+
+  useEffect(() => {
+    if (!isMenuOpen) return undefined;
+
+    function handlePointerDown(event) {
+      if (!menuRef.current?.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMenuOpen]);
+
+  function handleOpenPeopleFromMenu() {
+    setIsMenuOpen(false);
+    onOpenPeople();
+  }
+
+  function handleSignOut() {
+    setIsMenuOpen(false);
+    onSignOut?.();
+  }
+
   return (
     <section className="flex h-full min-h-0 w-full flex-col border-r border-black/30 bg-[#17212b] md:max-w-[370px]">
       <div className="border-b border-black/25 px-3 py-3">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white"
-            title="Menu"
-          >
-            <Menu size={21} />
-          </button>
+          <div ref={menuRef} className="relative shrink-0">
+            <button
+              type="button"
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white"
+              title="Menu"
+            >
+              <Menu size={21} />
+            </button>
+
+            {isMenuOpen ? (
+              <div className="absolute left-0 top-12 z-30 w-56 rounded-lg border border-black/25 bg-[#202b36] py-2 shadow-panel">
+                <Link
+                  to="/profile"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+                >
+                  <UserRound size={17} />
+                  Profile
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleOpenPeopleFromMenu}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+                >
+                  <MessageSquarePlus size={17} />
+                  New chat
+                </button>
+                <div className="my-2 h-px bg-black/25" />
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-rose-100 transition hover:bg-rose-400/10"
+                >
+                  <LogOut size={17} />
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
           <Link to="/profile" className="shrink-0" title="Profile">
             <Avatar user={currentUser} size="sm" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-white">Pulse</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-lg font-semibold tracking-tight text-white">Pulse</h1>
+              <span
+                className={`h-2 w-2 rounded-full ${realtimeTone}`}
+                title={`Realtime ${realtimeStatus}`}
+              />
+            </div>
             <p className="truncate text-xs text-slate-400">
               {stats.onlineCount} online - {stats.unreadTotal} unread
             </p>
@@ -120,7 +213,7 @@ export default function ConversationList({
                           conversation.unreadCount > 0 ? "font-medium text-slate-100" : "text-slate-400",
                         ].join(" ")}
                       >
-                        {conversation.lastMessage?.senderId === currentUser.id ? "You: " : ""}
+                        {isSameId(conversation.lastMessage?.senderId, currentUser.id) ? "You: " : ""}
                         {preview}
                       </p>
                       {conversation.unreadCount > 0 ? (

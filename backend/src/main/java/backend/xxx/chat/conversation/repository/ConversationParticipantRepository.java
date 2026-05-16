@@ -110,6 +110,19 @@ public interface ConversationParticipantRepository
             @Param("conversationIds") Collection<Long> conversationIds
     );
 
+    @Query("""
+        select distinct participant.user.username
+        from ConversationParticipant participant
+        where participant.user.id <> :userId
+            and participant.isVisibleInList = true
+            and participant.conversation.id in (
+                select actorParticipant.conversation.id
+                from ConversationParticipant actorParticipant
+                where actorParticipant.user.id = :userId
+            )
+        """)
+    List<String> findVisiblePeerUsernamesByUserId(@Param("userId") Long userId);
+
     interface DirectConversationLookup {
         Long getUserId();
 

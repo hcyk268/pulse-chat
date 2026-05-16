@@ -27,6 +27,7 @@ import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
+import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -219,6 +220,14 @@ public class MessageService {
         );
 
         currentParticipant.markRead(lastReadMessage.getId());
+
+        applicationEventPublisher.publishEvent(
+                new MessageReadDomainEvent(
+                        conversation.getId() ,
+                        currentUser.getId(),
+                        lastReadMessage.getId(),
+                        readAt)
+        );
 
         return new MarkReadResponse(
                 conversation.getId(),

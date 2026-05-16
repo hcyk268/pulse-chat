@@ -10,6 +10,10 @@ import InteractiveEmptyState from "./InteractiveEmptyState";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 
+function isSameId(left, right) {
+  return left != null && right != null && String(left) === String(right);
+}
+
 export default function ChatWindow({
   conversation,
   currentUser,
@@ -21,6 +25,7 @@ export default function ChatWindow({
   isTyping,
   onLoadMoreMessages,
   onSendMessage,
+  onTypingChange,
   sendError = "",
 }) {
   const bottomRef = useRef(null);
@@ -112,7 +117,7 @@ export default function ChatWindow({
             </div>
           ) : (
             conversation.messages.map((message) => {
-              const isOwn = message.senderId === currentUser.id;
+              const isOwn = isSameId(message.senderId, currentUser.id);
               const sender = isOwn ? currentUser : participant;
 
               return (
@@ -138,6 +143,7 @@ export default function ChatWindow({
 
       <Composer
         disabled={isSending}
+        onTypingChange={onTypingChange}
         onSend={(content) => onSendMessage(conversation.id, content)}
       />
     </section>

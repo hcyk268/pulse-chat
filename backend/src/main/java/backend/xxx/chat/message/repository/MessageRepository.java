@@ -101,4 +101,30 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("readAt") Instant readAt
     );
 
+    @Modifying
+    @Query("""
+            update Message message
+            set message.status = :deliveredStatus,
+                message.deliveredAt = coalesce(message.deliveredAt, :deliveredAt)
+            where message.conversation.id = :conversationId
+                and message.sender.id <> :receiverId
+                and message.status = :sentStatus
+                and (
+                    message.createdAt < :lastDeliveredCreatedAt
+                    or (
+                        message.createdAt = :lastDeliveredCreatedAt
+                        and message.id <= :lastDeliveredMessageId
+                    )
+                )
+            """)
+    int markMessagesDeliveredUpTo(
+            @Param("conversationId") Long conversationId,
+            @Param("receiverId") Long receiverId,
+            @Param("lastDeliveredCreatedAt") Instant lastDeliveredCreatedAt,
+            @Param("lastDeliveredMessageId") Long lastDeliveredMessageId,
+            @Param("sentStatus") MessageStatus sentStatus,
+            @Param("deliveredStatus") MessageStatus deliveredStatus,
+            @Param("deliveredAt") Instant deliveredAt
+    );
+
 }

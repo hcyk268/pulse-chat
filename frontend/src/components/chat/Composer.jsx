@@ -1,15 +1,79 @@
 import { SendHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export default function Composer({ disabled = false, onSend }) {
+export default function Composer({ disabled = false, onSend, onTypingChange }) {
   const [value, setValue] = useState("");
+  const onTypingChangeRef = useRef(onTypingChange);
+  const stopTypingTimerRef = useRef(null);
+  const typingRef = useRef(false);
+
+  useEffect(() => {
+    onTypingChangeRef.current = onTypingChange;
+  }, [onTypingChange]);
+
+  function clearStopTypingTimer() {
+    if (!stopTypingTimerRef.current) return;
+
+    window.clearTimeout(stopTypingTimerRef.current);
+    stopTypingTimerRef.current = null;
+  }
+
+  function emitTyping(nextTyping) {
+    if (typingRef.current === nextTyping) return;
+
+    typingRef.current = nextTyping;
+    onTypingChangeRef.current?.(nextTyping);
+  }
+
+  function scheduleTypingStop() {
+    clearStopTypingTimer();
+    stopTypingTimerRef.current = window.setTimeout(() => {
+      emitTyping(false);
+      stopTypingTimerRef.current = null;
+    }, 2500);
+  }
+
+  function stopTyping() {
+    clearStopTypingTimer();
+    emitTyping(false);
+  }
+
+  useEffect(() => {
+    if (disabled) {
+      stopTyping();
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    return () => {
+      clearStopTypingTimer();
+      if (typingRef.current) {
+        onTypingChangeRef.current?.(false);
+      }
+    };
+  }, []);
 
   function submit() {
     const text = value.trim();
     if (!text || disabled) return;
 
+    stopTyping();
     onSend(text);
     setValue("");
+  }
+
+  function handleChange(event) {
+    const nextValue = event.target.value;
+    setValue(nextValue);
+
+    if (disabled) return;
+
+    if (nextValue.trim()) {
+      emitTyping(true);
+      scheduleTypingStop();
+    } else {
+      stopTyping();
+    }
   }
 
   function handleKeyDown(event) {
@@ -25,7 +89,7 @@ export default function Composer({ disabled = false, onSend }) {
         <div className="flex min-h-11 flex-1 items-end rounded-2xl bg-[#242f3d] px-4 py-1.5 transition focus-within:bg-[#2b3948]">
           <textarea
             value={value}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
             disabled={disabled}
             rows={1}
