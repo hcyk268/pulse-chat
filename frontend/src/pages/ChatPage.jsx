@@ -41,6 +41,7 @@ export default function ChatPage() {
     startConversation,
     startConversationError,
     stats,
+    toggleMessagePin,
     typingByConversation,
     userSearchError,
     userSearchResults,
@@ -125,6 +126,7 @@ export default function ChatPage() {
             isTyping={Boolean(conversationId && typingByConversation[conversationId])}
             onLoadMoreMessages={() => loadMoreMessages(conversationId)}
             onSendMessage={sendMessage}
+            onToggleMessagePin={(message) => toggleMessagePin(conversationId, message)}
             onTypingChange={(typing) => sendTypingStatus(conversationId, typing)}
             sendError={chatActionError}
           />

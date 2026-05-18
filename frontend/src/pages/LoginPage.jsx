@@ -77,12 +77,12 @@ export default function LoginPage() {
             Realtime chat that feels alive.
           </h1>
           <p className="mt-5 max-w-lg text-base leading-7 text-slate-300">
-            A sharper mock frontend with drawn product assets, live-feeling message states, and clean routing.
+            Sign in to your live workspace, pick up conversations, and keep presence in sync.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <StatusPill tone="cyan">JWT ready</StatusPill>
-            <StatusPill tone="emerald">Mock realtime</StatusPill>
-            <StatusPill tone="amber">Route based</StatusPill>
+            <StatusPill tone="cyan">Secure session</StatusPill>
+            <StatusPill tone="emerald">Realtime sync</StatusPill>
+            <StatusPill tone="amber">Direct chat</StatusPill>
           </div>
         </div>
         <div className="relative z-10 mt-8 animate-enter-up [animation-delay:120ms]">
@@ -175,7 +175,7 @@ export default function LoginPage() {
 
           <div className="mt-6 flex items-center gap-3 rounded-xl bg-[#242f3d] p-3 text-sm text-slate-300">
             <ShieldCheck size={18} className="shrink-0 text-emerald-300" />
-            Login now uses the backend auth API.
+            Your session is protected and ready for realtime chat.
           </div>
         </form>
       </section>

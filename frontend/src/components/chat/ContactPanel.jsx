@@ -93,7 +93,7 @@ export default function ContactPanel({
                     />
                   </div>
                   <p className="truncate text-xs text-slate-400">
-                    {contact.role} · @{contact.username}
+                    {contact.role} / @{contact.username}
                   </p>
                   <p
                     className={[

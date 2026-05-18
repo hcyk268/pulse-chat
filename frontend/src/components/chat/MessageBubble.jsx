@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Clock3 } from "lucide-react";
+import { Check, CheckCheck, Clock3, Pin } from "lucide-react";
 import { formatShortTime } from "../../utils/formatters";
 import Avatar from "../ui/Avatar";
 
@@ -13,7 +13,9 @@ function StatusIcon({ status }) {
   return <Clock3 size={14} className="text-slate-400 transition-colors duration-200" />;
 }
 
-export default function MessageBubble({ message, sender, isOwn }) {
+export default function MessageBubble({ message, sender, isOwn, onTogglePin }) {
+  const pinLabel = message.pinned ? "Unpin message" : "Pin message";
+
   return (
     <div
       className={[
@@ -46,8 +48,22 @@ export default function MessageBubble({ message, sender, isOwn }) {
         </div>
 
         <div className="mt-1 flex items-center gap-1.5 px-1 text-[11px] text-slate-500 opacity-80 transition-opacity duration-200 group-hover:opacity-100">
+          {message.pinned ? (
+            <Pin size={12} className="text-[#6ab7ee]" aria-label="Pinned" />
+          ) : null}
           <span>{formatShortTime(message.createdAt)}</span>
           {isOwn ? <StatusIcon status={message.status} /> : null}
+          {onTogglePin ? (
+            <button
+              type="button"
+              aria-pressed={Boolean(message.pinned)}
+              onClick={() => onTogglePin(message)}
+              className="press -mr-1 flex h-6 w-6 items-center justify-center rounded-full text-slate-500 opacity-70 transition-all duration-200 hover:bg-white/10 hover:text-[#6ab7ee] focus:opacity-100 group-hover:opacity-100"
+              title={pinLabel}
+            >
+              <Pin size={12} />
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

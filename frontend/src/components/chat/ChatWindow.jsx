@@ -25,6 +25,7 @@ export default function ChatWindow({
   isTyping,
   onLoadMoreMessages,
   onSendMessage,
+  onToggleMessagePin,
   onTypingChange,
   sendError = "",
 }) {
@@ -138,6 +139,7 @@ export default function ChatWindow({
                   message={message}
                   sender={sender}
                   isOwn={isOwn}
+                  onTogglePin={onToggleMessagePin}
                 />
               );
             })

@@ -156,7 +156,7 @@ export default function ConversationList({
               />
             </div>
             <p className="truncate text-xs text-slate-400">
-              {stats.onlineCount} online · {stats.unreadTotal} unread
+              {stats.onlineCount} online / {stats.unreadTotal} unread
             </p>
           </div>
 

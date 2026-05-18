@@ -33,3 +33,31 @@ export function markMessagesRead({ conversationId, lastReadMessageId }) {
   });
 }
 
+export function pinMessage(messageId) {
+  return apiRequest(`/api/v1/messages/${messageId}/pin`, {
+    method: "POST",
+  });
+}
+
+export function unpinMessage(messageId) {
+  return apiRequest(`/api/v1/messages/${messageId}/pin`, {
+    method: "DELETE",
+  });
+}
+
+export function getMessageReactions(messageId) {
+  return apiRequest(`/api/v1/messages/${messageId}/reactions`);
+}
+
+export function reactToMessage(messageId, emoji) {
+  return apiRequest(`/api/v1/messages/${messageId}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export function removeMessageReaction(messageId, emoji) {
+  return apiRequest(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, {
+    method: "DELETE",
+  });
+}

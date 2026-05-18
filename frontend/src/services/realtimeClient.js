@@ -1,14 +1,5 @@
 import { getAccessToken } from "../utils/authStorage";
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(
-  /\/$/,
-  "",
-);
-
-const REALTIME_URL =
-  import.meta.env.VITE_WS_URL ||
-  `${API_BASE_URL.replace(/^http/i, "ws")}/ws`;
-const REALTIME_HOST = new URL(API_BASE_URL).host;
+import { REALTIME_HOST, REALTIME_URL } from "./apiConfig";
 
 const USER_EVENTS_DESTINATION = "/user/queue/events";
 const USER_ERRORS_DESTINATION = "/user/queue/errors";

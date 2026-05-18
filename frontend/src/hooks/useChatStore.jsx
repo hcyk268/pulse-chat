@@ -1,10 +1,10 @@
 import { createContext, useContext } from "react";
-import { useChatMock } from "./useChatMock";
+import { useChatApi } from "./useChatApi";
 
 const ChatContext = createContext(null);
 
 export function ChatProvider({ children }) {
-  const chat = useChatMock();
+  const chat = useChatApi();
 
   return <ChatContext.Provider value={chat}>{children}</ChatContext.Provider>;
 }

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { currentUserMock } from "../data/mockData";
 import {
   clearAuthSession,
   getAuthSession,
@@ -11,17 +10,34 @@ import { setAuthEventHandlers } from "../services/apiClient";
 import {
   createDirectConversation,
   getConversation,
+  listConversationPins,
   listConversations,
 } from "../services/conversationApi";
 import {
   listMessages,
   markMessagesRead,
+  pinMessage as pinMessageApi,
   sendMessage as sendMessageApi,
+  unpinMessage as unpinMessageApi,
 } from "../services/messageApi";
 import { createRealtimeClient } from "../services/realtimeClient";
 import { getMe, searchUsers as searchUsersApi, updateMe } from "../services/userApi";
 
 const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
+const DEFAULT_USER_ACCENT = "from-cyan-300 to-emerald-400";
+const EMPTY_CURRENT_USER = {
+  id: null,
+  backendId: null,
+  username: "",
+  email: "",
+  displayName: "You",
+  avatarUrl: null,
+  bio: "",
+  accountStatus: null,
+  accent: DEFAULT_USER_ACCENT,
+  createdAt: null,
+  updatedAt: null,
+};
 
 function createClientId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -34,15 +50,16 @@ function createClientId() {
 }
 
 function toCurrentUser(user) {
-  const userId = user?.id ?? currentUserMock.id;
+  const userId = user?.id ?? null;
 
   return {
-    ...currentUserMock,
+    ...EMPTY_CURRENT_USER,
     ...user,
     id: userId,
     backendId: userId,
-    bio: user?.bio ?? currentUserMock.bio,
-    accent: user?.accent ?? currentUserMock.accent,
+    displayName: user?.displayName || user?.username || EMPTY_CURRENT_USER.displayName,
+    bio: user?.bio ?? "",
+    accent: user?.accent ?? DEFAULT_USER_ACCENT,
   };
 }
 
@@ -125,10 +142,17 @@ function getMessageIndex(messages, messageId) {
   return messages.findIndex((message) => isSameId(message.id, messageId));
 }
 
-export function useChatMock() {
+function getPinnedMessageIds(pinResponse) {
+  return (pinResponse?.items ?? [])
+    .map((pin) => pin?.message?.id)
+    .filter((messageId) => messageId != null)
+    .map(String);
+}
+
+export function useChatApi() {
   const [authSession, setAuthSession] = useState(getStoredAuthSession);
   const [currentUser, setCurrentUser] = useState(() => {
-    return authSession?.user ? toCurrentUser(authSession.user) : currentUserMock;
+    return authSession?.user ? toCurrentUser(authSession.user) : EMPTY_CURRENT_USER;
   });
   const [authStatus, setAuthStatus] = useState(() =>
     authSession ? "checking" : "unauthenticated",
@@ -147,6 +171,7 @@ export function useChatMock() {
   const [loadingMessagesByConversation, setLoadingMessagesByConversation] = useState({});
   const [loadingOlderMessagesByConversation, setLoadingOlderMessagesByConversation] = useState({});
   const [messageErrorByConversation, setMessageErrorByConversation] = useState({});
+  const [pinnedMessageIdsByConversation, setPinnedMessageIdsByConversation] = useState({});
   const [chatActionError, setChatActionError] = useState("");
   const [typingByConversation, setTypingByConversation] = useState({});
   const [isStartingConversation, setIsStartingConversation] = useState(false);
@@ -179,7 +204,7 @@ export function useChatMock() {
     return conversations
       .map((conversation) => {
         const otherParticipant = contacts.find(
-          (contact) => contact.id === conversation.otherParticipantId,
+          (contact) => isSameId(contact.id, conversation.otherParticipantId),
         ) ?? conversation.otherParticipant;
         const lastMessage = conversation.messages.at(-1) ?? conversation.lastMessage ?? null;
 
@@ -267,6 +292,37 @@ export function useChatMock() {
     );
   }
 
+  function replaceConversationPins(conversationId, pinResponse) {
+    if (!conversationId) return;
+
+    setPinnedMessageIdsByConversation((previous) => ({
+      ...previous,
+      [String(conversationId)]: getPinnedMessageIds(pinResponse),
+    }));
+  }
+
+  function setMessagePinned(conversationId, messageId, pinned) {
+    if (!conversationId || !messageId) return;
+
+    const key = String(conversationId);
+    const messageKey = String(messageId);
+
+    setPinnedMessageIdsByConversation((previous) => {
+      const ids = new Set(previous[key] ?? []);
+
+      if (pinned) {
+        ids.add(messageKey);
+      } else {
+        ids.delete(messageKey);
+      }
+
+      return {
+        ...previous,
+        [key]: Array.from(ids),
+      };
+    });
+  }
+
   function clearTypingTimeout(conversationId) {
     const key = String(conversationId);
     const timeoutId = typingTimeoutsRef.current.get(key);
@@ -350,12 +406,13 @@ export function useChatMock() {
   const clearAuthenticatedSession = useCallback((message = "") => {
     clearAuthSession();
     setAuthSession(null);
-    setCurrentUser(currentUserMock);
+    setCurrentUser(EMPTY_CURRENT_USER);
     setConversations([]);
     setConversationPaging(null);
     setContacts([]);
     setUserSearchResults([]);
     setMessagePagingByConversation({});
+    setPinnedMessageIdsByConversation({});
     setTypingByConversation({});
     activeConversationIdRef.current = null;
     deliveredMessageIdsRef.current.clear();
@@ -472,9 +529,10 @@ export function useChatMock() {
     setMessageErrorByConversation((previous) => ({ ...previous, [conversationId]: "" }));
 
     try {
-      const [conversationResponse, messageResponse] = await Promise.all([
+      const [conversationResponse, messageResponse, pinsResponse] = await Promise.all([
         getConversation(conversationId),
         listMessages({ conversationId, limit: 20 }),
+        listConversationPins(conversationId),
       ]);
       const messages = (messageResponse.items ?? []).map((message) =>
         normalizeMessage(message),
@@ -483,6 +541,7 @@ export function useChatMock() {
 
       setContacts((previous) => mergeContacts(previous, [normalizedConversation.otherParticipant]));
       setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
+      replaceConversationPins(conversationId, pinsResponse);
       setMessagePagingByConversation((previous) => ({
         ...previous,
         [conversationId]: messageResponse.paging ?? null,
@@ -741,6 +800,21 @@ export function useChatMock() {
     );
   }
 
+  function applyRealtimeMessagePinned(event) {
+    const pin = event.data?.pin;
+    const conversationId = event.conversationId ?? pin?.message?.conversationId;
+    const messageId = pin?.message?.id;
+
+    setMessagePinned(conversationId, messageId, true);
+  }
+
+  function applyRealtimeMessageUnpinned(event) {
+    const conversationId = event.conversationId;
+    const messageId = event.data?.messageId;
+
+    setMessagePinned(conversationId, messageId, false);
+  }
+
   function handleRealtimeEvent(event) {
     if (!event?.eventType) return;
 
@@ -756,6 +830,16 @@ export function useChatMock() {
 
     if (event.eventType === "message.read") {
       applyRealtimeReadReceipt(event);
+      return;
+    }
+
+    if (event.eventType === "message.pinned") {
+      applyRealtimeMessagePinned(event);
+      return;
+    }
+
+    if (event.eventType === "message.unpinned") {
+      applyRealtimeMessageUnpinned(event);
       return;
     }
 
@@ -814,10 +898,20 @@ export function useChatMock() {
     if (!conversation) return null;
 
     const otherParticipant = contacts.find(
-      (contact) => contact.id === conversation.otherParticipantId,
+      (contact) => isSameId(contact.id, conversation.otherParticipantId),
+    );
+    const pinnedMessageIds = new Set(
+      pinnedMessageIdsByConversation[String(conversation.id)] ?? [],
     );
 
-    return { ...conversation, otherParticipant };
+    return {
+      ...conversation,
+      otherParticipant,
+      messages: (conversation.messages ?? []).map((message) => ({
+        ...message,
+        pinned: pinnedMessageIds.has(String(message.id)),
+      })),
+    };
   }
 
   async function markConversationRead(conversationId, explicitLastReadMessageId = null) {
@@ -898,6 +992,41 @@ export function useChatMock() {
       return null;
     } finally {
       setSendingByConversation((previous) => ({ ...previous, [conversationId]: false }));
+    }
+  }
+
+  async function toggleMessagePin(conversationId, message) {
+    const messageId = message?.id;
+    if (!conversationId || !messageId) return null;
+
+    const pinnedMessageIds = new Set(
+      pinnedMessageIdsByConversation[String(conversationId)] ?? [],
+    );
+    const isPinned = pinnedMessageIds.has(String(messageId));
+
+    setChatActionError("");
+
+    try {
+      if (isPinned) {
+        const response = await unpinMessageApi(messageId);
+        setMessagePinned(
+          response?.conversationId ?? conversationId,
+          response?.messageId ?? messageId,
+          false,
+        );
+        return response;
+      }
+
+      const response = await pinMessageApi(messageId);
+      setMessagePinned(
+        response?.message?.conversationId ?? conversationId,
+        response?.message?.id ?? messageId,
+        true,
+      );
+      return response;
+    } catch (error) {
+      setChatActionError(error.message || "Could not update message pin.");
+      return null;
     }
   }
 
@@ -1048,6 +1177,7 @@ export function useChatMock() {
     setAuthenticatedUser,
     signOut,
     sendTypingStatus,
+    toggleMessagePin,
     typingByConversation,
     updateProfile,
     getMessageError,

@@ -15,6 +15,10 @@ export function getConversation(conversationId) {
   return apiRequest(`/api/v1/conversations/${conversationId}`);
 }
 
+export function listConversationPins(conversationId) {
+  return apiRequest(`/api/v1/conversations/${conversationId}/pins`);
+}
+
 export function createDirectConversation(targetUserId) {
   return apiRequest("/api/v1/conversations/direct", {
     method: "POST",
@@ -23,4 +27,3 @@ export function createDirectConversation(targetUserId) {
     }),
   });
 }
-
