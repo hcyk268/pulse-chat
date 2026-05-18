@@ -8,18 +8,37 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  --tg-accent: #2aabee;
+  --tg-accent-soft: #6ab7ee;
+  --tg-bg: #0e1621;
+  --tg-panel: #17212b;
+  --tg-panel-2: #202b36;
+  --tg-input: #242f3d;
+  --tg-input-focus: #2b3948;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: #0e1621;
+  background:
+    radial-gradient(ellipse 1200px 700px at 15% -10%, rgba(42, 171, 238, 0.08), transparent 60%),
+    radial-gradient(ellipse 900px 600px at 95% 110%, rgba(103, 232, 249, 0.05), transparent 60%),
+    #0e1621;
   color: #eef2ff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -28,14 +47,30 @@ textarea {
   font: inherit;
 }
 
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(42, 171, 238, 0.35);
+  color: #ffffff;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.38);
+  background: rgba(148, 163, 184, 0.28);
+  background-clip: content-box;
+  transition: background-color 200ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
   background-clip: content-box;
 }
 
@@ -43,10 +78,34 @@ textarea {
   background: transparent;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+}
+
+/* === Focus rings === */
+*:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgba(42, 171, 238, 0.7);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* === Glass / mesh utilities === */
 .glass-panel {
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(8, 13, 24, 0.72)),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(8, 13, 24, 0.78)),
     rgba(15, 23, 42, 0.72);
   backdrop-filter: blur(22px);
 }
@@ -62,6 +121,231 @@ textarea {
   text-wrap: balance;
 }
 
+/* === Interactive primitives === */
+.press {
+  transition:
+    transform 140ms cubic-bezier(0.2, 0.9, 0.18, 1),
+    box-shadow 200ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.press:active {
+  transform: scale(0.96);
+}
+
+.lift {
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms ease,
+    background-color 200ms ease;
+}
+
+.lift:hover {
+  transform: translateY(-1px);
+}
+
+/* === Conversation row accent === */
+.conv-row {
+  position: relative;
+  isolation: isolate;
+  transition:
+    background-color 200ms ease,
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.conv-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2aabee, #67e8f9);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition:
+    opacity 220ms ease,
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.conv-row:hover::before {
+  opacity: 0.55;
+  transform: scaleY(1);
+}
+
+.conv-row[data-active="true"]::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* === Message bubble polish === */
+.bubble-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.bubble-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 62%
+  );
+  transform: translateX(-150%) skewX(-12deg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.bubble-shine:hover::after {
+  opacity: 1;
+  animation: sheen 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheen {
+  0% {
+    transform: translateX(-150%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-12deg);
+  }
+}
+
+/* === Input field polish === */
+.field-shell {
+  position: relative;
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.field-shell:focus-within {
+  background-color: var(--tg-input-focus);
+  box-shadow:
+    0 0 0 1px rgba(42, 171, 238, 0.35),
+    0 0 0 4px rgba(42, 171, 238, 0.12);
+}
+
+/* === Send button delight === */
+.send-button {
+  position: relative;
+  isolation: isolate;
+  transition:
+    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 220ms ease,
+    background-color 200ms ease,
+    color 180ms ease;
+}
+
+.send-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 55%);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.send-button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.send-button:not(:disabled):hover::before {
+  opacity: 1;
+}
+
+.send-button:not(:disabled):active {
+  transform: scale(0.94);
+}
+
+/* === Avatar status pulse === */
+.avatar-status-pulse {
+  animation: avatar-status 2.4s ease-out infinite;
+}
+
+@keyframes avatar-status {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.85;
+  }
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* === Typing indicator === */
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(203, 213, 225, 0.8);
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+@keyframes typing-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0) scale(0.85);
+    opacity: 0.55;
+  }
+  40% {
+    transform: translateY(-4px) scale(1);
+    opacity: 1;
+  }
+}
+
+/* === Modal / sheet overlay === */
+.sheet-overlay {
+  animation: fade-in 220ms ease-out both;
+}
+
+.sheet-panel {
+  animation: slide-in-right 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* === Empty-state physics scene === */
 .empty-physics-scene {
   perspective: 1200px;
 }
@@ -75,15 +359,17 @@ textarea {
     scale(var(--press));
   transform-style: preserve-3d;
   transition:
-    transform 180ms cubic-bezier(0.2, 0.9, 0.18, 1),
-    border-color 180ms ease,
-    background-color 180ms ease;
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
   will-change: transform;
 }
 
 .empty-physics-panel:hover {
-  border-color: rgba(103, 232, 249, 0.28);
+  border-color: rgba(103, 232, 249, 0.32);
   background-color: rgba(23, 33, 43, 0.98);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 80px rgba(42, 171, 238, 0.12);
 }
 
 .empty-physics-sheen {
@@ -97,16 +383,16 @@ textarea {
     );
   background-size: 240% 100%;
   mix-blend-mode: screen;
-  opacity: 0.65;
+  opacity: 0.7;
   transform: translateZ(28px);
   animation: empty-sheen 5.8s ease-in-out infinite;
 }
 
 .empty-physics-orbit {
-  border: 1px solid rgba(103, 232, 249, 0.08);
+  border: 1px solid rgba(103, 232, 249, 0.1);
   box-shadow:
-    inset 0 0 34px rgba(34, 211, 238, 0.04),
-    0 0 34px rgba(34, 211, 238, 0.04);
+    inset 0 0 34px rgba(34, 211, 238, 0.05),
+    0 0 34px rgba(34, 211, 238, 0.05);
   transform: translateZ(18px);
   animation: empty-orbit-breathe 4.8s ease-in-out infinite;
 }
@@ -121,9 +407,10 @@ textarea {
     rotate(calc(var(--mx) * var(--depth) * 0.055deg))
     scale(var(--press));
   transition:
-    transform 160ms cubic-bezier(0.2, 0.9, 0.18, 1),
-    border-color 160ms ease,
-    background-color 160ms ease;
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 200ms ease,
+    background-color 200ms ease,
+    box-shadow 200ms ease;
   will-change: transform;
   animation: empty-chip-float 5.2s ease-in-out infinite;
 }
@@ -137,8 +424,9 @@ textarea {
 }
 
 .empty-physics-chip:hover {
-  border-color: rgba(103, 232, 249, 0.3);
+  border-color: rgba(103, 232, 249, 0.4);
   background-color: rgba(24, 37, 51, 0.98);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45), 0 0 24px rgba(103, 232, 249, 0.18);
 }
 
 @keyframes empty-sheen {
@@ -175,13 +463,13 @@ textarea {
 
 .chat-backdrop-grid {
   transform-origin: center;
-  animation: chat-grid-drift 18s linear infinite;
+  animation: chat-grid-drift 22s linear infinite;
 }
 
 .chat-backdrop-wave {
   stroke-dasharray: 18 20;
   animation:
-    chat-wave-flow 8.5s linear infinite,
+    chat-wave-flow 9s linear infinite,
     chat-wave-float 7s ease-in-out infinite;
 }
 
@@ -238,20 +526,63 @@ textarea {
   }
 }
 
+/* === Dropdown menu === */
+.menu-pop {
+  animation: menu-pop 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top left;
+}
+
+@keyframes menu-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* === Skeleton shimmer === */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(36, 47, 61, 0.6);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* === Reduced motion === */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   .empty-physics-panel,
   .empty-physics-chip {
     transform: none;
-    transition: none;
-  }
-
-  .empty-physics-sheen,
-  .empty-physics-chip,
-  .empty-physics-orbit,
-  .chat-backdrop-grid,
-  .chat-backdrop-wave,
-  .chat-backdrop-card,
-  .chat-backdrop-card-line {
-    animation: none;
   }
 }

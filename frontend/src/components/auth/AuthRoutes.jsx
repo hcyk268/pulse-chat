@@ -4,8 +4,11 @@ import { useChatStore } from "../../hooks/useChatStore";
 function AuthLoadingScreen() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0e1621] p-6 text-white">
-      <div className="flex items-center gap-3 rounded-lg border border-black/25 bg-[#17212b] px-5 py-4 shadow-panel">
-        <span className="h-3 w-3 animate-pulse rounded-full bg-[#2aabee]" />
+      <div className="flex animate-scale-in items-center gap-3 rounded-xl border border-white/5 bg-[#17212b] px-5 py-4 shadow-panel">
+        <span className="relative flex h-3 w-3">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2aabee] opacity-75" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-[#2aabee]" />
+        </span>
         <span className="text-sm font-medium text-slate-200">Checking session...</span>
       </div>
     </main>

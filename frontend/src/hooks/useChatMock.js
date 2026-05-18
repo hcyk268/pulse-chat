@@ -156,6 +156,7 @@ export function useChatMock() {
   const [realtimeError, setRealtimeError] = useState("");
   const activeConversationIdRef = useRef(null);
   const currentUserRef = useRef(currentUser);
+  const deliveredMessageIdsRef = useRef(new Set());
   const pendingMessagesByConversationRef = useRef(new Map());
   const realtimeClientRef = useRef(null);
   const realtimeEventHandlerRef = useRef(null);
@@ -318,6 +319,26 @@ export function useChatMock() {
     return messages;
   }
 
+  function sendMessageDelivered(message) {
+    const messageId = message?.id;
+    if (!messageId || isSameId(message.senderId, currentUserRef.current.id)) {
+      return;
+    }
+
+    if (message.status === "DELIVERED" || message.status === "READ") {
+      return;
+    }
+
+    const key = String(messageId);
+    if (deliveredMessageIdsRef.current.has(key)) {
+      return;
+    }
+
+    if (realtimeClientRef.current?.sendMessageDelivered(messageId)) {
+      deliveredMessageIdsRef.current.add(key);
+    }
+  }
+
   const applyAuthenticatedSession = useCallback((nextAuthSession, rememberSession = true) => {
     saveAuthSession(nextAuthSession, rememberSession);
     setAuthSession(nextAuthSession);
@@ -337,6 +358,7 @@ export function useChatMock() {
     setMessagePagingByConversation({});
     setTypingByConversation({});
     activeConversationIdRef.current = null;
+    deliveredMessageIdsRef.current.clear();
     pendingMessagesByConversationRef.current.clear();
     clearAllTypingTimeouts();
     setAuthStatus("unauthenticated");
@@ -555,6 +577,7 @@ export function useChatMock() {
     });
 
     if (!isSameId(message.senderId, currentUserRef.current.id)) {
+      sendMessageDelivered(message);
       setConversationTyping(message.conversationId, false);
 
       if (isSameId(activeConversationIdRef.current, message.conversationId)) {
@@ -586,27 +609,48 @@ export function useChatMock() {
     if (!messageId) return;
 
     setConversations((previous) =>
-      previous.map((conversation) => ({
-        ...conversation,
-        lastMessage: isSameId(conversation.lastMessage?.id, messageId)
-          ? {
-              ...conversation.lastMessage,
-              status: data.status ?? conversation.lastMessage.status,
-              deliveredAt: data.deliveredAt ?? conversation.lastMessage.deliveredAt,
-              readAt: data.readAt ?? conversation.lastMessage.readAt,
-            }
-          : conversation.lastMessage,
-        messages: (conversation.messages ?? []).map((message) =>
-          isSameId(message.id, messageId)
+      previous.map((conversation) => {
+        const messages = conversation.messages ?? [];
+        const cutoffIndex = getMessageIndex(messages, messageId);
+        const isDeliveredEvent = data.status === "DELIVERED";
+
+        const nextMessages =
+          isDeliveredEvent && cutoffIndex !== -1
+            ? messages.map((message, index) =>
+                index <= cutoffIndex &&
+                isSameId(message.senderId, currentUserRef.current.id) &&
+                message.status !== "READ"
+                  ? {
+                      ...message,
+                      status: "DELIVERED",
+                      deliveredAt: data.deliveredAt ?? message.deliveredAt,
+                    }
+                  : message,
+              )
+            : messages.map((message) =>
+                isSameId(message.id, messageId)
+                  ? {
+                      ...message,
+                      status: data.status ?? message.status,
+                      deliveredAt: data.deliveredAt ?? message.deliveredAt,
+                      readAt: data.readAt ?? message.readAt,
+                    }
+                  : message,
+              );
+
+        return {
+          ...conversation,
+          lastMessage: isSameId(conversation.lastMessage?.id, messageId)
             ? {
-                ...message,
-                status: data.status ?? message.status,
-                deliveredAt: data.deliveredAt ?? message.deliveredAt,
-                readAt: data.readAt ?? message.readAt,
+                ...conversation.lastMessage,
+                status: data.status ?? conversation.lastMessage.status,
+                deliveredAt: data.deliveredAt ?? conversation.lastMessage.deliveredAt,
+                readAt: data.readAt ?? conversation.lastMessage.readAt,
               }
-            : message,
-        ),
-      })),
+            : conversation.lastMessage,
+          messages: nextMessages,
+        };
+      }),
     );
   }
 

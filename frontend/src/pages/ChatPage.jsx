@@ -132,8 +132,13 @@ export default function ChatPage() {
       </main>
 
       {showPeople ? (
-        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm">
-          <div className="ml-auto h-full w-full max-w-md border-l border-black/30 bg-[#17212b] shadow-panel">
+        <div
+          className="sheet-overlay fixed inset-0 z-50 bg-black/55 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setShowPeople(false);
+          }}
+        >
+          <div className="sheet-panel ml-auto h-full w-full max-w-md border-l border-black/30 bg-[#17212b] shadow-panel">
             <ContactPanel
               contacts={contacts}
               isSearching={isSearchingUsers}

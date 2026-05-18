@@ -12,6 +12,8 @@ const REALTIME_HOST = new URL(API_BASE_URL).host;
 
 const USER_EVENTS_DESTINATION = "/user/queue/events";
 const USER_ERRORS_DESTINATION = "/user/queue/errors";
+const USER_EVENTS_SUBSCRIPTION_ID = "user-events";
+const USER_ERRORS_SUBSCRIPTION_ID = "user-errors";
 
 function buildFrame(command, headers = {}, body = "") {
   const headerLines = Object.entries(headers)
@@ -59,25 +61,27 @@ export function createRealtimeClient({ onEvent, onStatus, onError }) {
   }
 
   function sendFrame(command, headers = {}, body = "") {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+
     socket.send(buildFrame(command, headers, body));
+    return true;
   }
 
   function subscribeToEvents() {
     sendFrame("SUBSCRIBE", {
       ack: "auto",
       destination: USER_EVENTS_DESTINATION,
-      id: "user-events",
+      id: USER_EVENTS_SUBSCRIPTION_ID,
     });
     sendFrame("SUBSCRIBE", {
       ack: "auto",
       destination: USER_ERRORS_DESTINATION,
-      id: "user-errors",
+      id: USER_ERRORS_SUBSCRIPTION_ID,
     });
   }
 
   function sendJson(destination, payload) {
-    sendFrame(
+    return sendFrame(
       "SEND",
       {
         "content-type": "application/json",
@@ -119,7 +123,14 @@ export function createRealtimeClient({ onEvent, onStatus, onError }) {
 
       if (frame.command === "MESSAGE") {
         try {
-          onEvent?.(JSON.parse(frame.body));
+          const body = JSON.parse(frame.body);
+
+          if (frame.headers.subscription === USER_ERRORS_SUBSCRIPTION_ID) {
+            onError?.(body.message || "Realtime request failed.");
+            return;
+          }
+
+          onEvent?.(body);
         } catch (error) {
           onError?.(error.message || "Could not parse realtime event.");
         }
@@ -184,9 +195,14 @@ export function createRealtimeClient({ onEvent, onStatus, onError }) {
     connect,
     disconnect,
     sendTypingStatus(conversationId, typing) {
-      if (!conversationId) return;
+      if (!conversationId) return false;
 
-      sendJson(`/app/conversations/${conversationId}/typing`, { typing });
+      return sendJson(`/app/conversations/${conversationId}/typing`, { typing });
+    },
+    sendMessageDelivered(messageId) {
+      if (!messageId) return false;
+
+      return sendJson(`/app/messages/${messageId}/delivered`, {});
     },
   };
 }

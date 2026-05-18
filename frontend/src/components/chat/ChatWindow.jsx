@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreVertical, Search } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Search, Video } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { formatPresence } from "../../utils/formatters";
@@ -38,7 +38,11 @@ export default function ChatWindow({
     return (
       <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0e1621] p-6">
         <ChatBackdrop />
-        <div className="relative rounded-lg border border-black/25 bg-[#17212b]/90 px-5 py-4 text-sm font-medium text-slate-200 shadow-panel">
+        <div className="relative flex animate-scale-in items-center gap-3 rounded-xl border border-white/5 bg-[#17212b]/90 px-5 py-4 text-sm font-medium text-slate-200 shadow-panel backdrop-blur">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2aabee] opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2aabee]" />
+          </span>
           Loading messages...
         </div>
       </section>
@@ -59,11 +63,12 @@ export default function ChatWindow({
   return (
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0e1621]">
       <ChatBackdrop />
-      <header className="relative flex items-center justify-between gap-3 border-b border-black/25 bg-[#17212b] px-4 py-2.5">
+
+      <header className="relative z-10 flex animate-fade-in items-center justify-between gap-3 border-b border-black/30 bg-[#17212b]/95 px-4 py-2.5 backdrop-blur">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/chat"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 md:hidden"
+            className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-300 hover:bg-white/10 hover:text-white md:hidden"
             title="Back"
           >
             <ArrowLeft size={19} />
@@ -75,17 +80,26 @@ export default function ChatWindow({
                 {participant?.displayName}
               </h2>
             </div>
-            <p className="truncate text-xs text-[#6ab7ee]">{formatPresence(participant?.presence)}</p>
+            <p
+              className={[
+                "truncate text-xs transition-colors duration-300",
+                participant?.presence?.isOnline ? "text-[#6ab7ee]" : "text-slate-400",
+              ].join(" ")}
+            >
+              {formatPresence(participant?.presence)}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <HeaderAction icon={Phone} label="Call" className="hidden sm:flex" />
+          <HeaderAction icon={Video} label="Video" className="hidden sm:flex" />
           <HeaderAction icon={Search} label="Search" />
           <HeaderAction icon={MoreVertical} label="More" />
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-5">
           {hasMoreMessages ? (
             <div className="flex justify-center">
@@ -93,7 +107,7 @@ export default function ChatWindow({
                 type="button"
                 onClick={onLoadMoreMessages}
                 disabled={isLoadingMoreMessages}
-                className="rounded-lg bg-[#17212b]/90 px-4 py-2 text-sm font-medium text-slate-200 shadow-panel transition hover:bg-[#202b36] disabled:cursor-not-allowed disabled:text-slate-500"
+                className="press lift rounded-full border border-white/5 bg-[#17212b]/90 px-4 py-2 text-sm font-medium text-slate-200 shadow-panel-soft backdrop-blur hover:bg-[#202b36] disabled:cursor-not-allowed disabled:text-slate-500"
               >
                 {isLoadingMoreMessages ? "Loading..." : "Load earlier messages"}
               </button>
@@ -101,13 +115,13 @@ export default function ChatWindow({
           ) : null}
 
           {error ? (
-            <div className="mx-auto max-w-sm rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-center text-sm leading-5 text-rose-100">
+            <div className="mx-auto max-w-sm animate-scale-in rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-center text-sm leading-5 text-rose-100 backdrop-blur">
               {error}
             </div>
           ) : null}
 
           {conversation.messages.length === 0 ? (
-            <div className="mx-auto mt-12 max-w-sm rounded-lg border border-black/25 bg-[#17212b]/90 p-6 text-center shadow-panel">
+            <div className="mx-auto mt-12 max-w-sm animate-scale-in rounded-2xl border border-white/5 bg-[#17212b]/90 p-6 text-center shadow-panel backdrop-blur">
               <EmptyChatArtwork compact />
               <Avatar user={participant} size="xl" showStatus />
               <h3 className="mt-5 text-lg font-semibold text-white">{participant?.displayName}</h3>
@@ -133,7 +147,7 @@ export default function ChatWindow({
 
           {isTyping ? <TypingIndicator user={participant} /> : null}
           {sendError ? (
-            <div className="ml-auto max-w-sm rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-sm leading-5 text-rose-100">
+            <div className="ml-auto max-w-sm animate-scale-in rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-sm leading-5 text-rose-100 backdrop-blur">
               {sendError}
             </div>
           ) : null}
@@ -154,7 +168,7 @@ function HeaderAction({ icon: Icon, label, className = "flex" }) {
   return (
     <button
       type="button"
-      className={`${className} h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white`}
+      className={`${className} press h-10 w-10 items-center justify-center rounded-full text-slate-300 hover:bg-white/10 hover:text-white`}
       title={label}
     >
       <Icon size={18} />

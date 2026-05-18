@@ -52,7 +52,7 @@ export default function InteractiveEmptyState() {
   return (
     <div
       ref={panelRef}
-      className="empty-physics-scene relative w-full max-w-[560px]"
+      className="empty-physics-scene relative w-full max-w-[560px] animate-scale-in"
       onPointerMove={updatePointer}
       onPointerLeave={resetPointer}
       onPointerDown={() => setPointer((previous) => ({ ...previous, pressed: true }))}
@@ -69,7 +69,7 @@ export default function InteractiveEmptyState() {
         return (
           <div
             key={chip.label}
-            className={`empty-physics-chip absolute z-20 items-center gap-2 rounded-lg border border-white/10 bg-[#101827]/95 px-3 py-2 text-xs font-semibold text-slate-200 shadow-panel ${chip.className}`}
+            className={`empty-physics-chip absolute z-20 items-center gap-2 rounded-xl border border-white/10 bg-[#101827]/95 px-3 py-2 text-xs font-semibold text-slate-200 shadow-panel-soft backdrop-blur ${chip.className}`}
             style={{ "--depth": chip.depth }}
           >
             <Icon size={15} className={chip.tone} />
@@ -78,12 +78,14 @@ export default function InteractiveEmptyState() {
         );
       })}
 
-      <div className="empty-physics-panel relative rounded-lg border border-black/25 bg-[#17212b]/94 px-7 pb-9 pt-8 text-center shadow-panel sm:px-9">
-        <div className="empty-physics-sheen pointer-events-none absolute inset-0 rounded-lg" />
-        <div className="empty-physics-orbit pointer-events-none absolute inset-5 rounded-lg" />
+      <div className="empty-physics-panel relative rounded-2xl border border-white/5 bg-[#17212b]/94 px-7 pb-9 pt-8 text-center shadow-panel sm:px-9">
+        <div className="empty-physics-sheen pointer-events-none absolute inset-0 rounded-2xl" />
+        <div className="empty-physics-orbit pointer-events-none absolute inset-5 rounded-2xl" />
         <div className="relative">
           <EmptyChatArtwork />
-          <h2 className="mt-4 text-2xl font-semibold text-white">No conversation selected</h2>
+          <h2 className="mt-4 bg-gradient-to-r from-white via-cyan-100 to-white bg-clip-text text-2xl font-semibold text-transparent">
+            No conversation selected
+          </h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">
             Open a recent chat or start a new direct conversation from the people panel.
           </p>
