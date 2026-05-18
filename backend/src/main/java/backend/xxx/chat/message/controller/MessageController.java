@@ -2,12 +2,9 @@ package backend.xxx.chat.message.controller;
 
 
 import backend.xxx.chat.common.security.CurrentUserProvider;
-import backend.xxx.chat.message.dto.MarkReadRequest;
-import backend.xxx.chat.message.dto.MarkReadResponse;
-import backend.xxx.chat.message.dto.MessageHistoryResponse;
-import backend.xxx.chat.message.dto.MessagePinResponse;
-import backend.xxx.chat.message.dto.MessageResponse;
-import backend.xxx.chat.message.dto.SendMessageRequest;
+import backend.xxx.chat.message.dto.*;
+import backend.xxx.chat.message.model.MessageReactionEmoji;
+import backend.xxx.chat.message.service.MessageReactionService;
 import backend.xxx.chat.message.service.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +19,7 @@ public class MessageController {
 
     private final CurrentUserProvider currentUserProvider;
     private final MessageService messageService;
+    private final MessageReactionService messageReactionService;
 
     @GetMapping()
     public ResponseEntity<MessageHistoryResponse> getHistory(
@@ -50,4 +48,44 @@ public class MessageController {
         return ResponseEntity.status(status).body(result.response());
     }
 
+    @DeleteMapping("/{messageId}/pin")
+    public ResponseEntity<UnPinMessageResponse> unPinMessage(@PathVariable Long messageId) {
+        return ResponseEntity.ok(messageService.unPinMessage(currentUserProvider.getCurrentUsername(), messageId));
+    }
+
+    @PostMapping("/{messageId}/reactions")
+    public ResponseEntity<MessageReactionResponse> reactMessage(
+            @PathVariable Long messageId,
+            @Valid @RequestBody MessageReactionRequest request
+    ) {
+        MessageReactionService.ReactMessageResult result = messageReactionService.reactMessage(
+                currentUserProvider.getCurrentUsername(),
+                messageId,
+                request
+        );
+
+        HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.response());
+    }
+
+    @DeleteMapping("/{messageId}/reactions/{emoji}")
+    public ResponseEntity<Void> removeReaction(
+            @PathVariable Long messageId,
+            @PathVariable MessageReactionEmoji emoji
+    ) {
+        messageReactionService.removeReaction(
+                currentUserProvider.getCurrentUsername(),
+                messageId,
+                emoji
+        );
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{messageId}/reactions")
+    public ResponseEntity<MessageReactionsResponse> getReactions(@PathVariable Long messageId) {
+        return ResponseEntity.ok(messageReactionService.getReactions(
+                currentUserProvider.getCurrentUsername(),
+                messageId
+        ));
+    }
 }

@@ -1,6 +1,7 @@
 package backend.xxx.chat.message.repository;
 
 import java.util.Optional;
+import java.util.List;
 
 import backend.xxx.chat.message.model.MessagePin;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,7 +15,21 @@ public interface MessagePinRepository extends JpaRepository<MessagePin, Long> {
     @Query("""
             from MessagePin messagePin
             join fetch messagePin.conversation
-            join fetch messagePin.message
+            join fetch messagePin.message message
+            join fetch message.conversation
+            join fetch message.sender
+            join fetch messagePin.pinnedBy
+            where messagePin.conversation.id = :conversationId
+            order by messagePin.pinnedAt desc, messagePin.id desc
+            """)
+    List<MessagePin> findByConversationIdWithDetails(@Param("conversationId") Long conversationId);
+
+    @Query("""
+            from MessagePin messagePin
+            join fetch messagePin.conversation
+            join fetch messagePin.message message
+            join fetch message.conversation
+            join fetch message.sender
             join fetch messagePin.pinnedBy
             where messagePin.id = :messagePinId
             """)
@@ -23,7 +38,9 @@ public interface MessagePinRepository extends JpaRepository<MessagePin, Long> {
     @Query("""
             from MessagePin messagePin
             join fetch messagePin.conversation
-            join fetch messagePin.message
+            join fetch messagePin.message message
+            join fetch message.conversation
+            join fetch message.sender
             join fetch messagePin.pinnedBy
             where messagePin.message.id = :messageId
             """)

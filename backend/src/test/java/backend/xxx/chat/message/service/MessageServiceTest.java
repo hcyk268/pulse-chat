@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import backend.xxx.chat.common.exception.ConflictException;
+import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
@@ -12,6 +13,7 @@ import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.message.dto.MessageHistoryResponse;
 import backend.xxx.chat.message.dto.MessagePinResponse;
 import backend.xxx.chat.message.dto.MessageResponse;
+import backend.xxx.chat.message.dto.UnPinMessageResponse;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
@@ -113,9 +115,9 @@ class MessageServiceTest {
         MessagePinResponse secondResponse = secondResult.response();
         assertThat(firstResult.created()).isTrue();
         assertThat(secondResult.created()).isFalse();
-        assertThat(secondResponse.id()).isEqualTo(firstResponse.id());
-        assertThat(firstResponse.conversationId()).isEqualTo(conversation.getId());
-        assertThat(firstResponse.messageId()).isEqualTo(message.getId());
+        assertThat(secondResponse.pinId()).isEqualTo(firstResponse.pinId());
+        assertThat(firstResponse.message().conversationId()).isEqualTo(conversation.getId());
+        assertThat(firstResponse.message().id()).isEqualTo(message.getId());
         assertThat(firstResponse.pinnedBy().id()).isEqualTo(alice.getId());
         assertThat(messagePinRepository.countByConversationId(conversation.getId())).isEqualTo(1L);
     }
@@ -139,6 +141,60 @@ class MessageServiceTest {
         assertThatThrownBy(() -> messageService.pinMessage(alice.getUsername(), overflowMessage.getId()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("Conversation can only have 20 pinned messages");
+    }
+
+    @Test
+    void unPinMessageDeletesPinAndReturnsOriginalMessageId() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        saveMessage(conversation, bob, "message before target", Instant.parse("2026-01-01T00:00:00Z"));
+        Message targetMessage = saveMessage(conversation, bob, "message to unpin", Instant.parse("2026-01-01T00:01:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        MessagePinResponse pinResponse = messageService.pinMessage(alice.getUsername(), targetMessage.getId()).response();
+
+        assertThat(pinResponse.pinId()).isNotEqualTo(targetMessage.getId());
+
+        UnPinMessageResponse unPinResponse = messageService.unPinMessage(alice.getUsername(), targetMessage.getId());
+
+        assertThat(unPinResponse.conversationId()).isEqualTo(conversation.getId());
+        assertThat(unPinResponse.messageId()).isEqualTo(targetMessage.getId());
+        assertThat(unPinResponse.unpinnedAt()).isNotNull();
+        assertThat(messagePinRepository.findByMessageIdWithDetails(targetMessage.getId())).isEmpty();
+    }
+
+    @Test
+    void getConversationPinsReturnsAllPinnedMessagesNewestFirst() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        Message firstMessage = saveMessage(conversation, bob, "first pinned message", Instant.parse("2026-01-01T00:00:00Z"));
+        Message secondMessage = saveMessage(conversation, bob, "second pinned message", Instant.parse("2026-01-01T00:01:00Z"));
+        Message unpinnedMessage = saveMessage(conversation, bob, "not pinned", Instant.parse("2026-01-01T00:02:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        messageService.pinMessage(alice.getUsername(), firstMessage.getId());
+        messageService.pinMessage(alice.getUsername(), secondMessage.getId());
+
+        ConversationPinsResponse response = messageService.getConversationPins(alice.getUsername(), conversation.getId());
+
+        assertThat(response.conversationId()).isEqualTo(conversation.getId());
+        assertThat(response.items())
+                .extracting(item -> item.message().id())
+                .containsExactly(secondMessage.getId(), firstMessage.getId());
+        assertThat(response.items())
+                .extracting(MessagePinResponse::pinnedAt)
+                .doesNotContainNull();
+        assertThat(response.items())
+                .extracting(item -> item.message().id())
+                .doesNotContain(unpinnedMessage.getId());
     }
 
     private Message saveMessage(

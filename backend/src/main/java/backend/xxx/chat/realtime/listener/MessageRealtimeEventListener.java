@@ -11,16 +11,8 @@ import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.service.MessageMapper;
 import backend.xxx.chat.message.service.MessagePinMapper;
-import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
-import backend.xxx.chat.realtime.event.MessageDeliveredDomainEvent;
-import backend.xxx.chat.realtime.event.MessagePinnedDomainEvent;
-import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
-import backend.xxx.chat.realtime.model.ConversationUpdatedEventData;
-import backend.xxx.chat.realtime.model.MessageCreatedEventData;
-import backend.xxx.chat.realtime.model.MessageDeliveredEventData;
-import backend.xxx.chat.realtime.model.MessagePinnedEventData;
-import backend.xxx.chat.realtime.model.MessageReadEventData;
-import backend.xxx.chat.realtime.model.RealtimeEventType;
+import backend.xxx.chat.realtime.event.*;
+import backend.xxx.chat.realtime.model.*;
 import backend.xxx.chat.realtime.service.RealtimeEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -161,5 +153,23 @@ public class MessageRealtimeEventListener {
                 event.conversationId(),
                 data
         );
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public void onMessageUnPinned(MessageUnPinnedDomainEvent event) {
+        MessageUnPinnedEventData data = new MessageUnPinnedEventData(event.messageId(), event.unPinnedAt());
+
+        List<ConversationParticipant> participants =
+                participantRepository.findByConversationIdWithUser(event.conversationId());
+
+        for (ConversationParticipant participant : participants) {
+            realtimeEventPublisher.sendToUser(
+                    participant.getUser().getUsername(),
+                    RealtimeEventType.MESSAGE_UNPINNED,
+                    event.conversationId(),
+                    data
+            );
+        }
     }
 }

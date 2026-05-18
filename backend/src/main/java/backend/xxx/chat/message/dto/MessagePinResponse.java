@@ -5,9 +5,8 @@ import java.time.Instant;
 import backend.xxx.chat.user.dto.SummarizeUserResponse;
 
 public record MessagePinResponse(
-        Long id,
-        Long conversationId,
-        Long messageId,
+        Long pinId,
+        MessageResponse message,
         SummarizeUserResponse pinnedBy,
         Instant pinnedAt
 ) {

@@ -2,9 +2,11 @@ package backend.xxx.chat.conversation.controller;
 
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.conversation.dto.ConversationBoxResponse;
+import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
 import backend.xxx.chat.conversation.dto.CreateDirectConversationRequest;
 import backend.xxx.chat.conversation.dto.DirectConversationResponse;
 import backend.xxx.chat.conversation.service.ConversationService;
+import backend.xxx.chat.message.service.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,7 @@ public class ConversationController {
 
     private final CurrentUserProvider currentUserProvider;
     private final ConversationService conversationService;
+    private final MessageService messageService;
 
     @PostMapping("/direct")
     public ResponseEntity<DirectConversationResponse> createOrOpenDirectConversation(@Valid @RequestBody CreateDirectConversationRequest request) {
@@ -44,6 +47,14 @@ public class ConversationController {
     @GetMapping("/{conversationId}")
     public ResponseEntity<DirectConversationResponse> getDetailConversation(@PathVariable Long conversationId) {
         return ResponseEntity.ok(conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
+    }
+
+    @GetMapping("/{conversationId}/pins")
+    public ResponseEntity<ConversationPinsResponse> getConversationPins(@PathVariable Long conversationId) {
+        return ResponseEntity.ok(messageService.getConversationPins(
+                currentUserProvider.getCurrentUsername(),
+                conversationId
+        ));
     }
 
 }

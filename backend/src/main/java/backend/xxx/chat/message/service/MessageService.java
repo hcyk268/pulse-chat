@@ -13,15 +13,10 @@ import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
-import backend.xxx.chat.message.dto.MarkReadRequest;
-import backend.xxx.chat.message.dto.MarkReadResponse;
-import backend.xxx.chat.message.dto.MessageCursor;
-import backend.xxx.chat.message.dto.MessageHistoryResponse;
-import backend.xxx.chat.message.dto.MessagePinResponse;
-import backend.xxx.chat.message.dto.MessageResponse;
-import backend.xxx.chat.message.dto.SendMessageRequest;
+import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessagePin;
 import backend.xxx.chat.message.model.MessageStatus;
@@ -32,6 +27,7 @@ import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
 import backend.xxx.chat.realtime.event.MessagePinnedDomainEvent;
 import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
+import backend.xxx.chat.realtime.event.MessageUnPinnedDomainEvent;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
@@ -209,6 +205,19 @@ public class MessageService {
         return new PinMessageResult(messagePinMapper.toResponse(savedPin), true);
     }
 
+    @Transactional(readOnly = true)
+    public ConversationPinsResponse getConversationPins(String currentUsername, Long conversationId) {
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+
+        List<MessagePinResponse> items = messagePinRepository.findByConversationIdWithDetails(conversationId)
+                .stream()
+                .map(messagePinMapper::toResponse)
+                .toList();
+
+        return new ConversationPinsResponse(conversationId, items);
+    }
+
     @Transactional
     public MarkReadResponse readMessage(String currentUsername, MarkReadRequest request) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
@@ -260,6 +269,31 @@ public class MessageService {
                 readAt,
                 currentParticipant.getUnreadCount()
         );
+    }
+
+    @Transactional
+    public UnPinMessageResponse unPinMessage(String currentUsername, Long messageId) {
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+
+        MessagePin unPinMessage = messagePinRepository.findByMessageIdWithDetails(messageId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Message is not pinned before"
+                ));
+
+        Long conversationId = unPinMessage.getConversation().getId();
+        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+
+        Long unPinnedMessageId = unPinMessage.getMessage().getId();
+        Instant unPinnedAt = Instant.now();
+        messagePinRepository.delete(unPinMessage);
+
+        applicationEventPublisher.publishEvent(
+                new MessageUnPinnedDomainEvent(conversationId, unPinnedMessageId, unPinnedAt)
+        );
+
+        return messagePinMapper.toUnPinMessageResponse(conversationId, unPinnedMessageId, unPinnedAt);
     }
 
     private int normalizeLimit(Short limit) {
