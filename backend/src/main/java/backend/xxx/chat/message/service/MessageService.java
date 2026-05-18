@@ -1,9 +1,7 @@
 package backend.xxx.chat.message.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
@@ -11,11 +9,11 @@ import backend.xxx.chat.common.dto.CursorPageResponse;
 import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.common.exception.ValidationException;
+import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.model.ConversationParticipantId;
-import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.dto.MarkReadRequest;
 import backend.xxx.chat.message.dto.MarkReadResponse;
 import backend.xxx.chat.message.dto.MessageCursor;
@@ -24,14 +22,13 @@ import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.dto.SendMessageRequest;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
-import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.message.strategy.MessageTypeStrategy;
+import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
 import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
@@ -47,11 +44,12 @@ public class MessageService {
     private static final int MAX_MESSAGE_LIMIT = 50;
 
     private final MessageRepository messageRepository;
-    private final ObjectMapper objectMapper;
+    private final CursorCodec cursorCodec;
     private final UserLookupService userLookupService;
     private final ConversationRepository conversationRepository;
-    private final ConversationParticipantRepository conversationParticipantRepository;
+    private final ConversationAccessPolicy conversationAccessPolicy;
     private final MessageMapper messageMapper;
+    private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional(readOnly = true)
@@ -67,15 +65,7 @@ public class MessageService {
                         )
                 );
 
-        if (!conversationParticipantRepository.existsById(
-                new ConversationParticipantId(conversation.getId(), currentUser.getId())
-        )) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "You are not allowed to access this conversation"
-            );
-        }
+        conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
 
         int pageLimit = normalizeLimit(limit);
         MessageCursor messageCursor = decodeCursor(cursor);
@@ -127,18 +117,8 @@ public class MessageService {
                 ));
 
         List<ConversationParticipant> participants =
-                conversationParticipantRepository.findByConversationIdWithUser(conversation.getId());
-
-        boolean isCurrentUserParticipant = participants.stream()
-                .anyMatch(participant -> participant.getUser().getId().equals(currentUser.getId()));
-
-        if (!isCurrentUserParticipant) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "You are not allowed to send message to this conversation"
-            );
-        }
+                conversationAccessPolicy.requireParticipants(conversation.getId());
+        conversationAccessPolicy.assertCanSendMessage(currentUser, participants);
 
         Message existingMessage = messageRepository.findByConversationIdAndClientMessageIdWithSender(
                         conversation.getId(),
@@ -150,15 +130,11 @@ public class MessageService {
             return messageMapper.toResponse(existingMessage);
         }
 
-        if (request.messageType() != MessageType.TEXT) {
-            throw new ValidationException("Only TEXT messages are supported");
-        }
-
-        Message message = Message.createTextMessage(
+        MessageTypeStrategy strategy = messageTypeStrategyRegistry.get(request.messageType());
+        Message message = strategy.createMessage(
                 conversation,
                 currentUser,
-                request.clientMessageId(),
-                request.content()
+                request
         );
         Message savedMessage = messageRepository.save(message);
 
@@ -189,14 +165,8 @@ public class MessageService {
                         "Conversation not found"
                 ));
 
-        ConversationParticipant currentParticipant = conversationParticipantRepository.findById(
-                        new ConversationParticipantId(conversation.getId(), currentUser.getId())
-                )
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.FORBIDDEN,
-                        ErrorCode.FORBIDDEN,
-                        "You are not allowed to read this conversation"
-                ));
+        ConversationParticipant currentParticipant =
+                conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
 
         Message lastReadMessage = messageRepository.findByIdAndConversationId(
                         request.lastReadMessageId(),
@@ -248,42 +218,16 @@ public class MessageService {
     }
 
     private MessageCursor decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
+        MessageCursor messageCursor = cursorCodec.decode(cursor, MessageCursor.class, "Invalid message cursor");
 
-        try {
-            String json = new String(
-                    Base64.getDecoder().decode(cursor),
-                    StandardCharsets.UTF_8
-            );
-            MessageCursor messageCursor = objectMapper.readValue(json, MessageCursor.class);
-            if (messageCursor.createdAt() == null || messageCursor.messageId() == null) {
-                throw new ValidationException("Invalid message cursor");
-            }
-            return messageCursor;
-        } catch (ValidationException exception) {
-            throw exception;
-        } catch (Exception exception) {
+        if (messageCursor != null && (messageCursor.createdAt() == null || messageCursor.messageId() == null)) {
             throw new ValidationException("Invalid message cursor");
         }
+
+        return messageCursor;
     }
 
     private String encodeCursor(MessageCursor messageCursor) {
-        if (messageCursor == null) {
-            return null;
-        }
-
-        try {
-            String json = objectMapper.writeValueAsString(messageCursor);
-            return Base64.getEncoder()
-                    .encodeToString(json.getBytes(StandardCharsets.UTF_8));
-        } catch (JsonProcessingException exception) {
-            throw new ApiException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    ErrorCode.INTERNAL_SERVER_ERROR,
-                    "Failed to build message cursor"
-            );
-        }
+        return cursorCodec.encode(messageCursor, "Failed to build message cursor");
     }
 }

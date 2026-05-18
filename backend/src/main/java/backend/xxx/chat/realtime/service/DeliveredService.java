@@ -4,7 +4,7 @@ import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
@@ -26,7 +26,7 @@ public class DeliveredService {
 
     private final UserLookupService userLookupService;
     private final MessageRepository messageRepository;
-    private final ConversationParticipantRepository conversationParticipantRepository;
+    private final ConversationAccessPolicy conversationAccessPolicy;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
@@ -44,18 +44,8 @@ public class DeliveredService {
 
         Long conversationId = message.getConversation().getId();
         List<ConversationParticipant> participants =
-                conversationParticipantRepository.findByConversationIdWithUser(conversationId);
-
-        boolean isCurrentUserParticipant = participants.stream()
-                .anyMatch(participant -> participant.getUser().getId().equals(currentUser.getId()));
-
-        if (!isCurrentUserParticipant) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "You are not allowed to update this message status"
-            );
-        }
+                conversationAccessPolicy.requireParticipants(conversationId);
+        conversationAccessPolicy.assertCanUpdateMessageStatus(currentUser, participants);
 
         if (message.getSender().getId().equals(currentUser.getId())) {
             throw new ApiException(

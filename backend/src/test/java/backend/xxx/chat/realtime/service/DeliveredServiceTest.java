@@ -9,7 +9,7 @@ import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -44,7 +45,7 @@ class DeliveredServiceTest {
     private MessageRepository messageRepository;
 
     @Mock
-    private ConversationParticipantRepository conversationParticipantRepository;
+    private ConversationAccessPolicy conversationAccessPolicy;
 
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
@@ -59,14 +60,15 @@ class DeliveredServiceTest {
         Conversation conversation = conversation(10L);
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Message message = message(100L, conversation, alice, createdAt);
+        List<ConversationParticipant> participants = List.of(
+                participant(conversation, alice),
+                participant(conversation, bob)
+        );
 
         when(userLookupService.getCurrentUser("bob")).thenReturn(bob);
         when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(
-                        participant(conversation, alice),
-                        participant(conversation, bob)
-                ));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
         when(messageRepository.markMessagesDeliveredUpTo(
                 eq(conversation.getId()),
                 eq(bob.getId()),
@@ -109,14 +111,20 @@ class DeliveredServiceTest {
         User carol = user(3L, "carol");
         Conversation conversation = conversation(10L);
         Message message = message(100L, conversation, alice, Instant.parse("2026-01-01T00:00:00Z"));
+        List<ConversationParticipant> participants = List.of(
+                participant(conversation, alice),
+                participant(conversation, bob)
+        );
 
         when(userLookupService.getCurrentUser("carol")).thenReturn(carol);
         when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(
-                        participant(conversation, alice),
-                        participant(conversation, bob)
-                ));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
+        doThrow(new ApiException(
+                HttpStatus.FORBIDDEN,
+                ErrorCode.FORBIDDEN,
+                "You are not allowed to update this message status"
+        )).when(conversationAccessPolicy).assertCanUpdateMessageStatus(carol, participants);
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -143,14 +151,15 @@ class DeliveredServiceTest {
         User bob = user(2L, "bob");
         Conversation conversation = conversation(10L);
         Message message = message(100L, conversation, alice, Instant.parse("2026-01-01T00:00:00Z"));
+        List<ConversationParticipant> participants = List.of(
+                participant(conversation, alice),
+                participant(conversation, bob)
+        );
 
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
         when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(
-                        participant(conversation, alice),
-                        participant(conversation, bob)
-                ));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -178,14 +187,15 @@ class DeliveredServiceTest {
         Conversation conversation = conversation(10L);
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Message message = message(100L, conversation, alice, createdAt);
+        List<ConversationParticipant> participants = List.of(
+                participant(conversation, alice),
+                participant(conversation, bob)
+        );
 
         when(userLookupService.getCurrentUser("bob")).thenReturn(bob);
         when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(
-                        participant(conversation, alice),
-                        participant(conversation, bob)
-                ));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
         when(messageRepository.markMessagesDeliveredUpTo(
                 eq(conversation.getId()),
                 eq(bob.getId()),

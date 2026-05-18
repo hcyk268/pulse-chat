@@ -2,19 +2,15 @@ package backend.xxx.chat.realtime.service;
 
 import java.util.List;
 
-import backend.xxx.chat.common.exception.ApiException;
-import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
-import backend.xxx.chat.conversation.repository.ConversationRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.realtime.dto.TypingStatusRequest;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.realtime.model.TypingUpdatedEventData;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,8 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TypingService {
 
     private final UserLookupService userLookupService;
-    private final ConversationRepository conversationRepository;
-    private final ConversationParticipantRepository conversationParticipantRepository;
+    private final ConversationAccessPolicy conversationAccessPolicy;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
@@ -33,27 +28,9 @@ public class TypingService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
-        if (!conversationRepository.existsById(conversationId)) {
-            throw new ApiException(
-                    HttpStatus.NOT_FOUND,
-                    ErrorCode.NOT_FOUND,
-                    "Conversation not found"
-            );
-        }
-
         List<ConversationParticipant> participants =
-                conversationParticipantRepository.findByConversationIdWithUser(conversationId);
-
-        boolean isCurrentUserParticipant = participants.stream()
-                .anyMatch(participant -> participant.getUser().getId().equals(currentUser.getId()));
-
-        if (!isCurrentUserParticipant) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "You are not allowed to update typing status for this conversation"
-            );
-        }
+                conversationAccessPolicy.requireParticipants(conversationId);
+        conversationAccessPolicy.assertCanUpdateTyping(currentUser, participants);
 
         TypingUpdatedEventData data = new TypingUpdatedEventData(
                 currentUser.getId(),

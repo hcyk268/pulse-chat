@@ -6,8 +6,7 @@ import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
-import backend.xxx.chat.conversation.repository.ConversationRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.realtime.dto.TypingStatusRequest;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.realtime.model.TypingUpdatedEventData;
@@ -25,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,10 +37,7 @@ class TypingServiceTest {
     private UserLookupService userLookupService;
 
     @Mock
-    private ConversationRepository conversationRepository;
-
-    @Mock
-    private ConversationParticipantRepository conversationParticipantRepository;
+    private ConversationAccessPolicy conversationAccessPolicy;
 
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
@@ -54,15 +51,15 @@ class TypingServiceTest {
         User bob = user(2L, "bob");
         User carol = user(3L, "carol");
         Conversation conversation = conversation(10L);
+        List<ConversationParticipant> participants = List.of(
+                participant(conversation, alice),
+                participant(conversation, bob),
+                participant(conversation, carol)
+        );
 
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
-        when(conversationRepository.existsById(conversation.getId())).thenReturn(true);
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(
-                        participant(conversation, alice),
-                        participant(conversation, bob),
-                        participant(conversation, carol)
-                ));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
 
         typingService.updateTyping(
                 "alice",
@@ -106,7 +103,12 @@ class TypingServiceTest {
         Long conversationId = 10L;
 
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
-        when(conversationRepository.existsById(conversationId)).thenReturn(false);
+        when(conversationAccessPolicy.requireParticipants(conversationId))
+                .thenThrow(new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Conversation not found"
+                ));
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -127,11 +129,16 @@ class TypingServiceTest {
         User alice = user(1L, "alice");
         User bob = user(2L, "bob");
         Conversation conversation = conversation(10L);
+        List<ConversationParticipant> participants = List.of(participant(conversation, bob));
 
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
-        when(conversationRepository.existsById(conversation.getId())).thenReturn(true);
-        when(conversationParticipantRepository.findByConversationIdWithUser(conversation.getId()))
-                .thenReturn(List.of(participant(conversation, bob)));
+        when(conversationAccessPolicy.requireParticipants(conversation.getId()))
+                .thenReturn(participants);
+        doThrow(new ApiException(
+                HttpStatus.FORBIDDEN,
+                ErrorCode.FORBIDDEN,
+                "You are not allowed to update typing status for this conversation"
+        )).when(conversationAccessPolicy).assertCanUpdateTyping(alice, participants);
 
         ApiException exception = assertThrows(
                 ApiException.class,

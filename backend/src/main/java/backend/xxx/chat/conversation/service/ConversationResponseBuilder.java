@@ -8,6 +8,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import backend.xxx.chat.conversation.dto.ConversationResponse;
+import backend.xxx.chat.conversation.dto.DirectConversationResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
@@ -89,6 +90,26 @@ public class ConversationResponseBuilder {
                 ));
     }
 
+    public DirectConversationResponse buildDirectConversationResponse(
+            Conversation conversation,
+            User currentUser,
+            User targetUser
+    ) {
+        List<ConversationParticipant> participants =
+                conversationParticipantRepository.findByConversationIdWithUser(conversation.getId());
+        Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
+        Message lastMessage = findLastMessage(conversation);
+
+        return conversationMapper.toDirectConversationResponse(
+                conversation,
+                participants,
+                currentUser,
+                targetUser,
+                presenceByUserId,
+                lastMessage
+        );
+    }
+
     private Map<Long, List<ConversationParticipant>> findParticipantsByConversationId(
             List<ConversationParticipant> currentParticipants
     ) {
@@ -135,5 +156,16 @@ public class ConversationResponseBuilder {
         return messageRepository.findByIdInWithSender(lastMessageIds)
                 .stream()
                 .collect(Collectors.toMap(Message::getId, Function.identity()));
+    }
+
+    private Message findLastMessage(Conversation conversation) {
+        if (conversation.getLastMessageId() == null) {
+            return null;
+        }
+
+        return messageRepository.findByIdInWithSender(List.of(conversation.getLastMessageId()))
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 }

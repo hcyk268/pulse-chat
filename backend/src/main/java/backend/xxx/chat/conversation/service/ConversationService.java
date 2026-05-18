@@ -1,16 +1,12 @@
 package backend.xxx.chat.conversation.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
 import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ValidationException;
+import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.dto.*;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
@@ -19,15 +15,9 @@ import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.common.exception.ErrorCode;
-import backend.xxx.chat.message.model.Message;
-import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.user.model.AccountStatus;
-import backend.xxx.chat.user.model.Presence;
 import backend.xxx.chat.user.model.User;
-import backend.xxx.chat.user.repository.PresenceRepository;
 import backend.xxx.chat.user.service.UserLookupService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -44,11 +34,9 @@ public class ConversationService {
     private final UserLookupService userLookupService;
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final ConversationRepository conversationRepository;
-    private final MessageRepository messageRepository;
-    private final PresenceRepository presenceRepository;
-    private final ConversationMapper conversationMapper;
     private final ConversationResponseBuilder conversationResponseBuilder;
-    private final ObjectMapper objectMapper;
+    private final ConversationAccessPolicy conversationAccessPolicy;
+    private final CursorCodec cursorCodec;
 
     @Transactional
     public CreateOrOpenDirectConversationResult createOrOpenDirectConversation(
@@ -91,7 +79,7 @@ public class ConversationService {
         currentParticipant.markVisibleInList();
 
         return new CreateOrOpenDirectConversationResult(
-                buildDirectConversationResponse(conversation, currentUser, targetUser),
+                conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser),
                 false
         );
     }
@@ -103,7 +91,7 @@ public class ConversationService {
         conversationParticipantRepository.save(ConversationParticipant.create(conversation, targetUser, false));
 
         return new CreateOrOpenDirectConversationResult(
-                buildDirectConversationResponse(conversation, currentUser, targetUser),
+                conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser),
                 true
         );
     }
@@ -174,18 +162,8 @@ public class ConversationService {
             throw new ValidationException("Conversation is not a direct conversation");
         }
 
-        List<ConversationParticipant> participants = conversationParticipantRepository.findByConversationIdWithUser(conversationId);
-
-        boolean isUserInConversation = participants.stream()
-                .anyMatch(cp -> cp.getUser().getId().equals(currentUser.getId()));
-
-        if (!isUserInConversation) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "You are not allowed to access this conversation"
-            );
-        }
+        List<ConversationParticipant> participants = conversationAccessPolicy.requireParticipants(conversationId);
+        conversationAccessPolicy.assertCanReadConversation(currentUser, participants);
 
         User targetUser = participants.stream()
                 .map(ConversationParticipant::getUser)
@@ -197,38 +175,24 @@ public class ConversationService {
                         "User chat not found"
                 ));
 
-        return buildDirectConversationResponse(conversation, currentUser, targetUser);
+        return conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser);
     }
 
 
     private String buildConversationNextCursor(ConversationCursor conversationCursor) {
-        try {
-            String json = objectMapper.writeValueAsString(conversationCursor);
-            return Base64.getEncoder()
-                .encodeToString(json.getBytes(StandardCharsets.UTF_8));
-        } catch (JsonProcessingException exception) {
-            throw new ApiException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    ErrorCode.INTERNAL_SERVER_ERROR,
-                    "Failed to build conversation cursor"
-            );
-        }
+        return cursorCodec.encode(conversationCursor, "Failed to build conversation cursor");
     }
 
     private ConversationCursor decodeCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
+        ConversationCursor conversationCursor =
+                cursorCodec.decode(cursor, ConversationCursor.class, "Invalid conversation cursor");
 
-        try {
-            String json = new String(
-                    Base64.getDecoder().decode(cursor),
-                    StandardCharsets.UTF_8
-            );
-            return objectMapper.readValue(json, ConversationCursor.class);
-        } catch (Exception exception) {
+        if (conversationCursor != null
+                && (conversationCursor.cursorAt() == null || conversationCursor.conversationId() == null)) {
             throw new ValidationException("Invalid conversation cursor");
         }
+
+        return conversationCursor;
     }
 
     private int normalizeConversationLimit(Short limit) {
@@ -263,49 +227,4 @@ public class ConversationService {
         }
     }
 
-    private DirectConversationResponse buildDirectConversationResponse(
-            Conversation conversation,
-            User currentUser,
-            User targetUser
-    ) {
-        List<ConversationParticipant> participants =
-                conversationParticipantRepository.findByConversationIdWithUser(conversation.getId());
-        Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
-        Message lastMessage = findLastMessage(conversation);
-
-        return conversationMapper.toDirectConversationResponse(
-                conversation,
-                participants,
-                currentUser,
-                targetUser,
-                presenceByUserId,
-                lastMessage
-        );
-    }
-
-    private Message findLastMessage(Conversation conversation) {
-        if (conversation.getLastMessageId() == null) {
-            return null;
-        }
-
-        return messageRepository.findByIdInWithSender(List.of(conversation.getLastMessageId()))
-                .stream()
-                .findFirst()
-                .orElse(null);
-    }
-
-    private Map<Long, Presence> findPresenceByUserId(List<ConversationParticipant> participants) {
-        List<Long> userIds = participants.stream()
-                .map(participant -> participant.getUser().getId())
-                .distinct()
-                .toList();
-
-        if (userIds.isEmpty()) {
-            return Map.of();
-        }
-
-        return presenceRepository.findByUserIdIn(userIds)
-                .stream()
-                .collect(Collectors.toMap(Presence::getUserId, Function.identity()));
-    }
 }
