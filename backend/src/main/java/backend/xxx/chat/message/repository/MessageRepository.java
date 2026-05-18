@@ -24,6 +24,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByIdInWithSender(@Param("messageIds") Collection<Long> messageIds);
 
     @Query("""
+            from Message message
+            join fetch message.conversation
+            join fetch message.sender
+            where message.id = :messageId
+            """)
+    Optional<Message> findByIdWithConversationAndSender(@Param("messageId") Long messageId);
+
+    @Query("""
         from Message m
         join fetch m.sender
         where m.conversation.id = :conversationId

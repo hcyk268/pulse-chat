@@ -7,6 +7,7 @@ import java.util.List;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
 import backend.xxx.chat.common.exception.ApiException;
+import backend.xxx.chat.common.exception.ConflictException;
 import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.common.util.CursorCodec;
@@ -18,14 +19,18 @@ import backend.xxx.chat.message.dto.MarkReadRequest;
 import backend.xxx.chat.message.dto.MarkReadResponse;
 import backend.xxx.chat.message.dto.MessageCursor;
 import backend.xxx.chat.message.dto.MessageHistoryResponse;
+import backend.xxx.chat.message.dto.MessagePinResponse;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.dto.SendMessageRequest;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessagePin;
 import backend.xxx.chat.message.model.MessageStatus;
+import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.strategy.MessageTypeStrategy;
 import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
+import backend.xxx.chat.realtime.event.MessagePinnedDomainEvent;
 import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
@@ -42,13 +47,16 @@ public class MessageService {
 
     private static final int DEFAULT_MESSAGE_LIMIT = 20;
     private static final int MAX_MESSAGE_LIMIT = 50;
+    private static final int MAX_PINS_PER_CONVERSATION = 20;
 
     private final MessageRepository messageRepository;
+    private final MessagePinRepository messagePinRepository;
     private final CursorCodec cursorCodec;
     private final UserLookupService userLookupService;
     private final ConversationRepository conversationRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final MessageMapper messageMapper;
+    private final MessagePinMapper messagePinMapper;
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
     private final ApplicationEventPublisher applicationEventPublisher;
 
@@ -155,6 +163,53 @@ public class MessageService {
     }
 
     @Transactional
+    public PinMessageResult pinMessage(String currentUsername, Long messageId) {
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Message not found"
+                ));
+
+        Long conversationId = message.getConversation().getId();
+        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+
+        Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Conversation not found"
+                ));
+
+        MessagePin existingPin = messagePinRepository.findByMessageIdWithDetails(message.getId())
+                .orElse(null);
+        if (existingPin != null) {
+            return new PinMessageResult(messagePinMapper.toResponse(existingPin), false);
+        }
+
+        if (message.isDeleted()) {
+            throw new ValidationException("Deleted message cannot be pinned");
+        }
+
+        long pinnedCount = messagePinRepository.countByConversationId(conversationId);
+        if (pinnedCount >= MAX_PINS_PER_CONVERSATION) {
+            throw new ConflictException("Conversation can only have 20 pinned messages");
+        }
+
+        MessagePin savedPin = messagePinRepository.save(
+                MessagePin.create(conversation, message, currentUser, Instant.now())
+        );
+
+        applicationEventPublisher.publishEvent(
+                new MessagePinnedDomainEvent(conversationId, savedPin.getId())
+        );
+
+        return new PinMessageResult(messagePinMapper.toResponse(savedPin), true);
+    }
+
+    @Transactional
     public MarkReadResponse readMessage(String currentUsername, MarkReadRequest request) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
@@ -229,5 +284,11 @@ public class MessageService {
 
     private String encodeCursor(MessageCursor messageCursor) {
         return cursorCodec.encode(messageCursor, "Failed to build message cursor");
+    }
+
+    public record PinMessageResult(
+            MessagePinResponse response,
+            boolean created
+    ) {
     }
 }

@@ -5,6 +5,7 @@ import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.message.dto.MarkReadRequest;
 import backend.xxx.chat.message.dto.MarkReadResponse;
 import backend.xxx.chat.message.dto.MessageHistoryResponse;
+import backend.xxx.chat.message.dto.MessagePinResponse;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.dto.SendMessageRequest;
 import backend.xxx.chat.message.service.MessageService;
@@ -39,4 +40,14 @@ public class MessageController {
     public ResponseEntity<MarkReadResponse> readMessage(@Valid @RequestBody MarkReadRequest request) {
         return ResponseEntity.ok(messageService.readMessage(currentUserProvider.getCurrentUsername(), request));
     }
+
+    @PostMapping("/{messageId}/pin")
+    public ResponseEntity<MessagePinResponse> pinMessage(@PathVariable Long messageId) {
+        MessageService.PinMessageResult result =
+                messageService.pinMessage(currentUserProvider.getCurrentUsername(), messageId);
+
+        HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.response());
+    }
+
 }

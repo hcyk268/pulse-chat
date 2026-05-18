@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreVertical, Phone, Search, Video } from "lucide-react";
+import { ArrowLeft, MoreVertical, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { formatPresence } from "../../utils/formatters";
@@ -92,8 +92,6 @@ export default function ChatWindow({
         </div>
 
         <div className="flex items-center gap-1">
-          <HeaderAction icon={Phone} label="Call" className="hidden sm:flex" />
-          <HeaderAction icon={Video} label="Video" className="hidden sm:flex" />
           <HeaderAction icon={Search} label="Search" />
           <HeaderAction icon={MoreVertical} label="More" />
         </div>

@@ -53,6 +53,10 @@ public class Message extends AbstractBaseEntity<Long> {
     @Column(name = "content", nullable = false, length = CONTENT_MAX_LENGTH)
     private String content;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_message_id")
+    private Message replyToMessage;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "message_type", nullable = false, length = 20)
     private MessageType messageType = MessageType.TEXT;
@@ -67,17 +71,38 @@ public class Message extends AbstractBaseEntity<Long> {
     @Column(name = "read_at")
     private Instant readAt;
 
+    @Column(name = "edited_at")
+    private Instant editedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private User deletedBy;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     public static Message createTextMessage(
             Conversation conversation,
             User sender,
             UUID clientMessageId,
             String content
     ) {
+        return createTextMessage(conversation, sender, clientMessageId, content, null);
+    }
+
+    public static Message createTextMessage(
+            Conversation conversation,
+            User sender,
+            UUID clientMessageId,
+            String content,
+            Message replyToMessage
+    ) {
         Message message = new Message();
         message.conversation = Objects.requireNonNull(conversation, "conversation must not be null");
         message.sender = Objects.requireNonNull(sender, "sender must not be null");
         message.clientMessageId = Objects.requireNonNull(clientMessageId, "clientMessageId must not be null");
         message.content = requireContent(content);
+        message.replyToMessage = replyToMessage;
         message.messageType = MessageType.TEXT;
         message.status = MessageStatus.SENT;
         return message;
@@ -99,6 +124,21 @@ public class Message extends AbstractBaseEntity<Long> {
         }
     }
 
+    public void editContent(String content, Instant editedAt) {
+        ensureNotDeleted();
+        this.content = requireContent(content);
+        this.editedAt = Objects.requireNonNull(editedAt, "editedAt must not be null");
+    }
+
+    public void deleteForEveryone(User deletedBy, Instant deletedAt) {
+        this.deletedBy = Objects.requireNonNull(deletedBy, "deletedBy must not be null");
+        this.deletedAt = Objects.requireNonNull(deletedAt, "deletedAt must not be null");
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
     private static String requireContent(String content) {
         Objects.requireNonNull(content, "content must not be null");
         String trimmedContent = content.trim();
@@ -112,5 +152,11 @@ public class Message extends AbstractBaseEntity<Long> {
         }
 
         return trimmedContent;
+    }
+
+    private void ensureNotDeleted() {
+        if (isDeleted()) {
+            throw new IllegalStateException("Deleted message cannot be changed");
+        }
     }
 }
