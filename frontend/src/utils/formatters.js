@@ -23,6 +23,22 @@ export function formatLongTime(value) {
   });
 }
 
+export function formatChatTime(value) {
+  if (!value) return "";
+
+  return new Date(value).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+    minute: "2-digit",
+  });
+}
+
+export function formatDateSeparator(value) {
+  if (!value) return "";
+
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function formatPresence(presence) {
   if (!presence) return "Offline";
   if (presence.isOnline) return "Online now";

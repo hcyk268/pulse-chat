@@ -19,13 +19,15 @@ public class TextMessageStrategy implements MessageTypeStrategy {
     public Message createMessage(
             Conversation conversation,
             User sender,
-            SendMessageRequest request
+            SendMessageRequest request,
+            Message replyToMessage
     ) {
         return Message.createTextMessage(
                 conversation,
                 sender,
                 request.clientMessageId(),
-                request.content()
+                request.content(),
+                replyToMessage
         );
     }
 }

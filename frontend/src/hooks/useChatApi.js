@@ -14,9 +14,14 @@ import {
   listConversations,
 } from "../services/conversationApi";
 import {
+  deleteMessage as deleteMessageApi,
+  editMessage as editMessageApi,
+  getMessageReactions,
   listMessages,
   markMessagesRead,
   pinMessage as pinMessageApi,
+  reactToMessage,
+  removeMessageReaction,
   sendMessage as sendMessageApi,
   unpinMessage as unpinMessageApi,
 } from "../services/messageApi";
@@ -117,9 +122,13 @@ function normalizeMessage(message) {
     senderId: getMessageSenderId(message),
     sender: message.sender,
     content: message.content,
+    replyTo: message.replyTo ?? null,
     messageType: message.messageType,
     status: message.status,
     createdAt: message.createdAt,
+    editedAt: message.editedAt,
+    deletedBy: message.deletedBy,
+    deletedAt: message.deletedAt,
     deliveredAt: message.deliveredAt,
     readAt: message.readAt,
   };
@@ -131,6 +140,7 @@ function normalizeLastMessage(lastMessage) {
   return {
     ...lastMessage,
     senderId: getMessageSenderId(lastMessage),
+    contentPreview: lastMessage.deletedAt ? "Message deleted" : lastMessage.contentPreview,
   };
 }
 
@@ -142,11 +152,27 @@ function getMessageIndex(messages, messageId) {
   return messages.findIndex((message) => isSameId(message.id, messageId));
 }
 
+function getMessagePreview(message) {
+  if (!message) return "";
+  if (message.deletedAt) return "Message deleted";
+
+  return message.content ?? message.contentPreview ?? "";
+}
+
 function getPinnedMessageIds(pinResponse) {
   return (pinResponse?.items ?? [])
     .map((pin) => pin?.message?.id)
     .filter((messageId) => messageId != null)
     .map(String);
+}
+
+function normalizeReactionGroups(response) {
+  return (response?.items ?? []).map((group) => ({
+    emoji: group.emoji,
+    count: group.count ?? 0,
+    reactedByMe: Boolean(group.reactedByMe),
+    users: group.users ?? [],
+  }));
 }
 
 export function useChatApi() {
@@ -172,6 +198,7 @@ export function useChatApi() {
   const [loadingOlderMessagesByConversation, setLoadingOlderMessagesByConversation] = useState({});
   const [messageErrorByConversation, setMessageErrorByConversation] = useState({});
   const [pinnedMessageIdsByConversation, setPinnedMessageIdsByConversation] = useState({});
+  const [reactionsByMessageId, setReactionsByMessageId] = useState({});
   const [chatActionError, setChatActionError] = useState("");
   const [typingByConversation, setTypingByConversation] = useState({});
   const [isStartingConversation, setIsStartingConversation] = useState(false);
@@ -183,6 +210,7 @@ export function useChatApi() {
   const currentUserRef = useRef(currentUser);
   const deliveredMessageIdsRef = useRef(new Set());
   const pendingMessagesByConversationRef = useRef(new Map());
+  const loadedReactionMessageIdsRef = useRef(new Set());
   const realtimeClientRef = useRef(null);
   const realtimeEventHandlerRef = useRef(null);
   const typingTimeoutsRef = useRef(new Map());
@@ -215,9 +243,10 @@ export function useChatApi() {
             ? {
                 id: lastMessage.id,
                 senderId: lastMessage.senderId,
-                contentPreview: lastMessage.content ?? lastMessage.contentPreview ?? "",
+                contentPreview: getMessagePreview(lastMessage),
                 status: lastMessage.status,
                 createdAt: lastMessage.createdAt,
+                deletedAt: lastMessage.deletedAt,
               }
             : null,
         };
@@ -292,6 +321,64 @@ export function useChatApi() {
     );
   }
 
+  function applyMessageResponseToConversation(messageResponse) {
+    const message = normalizeMessage(messageResponse);
+    const lastMessage = {
+      id: message.id,
+      senderId: message.senderId,
+      contentPreview: getMessagePreview(message),
+      status: message.status,
+      createdAt: message.createdAt,
+      deletedAt: message.deletedAt,
+    };
+
+    setConversations((previous) =>
+      previous.map((conversation) => {
+        if (!isSameId(conversation.id, message.conversationId)) {
+          return conversation;
+        }
+
+        const messages = conversation.messages ?? [];
+        const hasMessage = messages.some((item) => isSameId(item.id, message.id));
+
+        const nextMessages = messages.map((item) => {
+          if (isSameId(item.id, message.id)) {
+            return message;
+          }
+
+          if (isSameId(item.replyTo?.id, message.id)) {
+            return {
+              ...item,
+              replyTo: {
+                ...item.replyTo,
+                content: message.content,
+                editedAt: message.editedAt,
+                deletedAt: message.deletedAt,
+              },
+            };
+          }
+
+          return item;
+        });
+
+        return {
+          ...conversation,
+          messages: hasMessage ? nextMessages : dedupeById([...nextMessages, message]),
+          lastMessage: isSameId(conversation.lastMessage?.id, message.id)
+            ? lastMessage
+            : conversation.lastMessage,
+          lastMessageAt: isSameId(conversation.lastMessage?.id, message.id)
+            ? message.createdAt
+            : conversation.lastMessageAt,
+        };
+      }),
+    );
+
+    if (message.deletedAt) {
+      setMessagePinned(message.conversationId, message.id, false);
+    }
+  }
+
   function replaceConversationPins(conversationId, pinResponse) {
     if (!conversationId) return;
 
@@ -321,6 +408,35 @@ export function useChatApi() {
         [key]: Array.from(ids),
       };
     });
+  }
+
+  function setMessageReactions(messageId, response) {
+    if (!messageId) return;
+
+    setReactionsByMessageId((previous) => ({
+      ...previous,
+      [String(messageId)]: normalizeReactionGroups(response),
+    }));
+  }
+
+  async function loadMessageReactions(messageId, { force = false } = {}) {
+    if (!messageId) return [];
+
+    const key = String(messageId);
+    if (!force && loadedReactionMessageIdsRef.current.has(key)) {
+      return reactionsByMessageId[key] ?? [];
+    }
+
+    loadedReactionMessageIdsRef.current.add(key);
+
+    try {
+      const response = await getMessageReactions(messageId);
+      setMessageReactions(messageId, response);
+      return normalizeReactionGroups(response);
+    } catch {
+      loadedReactionMessageIdsRef.current.delete(key);
+      return [];
+    }
   }
 
   function clearTypingTimeout(conversationId) {
@@ -413,10 +529,12 @@ export function useChatApi() {
     setUserSearchResults([]);
     setMessagePagingByConversation({});
     setPinnedMessageIdsByConversation({});
+    setReactionsByMessageId({});
     setTypingByConversation({});
     activeConversationIdRef.current = null;
     deliveredMessageIdsRef.current.clear();
     pendingMessagesByConversationRef.current.clear();
+    loadedReactionMessageIdsRef.current.clear();
     clearAllTypingTimeouts();
     setAuthStatus("unauthenticated");
     setAuthMessage(message);
@@ -600,9 +718,10 @@ export function useChatApi() {
     const lastMessage = {
       id: message.id,
       senderId: message.senderId,
-      contentPreview: message.content,
+      contentPreview: getMessagePreview(message),
       status: message.status,
       createdAt: message.createdAt,
+      deletedAt: message.deletedAt,
     };
 
     setConversations((previous) => {
@@ -823,6 +942,16 @@ export function useChatApi() {
       return;
     }
 
+    if (event.eventType === "message.updated" && event.data?.message) {
+      applyMessageResponseToConversation(event.data.message);
+      return;
+    }
+
+    if (event.eventType === "message.deleted" && event.data?.message) {
+      applyMessageResponseToConversation(event.data.message);
+      return;
+    }
+
     if (event.eventType === "conversation.updated" && event.data?.conversation) {
       applyRealtimeConversation(event.data.conversation);
       return;
@@ -945,7 +1074,7 @@ export function useChatApi() {
     }
   }
 
-  async function sendMessage(conversationId, content) {
+  async function sendMessage(conversationId, content, { replyToMessageId = null } = {}) {
     const trimmed = content.trim();
     if (!trimmed) return null;
 
@@ -958,14 +1087,16 @@ export function useChatApi() {
         clientMessageId: createClientId(),
         content: trimmed,
         messageType: "TEXT",
+        replyToMessageId,
       });
       const message = normalizeMessage(response);
       const lastMessage = {
         id: message.id,
         senderId: message.senderId,
-        contentPreview: message.content,
+        contentPreview: getMessagePreview(message),
         status: message.status,
         createdAt: message.createdAt,
+        deletedAt: message.deletedAt,
       };
 
       setConversations((previous) =>
@@ -992,6 +1123,40 @@ export function useChatApi() {
       return null;
     } finally {
       setSendingByConversation((previous) => ({ ...previous, [conversationId]: false }));
+    }
+  }
+
+  async function editMessage(messageId, content) {
+    const trimmed = content.trim();
+    if (!messageId || !trimmed) return null;
+
+    setChatActionError("");
+
+    try {
+      const response = await editMessageApi(messageId, {
+        newContent: trimmed,
+        type: "TEXT",
+      });
+      applyMessageResponseToConversation(response);
+      return normalizeMessage(response);
+    } catch (error) {
+      setChatActionError(error.message || "Could not edit message.");
+      return null;
+    }
+  }
+
+  async function deleteMessage(messageId) {
+    if (!messageId) return null;
+
+    setChatActionError("");
+
+    try {
+      const response = await deleteMessageApi(messageId);
+      applyMessageResponseToConversation(response);
+      return normalizeMessage(response);
+    } catch (error) {
+      setChatActionError(error.message || "Could not delete message.");
+      return null;
     }
   }
 
@@ -1026,6 +1191,32 @@ export function useChatApi() {
       return response;
     } catch (error) {
       setChatActionError(error.message || "Could not update message pin.");
+      return null;
+    }
+  }
+
+  async function toggleMessageReaction(message, emoji) {
+    const messageId = message?.id;
+    if (!messageId || !emoji) return null;
+
+    const currentGroups = reactionsByMessageId[String(messageId)] ?? [];
+    const reactedByMe = currentGroups.some(
+      (group) => group.emoji === emoji && group.reactedByMe,
+    );
+
+    setChatActionError("");
+
+    try {
+      if (reactedByMe) {
+        await removeMessageReaction(messageId, emoji);
+      } else {
+        await reactToMessage(messageId, emoji);
+      }
+
+      loadedReactionMessageIdsRef.current.delete(String(messageId));
+      return loadMessageReactions(messageId, { force: true });
+    } catch (error) {
+      setChatActionError(error.message || "Could not update message reaction.");
       return null;
     }
   }
@@ -1150,6 +1341,8 @@ export function useChatApi() {
     conversationPaging,
     conversationSummaries,
     currentUser,
+    deleteMessage,
+    editMessage,
     getConversationById,
     hasMoreMessages,
     isSearchingUsers,
@@ -1161,6 +1354,7 @@ export function useChatApi() {
     isStartingConversation,
     loadConversation,
     loadConversations,
+    loadMessageReactions,
     loadMoreMessages,
     markConversationRead,
     realtimeError,
@@ -1177,10 +1371,12 @@ export function useChatApi() {
     setAuthenticatedUser,
     signOut,
     sendTypingStatus,
+    toggleMessageReaction,
     toggleMessagePin,
     typingByConversation,
     updateProfile,
     getMessageError,
+    reactionsByMessageId,
     userSearchError,
     userSearchResults,
   };

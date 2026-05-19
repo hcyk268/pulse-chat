@@ -1,6 +1,7 @@
 import { Search, UserPlus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatPresence } from "../../utils/formatters";
+import { PeopleSearchAsset } from "../assets/MicroAssets";
 import Avatar from "../ui/Avatar";
 
 export default function ContactPanel({
@@ -109,6 +110,7 @@ export default function ContactPanel({
           </div>
         ) : (
           <div className="flex h-full animate-fade-in flex-col items-center justify-center px-8 text-center">
+            <PeopleSearchAsset className="mb-3 h-28 w-36 opacity-95" />
             <p className="font-medium text-white">No users found</p>
             <p className="mt-1 text-sm text-slate-500">
               {normalizedQuery

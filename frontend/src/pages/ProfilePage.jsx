@@ -1,7 +1,7 @@
 import { AlertCircle, ArrowLeft, Check, LogOut, Mail, Save, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import ProfileArtwork from "../components/assets/ProfileArtwork";
+import { ProfilePulseAsset } from "../components/assets/MicroAssets";
 import Avatar from "../components/ui/Avatar";
 import StatusPill from "../components/ui/StatusPill";
 import { useChatStore } from "../hooks/useChatStore";
@@ -74,7 +74,7 @@ export default function ProfilePage() {
 
         <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
           <section className="animate-enter-up rounded-2xl border border-white/5 bg-[#17212b] p-5 shadow-panel-soft">
-            <ProfileArtwork />
+            <ProfilePulseAsset className="h-auto w-full" />
             <div className="mt-5 flex items-center gap-4">
               <Avatar user={currentUser} size="xl" />
               <div>

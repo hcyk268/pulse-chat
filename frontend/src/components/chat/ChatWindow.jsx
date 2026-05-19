@@ -1,7 +1,7 @@
 import { ArrowLeft, MoreVertical, Search } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { formatPresence } from "../../utils/formatters";
+import { formatDateSeparator, formatPresence } from "../../utils/formatters";
 import ChatBackdrop from "../assets/ChatBackdrop";
 import EmptyChatArtwork from "../assets/EmptyChatArtwork";
 import Avatar from "../ui/Avatar";
@@ -14,6 +14,12 @@ function isSameId(left, right) {
   return left != null && right != null && String(left) === String(right);
 }
 
+function isSameMessageDay(left, right) {
+  if (!left || !right) return false;
+
+  return new Date(left).toDateString() === new Date(right).toDateString();
+}
+
 export default function ChatWindow({
   conversation,
   currentUser,
@@ -23,17 +29,38 @@ export default function ChatWindow({
   isLoadingMoreMessages = false,
   isSending = false,
   isTyping,
+  onDeleteMessage,
+  onEditMessage,
+  onLoadMessageReactions,
   onLoadMoreMessages,
   onSendMessage,
+  onToggleMessageReaction,
   onToggleMessagePin,
   onTypingChange,
+  reactionsByMessageId = {},
   sendError = "",
 }) {
   const bottomRef = useRef(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  const messageReactionKey = conversation?.messages.map((message) => message.id).join("|") ?? "";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [conversation?.messages.length, isTyping]);
+
+  useEffect(() => {
+    if (!conversation || !onLoadMessageReactions) return;
+
+    conversation.messages.forEach((message) => {
+      onLoadMessageReactions(message.id);
+    });
+  }, [conversation?.id, messageReactionKey, onLoadMessageReactions]);
+
+  useEffect(() => {
+    setEditingMessage(null);
+    setReplyToMessage(null);
+  }, [conversation?.id]);
 
   if (!conversation && isLoading) {
     return (
@@ -60,6 +87,38 @@ export default function ChatWindow({
   }
 
   const participant = conversation.otherParticipant;
+
+  async function handleComposerSend(content) {
+    if (editingMessage) {
+      const updated = await onEditMessage?.(editingMessage.id, content);
+      if (updated) {
+        setEditingMessage(null);
+      }
+      return updated;
+    }
+
+    const sent = await onSendMessage(conversation.id, content, {
+      replyToMessageId: replyToMessage?.id ?? null,
+    });
+
+    if (sent) {
+      setReplyToMessage(null);
+    }
+
+    return sent;
+  }
+
+  async function handleDeleteMessage(message) {
+    if (!window.confirm("Delete this message?")) return;
+
+    const deleted = await onDeleteMessage?.(message.id);
+    if (deleted && editingMessage?.id === message.id) {
+      setEditingMessage(null);
+    }
+    if (deleted && replyToMessage?.id === message.id) {
+      setReplyToMessage(null);
+    }
+  }
 
   return (
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0e1621]">
@@ -98,8 +157,8 @@ export default function ChatWindow({
         </div>
       </header>
 
-      <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        <div className="mx-auto flex max-w-4xl flex-col gap-5">
+      <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-2 py-4 sm:px-5">
+        <div className="mx-auto flex w-full max-w-5xl flex-col">
           {hasMoreMessages ? (
             <div className="flex justify-center">
               <button
@@ -129,18 +188,45 @@ export default function ChatWindow({
               </p>
             </div>
           ) : (
-            conversation.messages.map((message) => {
+            conversation.messages.map((message, index) => {
+              const previousMessage = conversation.messages[index - 1];
+              const nextMessage = conversation.messages[index + 1];
               const isOwn = isSameId(message.senderId, currentUser.id);
-              const sender = isOwn ? currentUser : participant;
-
+              const startsDay = !isSameMessageDay(previousMessage?.createdAt, message.createdAt);
+              const endsDay = !isSameMessageDay(message.createdAt, nextMessage?.createdAt);
+              const startsCluster =
+                startsDay ||
+                !previousMessage ||
+                !isSameId(previousMessage.senderId, message.senderId);
+              const endsCluster =
+                endsDay ||
+                !nextMessage ||
+                !isSameId(nextMessage.senderId, message.senderId);
               return (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  sender={sender}
-                  isOwn={isOwn}
-                  onTogglePin={onToggleMessagePin}
-                />
+                <div key={message.id} className={startsDay ? "mt-3 first:mt-0" : ""}>
+                  {startsDay ? (
+                    <div className="mb-3 flex justify-center">
+                      <span className="rounded-full bg-[#1c2a38]/95 px-4 py-1.5 text-sm font-semibold text-white shadow-panel-soft">
+                        {formatDateSeparator(message.createdAt)}
+                      </span>
+                    </div>
+                  ) : null}
+                  <MessageBubble
+                    message={message}
+                    reactions={reactionsByMessageId[String(message.id)] ?? []}
+                    isOwn={isOwn}
+                    startsCluster={startsCluster}
+                    endsCluster={endsCluster}
+                    onDelete={() => handleDeleteMessage(message)}
+                    onEdit={() => setEditingMessage(message)}
+                    onReply={() => {
+                      setEditingMessage(null);
+                      setReplyToMessage(message);
+                    }}
+                    onToggleReaction={(emoji) => onToggleMessageReaction?.(message, emoji)}
+                    onTogglePin={onToggleMessagePin}
+                  />
+                </div>
               );
             })
           )}
@@ -157,8 +243,12 @@ export default function ChatWindow({
 
       <Composer
         disabled={isSending}
+        editingMessage={editingMessage}
+        onCancelEdit={() => setEditingMessage(null)}
+        onCancelReply={() => setReplyToMessage(null)}
         onTypingChange={onTypingChange}
-        onSend={(content) => onSendMessage(conversation.id, content)}
+        onSend={handleComposerSend}
+        replyToMessage={replyToMessage}
       />
     </section>
   );

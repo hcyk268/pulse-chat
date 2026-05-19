@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum RealtimeEventType {
     MESSAGE_CREATED("message.created"),
+    MESSAGE_UPDATED("message.updated"),
+    MESSAGE_DELETED("message.deleted"),
     MESSAGE_PINNED("message.pinned"),
     MESSAGE_UNPINNED("message.unpinned"),
     MESSAGE_READ("message.read"),

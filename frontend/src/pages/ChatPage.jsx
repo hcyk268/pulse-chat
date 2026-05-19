@@ -18,6 +18,8 @@ export default function ChatPage() {
     conversationSummaries,
     currentUser,
     clearUserSearch,
+    deleteMessage,
+    editMessage,
     getConversationById,
     getMessageError,
     hasMoreMessages,
@@ -30,8 +32,10 @@ export default function ChatPage() {
     isSearchingUsers,
     loadConversation,
     loadConversations,
+    loadMessageReactions,
     loadMoreMessages,
     markConversationRead,
+    reactionsByMessageId,
     realtimeStatus,
     searchUsers,
     sendMessage,
@@ -41,6 +45,7 @@ export default function ChatPage() {
     startConversation,
     startConversationError,
     stats,
+    toggleMessageReaction,
     toggleMessagePin,
     typingByConversation,
     userSearchError,
@@ -124,10 +129,15 @@ export default function ChatPage() {
             isLoadingMoreMessages={isLoadingOlderMessages(conversationId)}
             isSending={isSendingMessage(conversationId)}
             isTyping={Boolean(conversationId && typingByConversation[conversationId])}
+            onDeleteMessage={deleteMessage}
+            onEditMessage={editMessage}
             onLoadMoreMessages={() => loadMoreMessages(conversationId)}
+            onLoadMessageReactions={loadMessageReactions}
             onSendMessage={sendMessage}
+            onToggleMessageReaction={toggleMessageReaction}
             onToggleMessagePin={(message) => toggleMessagePin(conversationId, message)}
             onTypingChange={(typing) => sendTypingStatus(conversationId, typing)}
+            reactionsByMessageId={reactionsByMessageId}
             sendError={chatActionError}
           />
         </div>

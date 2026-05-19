@@ -88,4 +88,18 @@ public class MessageController {
                 messageId
         ));
     }
+
+    @PatchMapping("/{messageId}")
+    public ResponseEntity<MessageResponse> editMessage(
+            @PathVariable Long messageId,
+            @Valid @RequestBody EditMessageRequest request
+    ) {
+        return ResponseEntity.ok(messageService.editMessage(currentUserProvider.getCurrentUsername(), messageId, request));
+    }
+
+    @DeleteMapping("/{messageId}")
+    public ResponseEntity<MessageResponse> deleteMessage(@PathVariable Long messageId) {
+        return ResponseEntity.ok(messageService.deleteMessage(currentUserProvider.getCurrentUsername(), messageId));
+    }
+
 }

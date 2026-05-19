@@ -13,6 +13,7 @@ public interface MessageTypeStrategy {
     Message createMessage(
             Conversation conversation,
             User sender,
-            SendMessageRequest request
+            SendMessageRequest request,
+            Message replyToMessage
     );
 }

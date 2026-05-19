@@ -12,9 +12,13 @@ public record MessageResponse(
         Long conversationId,
         SummarizeUserResponse sender,
         String content,
+        MessageReplyResponse replyTo,
         MessageType messageType,
         MessageStatus status,
         Instant createdAt,
+        Instant editedAt,
+        SummarizeUserResponse deletedBy,
+        Instant deletedAt,
         Instant deliveredAt,
         Instant readAt
 ) {

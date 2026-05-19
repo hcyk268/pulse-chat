@@ -9,6 +9,7 @@ public record ConversationLastMessageResponse(
         Long senderId,
         String contentPreview,
         MessageStatus status,
-        Instant createdAt
+        Instant createdAt,
+        Instant deletedAt
 ) {
 }

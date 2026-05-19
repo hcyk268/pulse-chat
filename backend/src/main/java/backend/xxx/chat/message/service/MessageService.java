@@ -20,14 +20,17 @@ import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessagePin;
 import backend.xxx.chat.message.model.MessageStatus;
+import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.strategy.MessageTypeStrategy;
 import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
 import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
+import backend.xxx.chat.realtime.event.MessageDeletedDomainEvent;
 import backend.xxx.chat.realtime.event.MessagePinnedDomainEvent;
 import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
 import backend.xxx.chat.realtime.event.MessageUnPinnedDomainEvent;
+import backend.xxx.chat.realtime.event.MessageUpdatedDomainEvent;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
@@ -134,11 +137,14 @@ public class MessageService {
             return messageMapper.toResponse(existingMessage);
         }
 
+        Message replyToMessage = resolveReplyToMessage(request.replyToMessageId(), conversation.getId());
+
         MessageTypeStrategy strategy = messageTypeStrategyRegistry.get(request.messageType());
         Message message = strategy.createMessage(
                 conversation,
                 currentUser,
-                request
+                request,
+                replyToMessage
         );
         Message savedMessage = messageRepository.save(message);
 
@@ -294,6 +300,119 @@ public class MessageService {
         );
 
         return messagePinMapper.toUnPinMessageResponse(conversationId, unPinnedMessageId, unPinnedAt);
+    }
+
+    @Transactional
+    public MessageResponse editMessage(String currentUsername, Long messageId, EditMessageRequest request) {
+        validateEditMessageRequest(messageId, request);
+
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Message not found"
+                ));
+
+        Long conversationId = message.getConversation().getId();
+        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+
+        if (!message.getSender().getId().equals(currentUser.getId())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    ErrorCode.FORBIDDEN,
+                    "Only message sender can edit this message"
+            );
+        }
+
+        if (message.isDeleted()) {
+            throw new ValidationException("Deleted message cannot be edited");
+        }
+
+        if (request.type() != null && request.type() != message.getMessageType()) {
+            throw new ValidationException("message type cannot be changed");
+        }
+
+        if (message.getMessageType() != MessageType.TEXT) {
+            throw new ValidationException("Only text message can be edited");
+        }
+
+        message.editContent(request.newContent(), Instant.now());
+
+        applicationEventPublisher.publishEvent(
+                new MessageUpdatedDomainEvent(conversationId, message.getId())
+        );
+
+        return messageMapper.toResponse(message);
+    }
+
+    @Transactional
+    public MessageResponse deleteMessage(String currentUsername, Long messageId) {
+        if (messageId == null) {
+            throw new ValidationException("messageId must not be null");
+        }
+
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Message not found"
+                ));
+
+        Long conversationId = message.getConversation().getId();
+        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+
+        if (!message.getSender().getId().equals(currentUser.getId())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    ErrorCode.FORBIDDEN,
+                    "Only message sender can delete this message"
+            );
+        }
+
+        if (!message.isDeleted()) {
+            message.deleteForEveryone(currentUser, Instant.now());
+
+            applicationEventPublisher.publishEvent(
+                    new MessageDeletedDomainEvent(conversationId, message.getId())
+            );
+        }
+
+        return messageMapper.toResponse(message);
+    }
+
+    private Message resolveReplyToMessage(Long replyToMessageId, Long conversationId) {
+        if (replyToMessageId == null) {
+            return null;
+        }
+
+        Message replyToMessage = messageRepository.findByIdWithConversationAndSender(replyToMessageId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        ErrorCode.NOT_FOUND,
+                        "Reply message not found"
+                ));
+
+        if (!replyToMessage.getConversation().getId().equals(conversationId)) {
+            throw new ValidationException("Reply message must belong to the same conversation");
+        }
+
+        if (replyToMessage.isDeleted()) {
+            throw new ValidationException("Deleted message cannot be replied");
+        }
+
+        return replyToMessage;
+    }
+
+    private void validateEditMessageRequest(Long messageId, EditMessageRequest request) {
+        if (messageId == null) {
+            throw new ValidationException("messageId must not be null");
+        }
+
+        if (request == null || request.newContent() == null || request.newContent().trim().isEmpty()) {
+            throw new ValidationException("newContent must not be blank");
+        }
     }
 
     private int normalizeLimit(Short limit) {

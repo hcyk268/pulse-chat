@@ -129,9 +129,10 @@ public class ConversationMapper {
         return new ConversationLastMessageResponse(
                 message.getId(),
                 message.getSender().getId(),
-                toContentPreview(message.getContent()),
+                message.isDeleted() ? null : toContentPreview(message.getContent()),
                 message.getStatus(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                message.getDeletedAt()
         );
     }
 

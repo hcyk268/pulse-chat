@@ -181,6 +181,37 @@ textarea:focus-visible {
 }
 
 /* === Message bubble polish === */
+.message-bubble {
+  isolation: isolate;
+  min-width: 88px;
+}
+
+.message-bubble-own::after,
+.message-bubble-peer::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  z-index: 0;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-bubble-tail-own::after {
+  right: -6px;
+  opacity: 1;
+  background: #315f8f;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+.message-bubble-tail-peer::after {
+  left: -6px;
+  opacity: 1;
+  background: #172636;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
 .bubble-shine {
   position: relative;
   overflow: hidden;

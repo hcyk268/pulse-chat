@@ -11,6 +11,7 @@ public record SendMessageRequest(
         @NotNull Long conversationId,
         @NotNull UUID clientMessageId,
         @NotBlank @Size(max = 4000) String content,
-        @NotNull MessageType messageType
+        @NotNull MessageType messageType,
+        Long replyToMessageId
 ) {
 }

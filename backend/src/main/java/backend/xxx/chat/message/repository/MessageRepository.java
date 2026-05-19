@@ -19,6 +19,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query("""
             from Message message
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
             where message.id in :messageIds
             """)
     List<Message> findByIdInWithSender(@Param("messageIds") Collection<Long> messageIds);
@@ -27,6 +29,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             from Message message
             join fetch message.conversation
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
             where message.id = :messageId
             """)
     Optional<Message> findByIdWithConversationAndSender(@Param("messageId") Long messageId);
@@ -34,6 +38,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query("""
         from Message m
         join fetch m.sender
+        left join fetch m.replyToMessage replyToMessage
+        left join fetch replyToMessage.sender
         where m.conversation.id = :conversationId
         order by m.createdAt desc, m.id desc
         """)
@@ -45,6 +51,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query("""
         from Message m
         join fetch m.sender
+        left join fetch m.replyToMessage replyToMessage
+        left join fetch replyToMessage.sender
         where m.conversation.id = :conversationId
           and (
               m.createdAt < :cursorCreatedAt
@@ -65,6 +73,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query("""
             from Message message
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
             where message.conversation.id = :conversationId
                 and message.clientMessageId = :clientMessageId
             """)

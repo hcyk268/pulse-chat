@@ -11,7 +11,13 @@ export function listMessages({ conversationId, limit = 20, cursor = null }) {
   return apiRequest(`/api/v1/messages?${params.toString()}`);
 }
 
-export function sendMessage({ conversationId, clientMessageId, content, messageType = "TEXT" }) {
+export function sendMessage({
+  conversationId,
+  clientMessageId,
+  content,
+  messageType = "TEXT",
+  replyToMessageId = null,
+}) {
   return apiRequest("/api/v1/messages", {
     method: "POST",
     body: JSON.stringify({
@@ -19,7 +25,24 @@ export function sendMessage({ conversationId, clientMessageId, content, messageT
       clientMessageId,
       content,
       messageType,
+      replyToMessageId,
     }),
+  });
+}
+
+export function editMessage(messageId, { newContent, type = "TEXT" }) {
+  return apiRequest(`/api/v1/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      newContent,
+      type,
+    }),
+  });
+}
+
+export function deleteMessage(messageId) {
+  return apiRequest(`/api/v1/messages/${messageId}`, {
+    method: "DELETE",
   });
 }
 

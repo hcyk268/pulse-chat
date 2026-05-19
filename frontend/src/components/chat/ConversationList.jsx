@@ -2,7 +2,6 @@ import {
   BellOff,
   LogOut,
   Menu,
-  MessageCircle,
   MessageSquarePlus,
   Pin,
   Plus,
@@ -12,6 +11,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { clampPreview, formatShortTime } from "../../utils/formatters";
+import { EmptyChatsAsset } from "../assets/MicroAssets";
 import Avatar from "../ui/Avatar";
 
 function isSameId(left, right) {
@@ -282,9 +282,7 @@ export default function ConversationList({
           </div>
         ) : (
           <div className="flex h-full animate-fade-in flex-col items-center justify-center px-8 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#242f3d] to-[#1c2733] text-slate-400 shadow-panel-soft">
-              <MessageCircle size={24} />
-            </div>
+            <EmptyChatsAsset className="mb-3 h-28 w-36 opacity-95" />
             <p className="font-medium text-white">No matching chats</p>
             <p className="mt-1 text-sm text-slate-500">Try a different name or username.</p>
           </div>
