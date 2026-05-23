@@ -91,12 +91,21 @@ public class JwtService {
             Claims claims = extractAllClaims(token, expectedTokenType);
             String username = claims.getSubject();
             JwtTokenType tokenType = extractTokenType(claims);
-            return username.equals(userDetails.getUsername())
+            return userDetails != null
+                    && username.equals(userDetails.getUsername())
                     && tokenType == expectedTokenType
-                    && !isTokenExpired(claims);
+                    && !isTokenExpired(claims)
+                    && canAuthenticate(userDetails);
         } catch (JwtException | IllegalArgumentException ex) {
             return false;
         }
+    }
+
+    private boolean canAuthenticate(UserDetails userDetails) {
+        return userDetails.isEnabled()
+                && userDetails.isAccountNonLocked()
+                && userDetails.isAccountNonExpired()
+                && userDetails.isCredentialsNonExpired();
     }
 
     private boolean isTokenExpired(Claims claims) {

@@ -9,6 +9,13 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:validate}
@@ -22,3 +29,10 @@ spring:
 jwt:
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}
   refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET}
+  refresh-token-hash-secret: ${JWT_REFRESH_TOKEN_HASH_SECRET}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

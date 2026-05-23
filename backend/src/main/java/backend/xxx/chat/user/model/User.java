@@ -12,7 +12,6 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.*;
 
 @Getter
-@Setter
 @Entity
 @Table(
         name = "users",
@@ -83,7 +82,7 @@ public class User extends AbstractBaseEntity<Long> {
     }
 
     public void changeEmail(String email) {
-        ensureAccountNotBanned();
+        ensureNotBanned();
         this.email = requireText(email, "email", EMAIL_MAX_LENGTH);
     }
 
@@ -117,15 +116,9 @@ public class User extends AbstractBaseEntity<Long> {
         return this.accountStatus == AccountStatus.SUSPENDED || this.accountStatus == AccountStatus.BANNED;
     }
 
-    private void ensureAccountNotBanned() {
-        if (this.accountStatus == AccountStatus.BANNED) {
-            throw new IllegalStateException("Cannot change banned user");
-        }
-    }
-
     private void ensureNotBanned() {
         if (this.accountStatus == AccountStatus.BANNED) {
-            throw new IllegalStateException("Banned user status cannot be changed");
+            throw new IllegalStateException("Banned user cannot be changed");
         }
     }
 

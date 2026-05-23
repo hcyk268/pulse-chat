@@ -41,4 +41,38 @@ class JwtServiceTest {
         assertThat(jwtService.isAccessTokenValid(accessToken, userDetails)).isTrue();
         assertThat(jwtService.isRefreshTokenValid(refreshToken, userDetails)).isTrue();
     }
+
+    @Test
+    void accessTokenIsInvalidWhenUserIsDisabled() {
+        UserDetails activeUser = User.withUsername("adminchatapp")
+                .password("password")
+                .authorities("ROLE_USER")
+                .build();
+        UserDetails disabledUser = User.withUsername("adminchatapp")
+                .password("password")
+                .authorities("ROLE_USER")
+                .disabled(true)
+                .build();
+
+        String accessToken = jwtService.generateAccessToken(activeUser);
+
+        assertThat(jwtService.isAccessTokenValid(accessToken, disabledUser)).isFalse();
+    }
+
+    @Test
+    void accessTokenIsInvalidWhenUserIsLocked() {
+        UserDetails activeUser = User.withUsername("adminchatapp")
+                .password("password")
+                .authorities("ROLE_USER")
+                .build();
+        UserDetails lockedUser = User.withUsername("adminchatapp")
+                .password("password")
+                .authorities("ROLE_USER")
+                .accountLocked(true)
+                .build();
+
+        String accessToken = jwtService.generateAccessToken(activeUser);
+
+        assertThat(jwtService.isAccessTokenValid(accessToken, lockedUser)).isFalse();
+    }
 }

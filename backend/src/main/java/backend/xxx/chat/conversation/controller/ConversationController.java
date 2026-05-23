@@ -8,9 +8,13 @@ import backend.xxx.chat.conversation.dto.DirectConversationResponse;
 import backend.xxx.chat.conversation.service.ConversationService;
 import backend.xxx.chat.message.service.MessageService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -18,6 +22,7 @@ import java.time.Instant;
 @RestController
 @RequestMapping("/api/v1/conversations")
 @RequiredArgsConstructor
+@Validated
 public class ConversationController {
 
     private final CurrentUserProvider currentUserProvider;
@@ -35,7 +40,7 @@ public class ConversationController {
 
     @GetMapping
     public ResponseEntity<ConversationBoxResponse> getConversations(
-            @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
+            @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
             @RequestParam(name = "cursor", required = false) String cursor,
             @RequestParam(name = "snapshotAt", required = false) Instant snapshotAt
             ){
@@ -45,12 +50,12 @@ public class ConversationController {
     }
 
     @GetMapping("/{conversationId}")
-    public ResponseEntity<DirectConversationResponse> getDetailConversation(@PathVariable Long conversationId) {
+    public ResponseEntity<DirectConversationResponse> getDetailConversation(@Positive @PathVariable Long conversationId) {
         return ResponseEntity.ok(conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
     }
 
     @GetMapping("/{conversationId}/pins")
-    public ResponseEntity<ConversationPinsResponse> getConversationPins(@PathVariable Long conversationId) {
+    public ResponseEntity<ConversationPinsResponse> getConversationPins(@Positive @PathVariable Long conversationId) {
         return ResponseEntity.ok(messageService.getConversationPins(
                 currentUserProvider.getCurrentUsername(),
                 conversationId

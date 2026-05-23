@@ -6,13 +6,17 @@ import backend.xxx.chat.user.dto.UserResponse;
 import backend.xxx.chat.user.dto.UserSearchResponse;
 import backend.xxx.chat.user.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
+@Validated
 public class UserController {
 
     private final CurrentUserProvider currentUserProvider;
@@ -31,7 +35,7 @@ public class UserController {
     @GetMapping("/search")
     public ResponseEntity<UserSearchResponse> search(
             @RequestParam(name = "q") String keyword,
-            @RequestParam(name = "limit", required = false, defaultValue = "10") Short limit
+            @Min(1) @Max(100) @RequestParam(name = "limit", required = false, defaultValue = "10") Short limit
     ) {
         return ResponseEntity.ok(userService.search(currentUserProvider.getCurrentUsername(), keyword, limit));
     }

@@ -1,22 +1,28 @@
 package backend.xxx.chat.auth.service;
 
+import java.time.Duration;
 import java.util.Locale;
+import java.util.UUID;
 
 import backend.xxx.chat.auth.dto.AuthResponse;
 import backend.xxx.chat.auth.dto.LoginRequest;
 import backend.xxx.chat.auth.dto.RefreshTokenRequest;
 import backend.xxx.chat.auth.dto.RegisterRequest;
-import backend.xxx.chat.auth.exception.EmailAlreadyExistsException;
-import backend.xxx.chat.auth.exception.InvalidRefreshTokenException;
-import backend.xxx.chat.auth.exception.PasswordConfirmationMismatchException;
-import backend.xxx.chat.auth.exception.UsernameAlreadyExistsException;
+import backend.xxx.chat.auth.exception.*;
+import backend.xxx.chat.auth.model.RefreshTokenSession;
+import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.AccountInactiveException;
 import backend.xxx.chat.common.exception.AccountLockedException;
+import backend.xxx.chat.common.exception.ErrorCode;
 import backend.xxx.chat.common.exception.UnauthorizedException;
+import backend.xxx.chat.common.util.TokenHash;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -29,12 +35,16 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String REFRESH_TOKEN_KEY_PREFIX = "refresh:";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtService jwtService;
     private final AuthMapper authMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final TokenHash tokenHash;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -75,6 +85,8 @@ public class AuthService {
         String refreshToken = request.refreshToken();
 
         try {
+            RefreshTokenSession session = getRefreshTokenSession(refreshToken);
+            
             String username = jwtService.extractUsername(refreshToken);
             User user = userRepository.findByUsernameIgnoreCase(username)
                     .orElseThrow(InvalidRefreshTokenException::new);
@@ -85,10 +97,20 @@ public class AuthService {
             }
 
             assertAccountStatus(user);
-            return toAuthResponse(user);
+
+            if (!session.username().equals(user.getUsername())) {
+                throw new InvalidRefreshTokenException();
+            }
+
+            deleteRefreshToken(refreshToken);
+            return toAuthResponse(user, session.sessionId());
         } catch (JwtException | IllegalArgumentException ex) {
             throw new InvalidRefreshTokenException();
         }
+    }
+
+    public void logout(RefreshTokenRequest request) {
+        deleteRefreshToken(request.refreshToken());
     }
 
     private void validatePasswordConfirmation(String password, String confirmPassword) {
@@ -108,13 +130,29 @@ public class AuthService {
     }
 
     private AuthResponse toAuthResponse(User user) {
+        return toAuthResponse(user, UUID.randomUUID().toString());
+    }
+
+    private AuthResponse toAuthResponse(User user, String sessionId) {
         UserDetails userDetails = customUserDetailsService.toUserDetails(user);
+
+        String refreshToken = jwtService.generateRefreshToken(userDetails);
+        long refreshTokenTime = jwtService.getRefreshTokenExpirationMs();
+        RefreshTokenSession session = new RefreshTokenSession(
+                user.getId(),
+                user.getUsername(),
+                sessionId
+        );
+
+        String hash = tokenHash.hashRefreshToken(refreshToken);
+        setValueRedis(refreshTokenKey(hash), session, Duration.ofMillis(refreshTokenTime));
+
         return authMapper.toResponse(
                 user,
                 jwtService.generateAccessToken(userDetails),
-                jwtService.generateRefreshToken(userDetails),
+                refreshToken,
                 jwtService.getAccessTokenExpirationMs(),
-                jwtService.getRefreshTokenExpirationMs()
+                refreshTokenTime
         );
     }
 
@@ -126,6 +164,57 @@ public class AuthService {
         if (user.isLocked()) {
             throw new AccountLockedException();
         }
+    }
+
+    private void setValueRedis(String keyName, Object value, Duration timeToLive) {
+        if (keyName == null || keyName.isBlank()) {
+            throw new IllegalArgumentException("Redis key must not be blank");
+        }
+
+        if (value == null) {
+            throw new IllegalArgumentException("Redis value must not be null");
+        }
+
+        if (timeToLive == null || timeToLive.isZero() || timeToLive.isNegative()) {
+            throw new IllegalArgumentException("Redis TTL must be positive");
+        }
+
+        try {
+            redisTemplate.opsForValue().set(keyName, value, timeToLive);
+        } catch (DataAccessException ex) {
+            throw new RedisUnavailable();
+        }
+    }
+
+    private RefreshTokenSession getRefreshTokenSession(String refreshToken) {
+        try {
+            String hash = tokenHash.hashRefreshToken(refreshToken);
+            Object value = redisTemplate.opsForValue().get(refreshTokenKey(hash));
+            if (value == null) {
+                throw new InvalidRefreshTokenException();
+            }
+
+            if (!(value instanceof RefreshTokenSession session)) {
+                throw new InvalidRefreshTokenException();
+            }
+
+            return session;
+        } catch (DataAccessException ex) {
+            throw new RedisUnavailable();
+        }
+    }
+
+    private void deleteRefreshToken(String refreshToken) {
+        try {
+            String hash = tokenHash.hashRefreshToken(refreshToken);
+            redisTemplate.delete(refreshTokenKey(hash));
+        } catch (DataAccessException ex) {
+            throw new RedisUnavailable();
+        }
+    }
+
+    private String refreshTokenKey(String hash) {
+        return REFRESH_TOKEN_KEY_PREFIX + hash;
     }
 
     private String normalizeUsername(String username) {

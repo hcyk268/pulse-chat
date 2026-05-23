@@ -7,14 +7,17 @@ import backend.xxx.chat.realtime.dto.TypingStatusRequest;
 import backend.xxx.chat.realtime.service.DeliveredService;
 import backend.xxx.chat.realtime.service.TypingService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
+import org.springframework.validation.annotation.Validated;
 
 @Controller
 @RequiredArgsConstructor
+@Validated
 public class RealtimeController {
 
     private final TypingService typingService;
@@ -23,7 +26,7 @@ public class RealtimeController {
     @MessageMapping("/conversations/{conversationId}/typing")
     public void updateTyping(
             Principal principal,
-            @DestinationVariable Long conversationId,
+            @Positive @DestinationVariable Long conversationId,
             @Valid @Payload TypingStatusRequest request
     ) {
         if (principal == null) {
@@ -36,7 +39,7 @@ public class RealtimeController {
     @MessageMapping("/messages/{messageId}/delivered")
     public void messageDelivered(
             Principal principal,
-            @DestinationVariable Long messageId
+            @Positive @DestinationVariable Long messageId
     ) {
         if (principal == null) {
             throw new UnauthorizedException("Unauthorized");
