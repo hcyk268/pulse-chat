@@ -21,15 +21,15 @@ function getReactionOption(emoji) {
 
 function StatusIcon({ status }) {
   if (status === "READ") {
-    return <CheckCheck size={14} className="text-cyan-200 transition-colors duration-200" />;
+    return <CheckCheck size={14} className="text-indigo-300 transition-colors duration-200" />;
   }
 
   if (status === "DELIVERED") {
-    return <CheckCheck size={14} className="text-sky-100/80 transition-colors duration-200" />;
+    return <CheckCheck size={14} className="text-indigo-200/70 transition-colors duration-200" />;
   }
 
   if (status === "SENT") {
-    return <Check size={14} className="text-sky-100/75 transition-colors duration-200" />;
+    return <Check size={14} className="text-indigo-200/60 transition-colors duration-200" />;
   }
 
   return <Clock3 size={14} className="text-slate-400 transition-colors duration-200" />;
@@ -83,7 +83,7 @@ export default function MessageBubble({
     <div
       className={[
         "group flex px-0.5",
-        startsCluster ? "mt-2.5" : "mt-1",
+        startsCluster ? "mt-3" : "mt-0.5",
         isOwn ? "justify-end animate-enter-bubble-right" : "justify-start animate-enter-bubble-left",
       ].join(" ")}
     >
@@ -95,8 +95,10 @@ export default function MessageBubble({
       >
         <div
           className={[
-            "message-bubble relative px-3.5 py-2 text-[15px] leading-5 text-white shadow-none transition-colors duration-200",
-            isOwn ? "message-bubble-own bg-[#315f8f]" : "message-bubble-peer bg-[#172636]",
+            "message-bubble relative px-3.5 py-2.5 text-[15px] leading-[1.45] text-white transition-all duration-200",
+            isOwn
+              ? "message-bubble-own bg-gradient-to-br from-indigo-600/90 to-indigo-700/90 shadow-bubble-own"
+              : "message-bubble-peer bg-[#1e293b] shadow-bubble-other",
             endsCluster && isOwn ? "message-bubble-tail-own rounded-br-md" : "rounded-br-2xl",
             endsCluster && !isOwn ? "message-bubble-tail-peer rounded-bl-md" : "rounded-bl-2xl",
             "rounded-t-2xl",
@@ -105,13 +107,13 @@ export default function MessageBubble({
           {message.replyTo ? (
             <div
               className={[
-                "relative z-[1] mb-1.5 rounded-lg border-l-2 px-2 py-1",
+                "relative z-[1] mb-2 rounded-lg border-l-2 px-2.5 py-1.5",
                 isOwn
-                  ? "border-cyan-200/70 bg-white/10"
-                  : "border-[#6ab7ee] bg-black/10",
+                  ? "border-indigo-300/70 bg-white/10"
+                  : "border-indigo-400 bg-indigo-500/10",
               ].join(" ")}
             >
-              <p className="truncate text-xs font-semibold text-cyan-100">
+              <p className="truncate text-xs font-semibold text-indigo-200">
                 {message.replyTo.sender?.displayName ?? message.replyTo.sender?.username ?? "Message"}
               </p>
               <p className="truncate text-xs text-slate-300">
@@ -122,19 +124,19 @@ export default function MessageBubble({
           <span
             className={[
               "relative z-[1] whitespace-pre-wrap break-words",
-              isDeleted ? "italic text-slate-300" : "",
+              isDeleted ? "italic text-slate-400" : "",
             ].join(" ")}
           >
             {getMessageText(message)}
           </span>
           <span
             className={[
-              "relative z-[1] ml-2 inline-flex translate-y-[2px] items-center gap-1 whitespace-nowrap text-[12px] leading-none",
-              isOwn ? "text-cyan-100/70" : "text-slate-400",
+              "relative z-[1] ml-2 inline-flex translate-y-[2px] items-center gap-1 whitespace-nowrap text-[11px] leading-none",
+              isOwn ? "text-indigo-200/60" : "text-slate-500",
             ].join(" ")}
           >
             {message.pinned && !isDeleted ? (
-              <Pin size={11} className="text-[#6ab7ee]" aria-label="Pinned" />
+              <Pin size={10} className="text-indigo-300" aria-label="Pinned" />
             ) : null}
             {message.editedAt && !isDeleted ? <span>edited</span> : null}
             {formatChatTime(message.createdAt)}
@@ -158,10 +160,10 @@ export default function MessageBubble({
                   type="button"
                   onClick={() => handleToggleReaction(reaction.emoji)}
                   className={[
-                    "press flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium shadow-panel-soft transition-colors duration-200",
+                    "press flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-all duration-200",
                     reaction.reactedByMe
-                      ? "border-[#6ab7ee]/45 bg-[#2aabee]/20 text-cyan-50"
-                      : "border-white/5 bg-[#17212b]/95 text-slate-300 hover:bg-[#202b36]",
+                      ? "border-indigo-400/40 bg-indigo-500/20 text-indigo-100 shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+                      : "border-white/5 bg-[#1e293b]/95 text-slate-300 hover:bg-[#334155]",
                   ].join(" ")}
                   title={option.label}
                 >
@@ -180,29 +182,19 @@ export default function MessageBubble({
           ].join(" ")}
         >
           {canActOnMessage && onReply ? (
-            <button
-              type="button"
-              onClick={onReply}
-              className="press flex h-7 w-7 items-center justify-center rounded-full bg-[#172636]/95 text-slate-400 shadow-panel-soft transition-all duration-200 hover:bg-[#203246] hover:text-[#6ab7ee]"
-              title="Reply"
-            >
-              <Reply size={14} />
-            </button>
+            <ActionButton icon={Reply} label="Reply" onClick={onReply} />
           ) : null}
           {canActOnMessage && onToggleReaction ? (
             <div ref={reactionPickerRef} className="relative">
-              <button
-                type="button"
+              <ActionButton
+                icon={SmilePlus}
+                label="React"
                 onClick={() => setIsReactionPickerOpen((open) => !open)}
-                className="press flex h-7 w-7 items-center justify-center rounded-full bg-[#172636]/95 text-slate-400 shadow-panel-soft transition-all duration-200 hover:bg-[#203246] hover:text-[#6ab7ee]"
-                title="React"
-              >
-                <SmilePlus size={14} />
-              </button>
+              />
               {isReactionPickerOpen ? (
                 <div
                   className={[
-                    "absolute bottom-8 z-20 flex gap-1 rounded-full border border-white/10 bg-[#202b36]/95 p-1 shadow-panel backdrop-blur",
+                    "absolute bottom-9 z-20 flex gap-0.5 rounded-2xl border border-white/10 bg-[#1f2937]/98 p-1.5 shadow-panel backdrop-blur-xl",
                     isOwn ? "right-0" : "left-0",
                   ].join(" ")}
                 >
@@ -211,7 +203,7 @@ export default function MessageBubble({
                       key={option.emoji}
                       type="button"
                       onClick={() => handleToggleReaction(option.emoji)}
-                      className="press flex h-8 w-8 items-center justify-center rounded-full text-base hover:bg-white/10"
+                      className="press flex h-8 w-8 items-center justify-center rounded-full text-base transition-transform hover:scale-125 hover:bg-white/10"
                       title={option.label}
                     >
                       {option.symbol}
@@ -222,38 +214,40 @@ export default function MessageBubble({
             </div>
           ) : null}
           {canActOnMessage && onTogglePin ? (
-            <button
-              type="button"
-              aria-pressed={Boolean(message.pinned)}
+            <ActionButton
+              icon={Pin}
+              label={pinLabel}
               onClick={() => onTogglePin(message)}
-              className="press flex h-7 w-7 items-center justify-center rounded-full bg-[#172636]/95 text-slate-400 shadow-panel-soft transition-all duration-200 hover:bg-[#203246] hover:text-[#6ab7ee]"
-              title={pinLabel}
-            >
-              <Pin size={14} />
-            </button>
+              active={Boolean(message.pinned)}
+            />
           ) : null}
           {canActOnMessage && isOwn && onEdit ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="press flex h-7 w-7 items-center justify-center rounded-full bg-[#172636]/95 text-slate-400 shadow-panel-soft transition-all duration-200 hover:bg-[#203246] hover:text-[#6ab7ee]"
-              title="Edit"
-            >
-              <Pencil size={14} />
-            </button>
+            <ActionButton icon={Pencil} label="Edit" onClick={onEdit} />
           ) : null}
           {canActOnMessage && isOwn && onDelete ? (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="press flex h-7 w-7 items-center justify-center rounded-full bg-[#172636]/95 text-slate-400 shadow-panel-soft transition-all duration-200 hover:bg-rose-400/10 hover:text-rose-200"
-              title="Delete"
-            >
-              <Trash2 size={14} />
-            </button>
+            <ActionButton icon={Trash2} label="Delete" onClick={onDelete} variant="danger" />
           ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function ActionButton({ icon: Icon, label, onClick, variant = "default", active = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={[
+        "press flex h-7 w-7 items-center justify-center rounded-lg shadow-panel-soft transition-all duration-200",
+        variant === "danger"
+          ? "bg-[#1e293b]/95 text-slate-400 hover:bg-rose-500/15 hover:text-rose-300"
+          : "bg-[#1e293b]/95 text-slate-400 hover:bg-indigo-500/15 hover:text-indigo-300",
+      ].join(" ")}
+      title={label}
+    >
+      <Icon size={14} />
+    </button>
   );
 }

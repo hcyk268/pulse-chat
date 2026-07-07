@@ -34,7 +34,6 @@ export default function Composer({
     }
   }, [editingMessage]);
 
-  // Auto-grow textarea up to max-height for smoother typing experience.
   useLayoutEffect(() => {
     const node = textareaRef.current;
     if (!node) return;
@@ -126,15 +125,15 @@ export default function Composer({
   const contextText = getPreviewText(contextMessage);
 
   return (
-    <div className="relative border-t border-black/30 bg-[#17212b]/95 px-3 py-3 backdrop-blur">
-      <div className="pointer-events-none absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+    <div className="relative border-t border-white/[0.04] bg-[#111827]/95 px-3 py-3 backdrop-blur-xl">
+      <div className="pointer-events-none absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
 
       <div className="mx-auto max-w-4xl">
         {contextMessage ? (
-          <div className="mb-2 flex items-center gap-3 rounded-xl border border-white/5 bg-[#202b36]/95 px-3 py-2 shadow-panel-soft">
-            <ContextIcon size={16} className="shrink-0 text-[#6ab7ee]" />
+          <div className="mb-2 flex items-center gap-3 rounded-xl border border-indigo-400/15 bg-indigo-500/5 px-3 py-2 shadow-panel-soft">
+            <ContextIcon size={16} className="shrink-0 text-indigo-400" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-[#6ab7ee]">{contextTitle}</p>
+              <p className="text-xs font-semibold text-indigo-400">{contextTitle}</p>
               <p className="truncate text-sm text-slate-300">{contextText}</p>
             </div>
             <button
@@ -147,7 +146,7 @@ export default function Composer({
                   onCancelReply?.();
                 }
               }}
-              className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white"
+              className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
               title="Cancel"
             >
               <X size={16} />
@@ -156,11 +155,11 @@ export default function Composer({
         ) : null}
 
         <div className="flex items-end gap-2">
-          <div className="field-shell flex min-h-11 flex-1 items-end rounded-2xl bg-[#242f3d] px-3 py-1.5">
+          <div className="field-shell flex min-h-12 flex-1 items-end rounded-2xl border border-white/5 bg-[#1e293b] px-3 py-1.5">
             <button
               type="button"
               tabIndex={-1}
-              className="press mb-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 hover:text-slate-200"
+              className="press mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300"
               title="Attach"
             >
               <Paperclip size={18} />
@@ -172,14 +171,14 @@ export default function Composer({
               onKeyDown={handleKeyDown}
               disabled={disabled}
               rows={1}
-              maxLength={2000}
-              placeholder={disabled ? "Sending..." : editingMessage ? "Edit message" : "Message"}
-              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-1 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-500"
+              maxLength={4000}
+              placeholder={disabled ? "Sending..." : editingMessage ? "Edit message" : "Type a message..."}
+              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:text-slate-600"
             />
             <button
               type="button"
               tabIndex={-1}
-              className="press mb-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-white/5 hover:text-slate-200"
+              className="press mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300"
               title="Emoji"
             >
               <Smile size={18} />
@@ -191,10 +190,10 @@ export default function Composer({
             disabled={!canSend}
             aria-label="Send"
             className={[
-              "send-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white",
+              "send-button flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white",
               canSend
-                ? "bg-gradient-to-br from-[#3cb8f5] to-[#2aabee] shadow-send hover:shadow-send-hover"
-                : "cursor-not-allowed bg-[#242f3d] text-slate-500 shadow-none",
+                ? "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-send hover:shadow-send-hover"
+                : "cursor-not-allowed bg-[#1e293b] text-slate-600 shadow-none",
             ].join(" ")}
             title="Send"
           >

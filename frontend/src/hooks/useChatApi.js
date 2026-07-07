@@ -7,6 +7,7 @@ import {
   saveAuthSession,
 } from "../utils/authStorage";
 import { setAuthEventHandlers } from "../services/apiClient";
+import { logout as logoutApi } from "../services/authApi";
 import {
   createDirectConversation,
   getConversation,
@@ -166,6 +167,15 @@ function getPinnedMessageIds(pinResponse) {
     .map(String);
 }
 
+function normalizePin(pin) {
+  return {
+    pinId: pin.pinId,
+    message: normalizeMessage(pin.message),
+    pinnedBy: pin.pinnedBy,
+    pinnedAt: pin.pinnedAt,
+  };
+}
+
 function normalizeReactionGroups(response) {
   return (response?.items ?? []).map((group) => ({
     emoji: group.emoji,
@@ -198,6 +208,7 @@ export function useChatApi() {
   const [loadingOlderMessagesByConversation, setLoadingOlderMessagesByConversation] = useState({});
   const [messageErrorByConversation, setMessageErrorByConversation] = useState({});
   const [pinnedMessageIdsByConversation, setPinnedMessageIdsByConversation] = useState({});
+  const [pinnedMessagesByConversation, setPinnedMessagesByConversation] = useState({});
   const [reactionsByMessageId, setReactionsByMessageId] = useState({});
   const [chatActionError, setChatActionError] = useState("");
   const [typingByConversation, setTypingByConversation] = useState({});
@@ -374,8 +385,11 @@ export function useChatApi() {
       }),
     );
 
+    updatePinnedMessageDetail(message);
+
     if (message.deletedAt) {
       setMessagePinned(message.conversationId, message.id, false);
+      removePinnedMessageDetail(message.conversationId, message.id);
     }
   }
 
@@ -385,6 +399,10 @@ export function useChatApi() {
     setPinnedMessageIdsByConversation((previous) => ({
       ...previous,
       [String(conversationId)]: getPinnedMessageIds(pinResponse),
+    }));
+    setPinnedMessagesByConversation((previous) => ({
+      ...previous,
+      [String(conversationId)]: (pinResponse?.items ?? []).map(normalizePin),
     }));
   }
 
@@ -408,6 +426,57 @@ export function useChatApi() {
         [key]: Array.from(ids),
       };
     });
+  }
+
+  function setPinnedMessageDetail(conversationId, pinResponse) {
+    if (!conversationId || !pinResponse?.message?.id) return;
+
+    const key = String(conversationId);
+    const messageKey = String(pinResponse.message.id);
+    const normalizedPin = normalizePin(pinResponse);
+
+    setPinnedMessagesByConversation((previous) => {
+      const nextPins = (previous[key] ?? []).filter(
+        (pin) => !isSameId(pin.message?.id, messageKey),
+      );
+
+      return {
+        ...previous,
+        [key]: [normalizedPin, ...nextPins],
+      };
+    });
+  }
+
+  function removePinnedMessageDetail(conversationId, messageId) {
+    if (!conversationId || !messageId) return;
+
+    const key = String(conversationId);
+
+    setPinnedMessagesByConversation((previous) => ({
+      ...previous,
+      [key]: (previous[key] ?? []).filter((pin) => !isSameId(pin.message?.id, messageId)),
+    }));
+  }
+
+  function updatePinnedMessageDetail(message) {
+    if (!message?.conversationId || !message.id) return;
+
+    const key = String(message.conversationId);
+
+    setPinnedMessagesByConversation((previous) => ({
+      ...previous,
+      [key]: (previous[key] ?? []).map((pin) =>
+        isSameId(pin.message?.id, message.id)
+          ? {
+              ...pin,
+              message: {
+                ...pin.message,
+                ...message,
+              },
+            }
+          : pin,
+      ),
+    }));
   }
 
   function setMessageReactions(messageId, response) {
@@ -529,6 +598,7 @@ export function useChatApi() {
     setUserSearchResults([]);
     setMessagePagingByConversation({});
     setPinnedMessageIdsByConversation({});
+    setPinnedMessagesByConversation({});
     setReactionsByMessageId({});
     setTypingByConversation({});
     activeConversationIdRef.current = null;
@@ -925,6 +995,7 @@ export function useChatApi() {
     const messageId = pin?.message?.id;
 
     setMessagePinned(conversationId, messageId, true);
+    setPinnedMessageDetail(conversationId, pin);
   }
 
   function applyRealtimeMessageUnpinned(event) {
@@ -932,6 +1003,7 @@ export function useChatApi() {
     const messageId = event.data?.messageId;
 
     setMessagePinned(conversationId, messageId, false);
+    removePinnedMessageDetail(conversationId, messageId);
   }
 
   function handleRealtimeEvent(event) {
@@ -1036,6 +1108,7 @@ export function useChatApi() {
     return {
       ...conversation,
       otherParticipant,
+      pinnedMessages: pinnedMessagesByConversation[String(conversation.id)] ?? [],
       messages: (conversation.messages ?? []).map((message) => ({
         ...message,
         pinned: pinnedMessageIds.has(String(message.id)),
@@ -1179,6 +1252,7 @@ export function useChatApi() {
           response?.messageId ?? messageId,
           false,
         );
+        removePinnedMessageDetail(response?.conversationId ?? conversationId, response?.messageId ?? messageId);
         return response;
       }
 
@@ -1188,6 +1262,7 @@ export function useChatApi() {
         response?.message?.id ?? messageId,
         true,
       );
+      setPinnedMessageDetail(response?.message?.conversationId ?? conversationId, response);
       return response;
     } catch (error) {
       setChatActionError(error.message || "Could not update message pin.");
@@ -1254,7 +1329,7 @@ export function useChatApi() {
   async function updateProfile(nextProfile) {
     const user = await updateMe({
       displayName: nextProfile.displayName?.trim() || null,
-      avatarUrl: nextProfile.avatarUrl ?? currentUser.avatarUrl ?? null,
+      avatarUrl: nextProfile.avatarUrl?.trim() ?? currentUser.avatarUrl ?? null,
       bio: nextProfile.bio?.trim() || null,
     });
 
@@ -1326,6 +1401,14 @@ export function useChatApi() {
   }
 
   function signOut(message = "") {
+    const refreshToken = authSession?.refreshToken;
+
+    if (refreshToken) {
+      logoutApi(refreshToken).catch(() => {
+        // Local sign-out must still complete if the backend session is already gone.
+      });
+    }
+
     clearAuthenticatedSession(message);
   }
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { initials } from "../../utils/formatters";
 
 const sizeClasses = {
@@ -10,22 +11,39 @@ const sizeClasses = {
 
 export default function Avatar({ user, size = "md", showStatus = false }) {
   const online = user?.presence?.isOnline;
-  const accent = user?.accent ?? "from-slate-400 to-cyan-400";
+  const accent = user?.accent ?? "from-indigo-400 to-purple-500";
+  const avatarUrl = user?.avatarUrl || "";
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = avatarUrl && !imageFailed;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
 
   return (
     <div
       className={`relative shrink-0 ${sizeClasses[size] ?? sizeClasses.md} transition-transform duration-200 ease-out-soft hover:scale-[1.04]`}
     >
       <div
-        className={`flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br ${accent} font-semibold text-slate-950 shadow-[0_10px_24px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] ring-1 ring-white/10`}
+        className={`flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${accent} font-semibold text-white shadow-[0_8px_20px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.15)] ring-1 ring-white/10`}
       >
-        {initials(user?.displayName || user?.username || "U")}
+        {showImage ? (
+          <img
+            src={avatarUrl}
+            alt={user?.displayName || user?.username || "User avatar"}
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          initials(user?.displayName || user?.username || "U")
+        )}
       </div>
       {showStatus ? (
-        <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#17212b]">
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#111827]">
           <span
             className={`h-2.5 w-2.5 rounded-full transition-colors duration-300 ${
-              online ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-slate-500"
+              online ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-slate-600"
             }`}
           />
           {online ? (

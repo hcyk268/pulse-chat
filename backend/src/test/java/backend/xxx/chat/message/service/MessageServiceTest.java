@@ -2,6 +2,7 @@ package backend.xxx.chat.message.service;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import backend.xxx.chat.common.exception.ApiException;
@@ -13,6 +14,7 @@ import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.message.dto.EditMessageRequest;
+import backend.xxx.chat.message.dto.MarkReadRequest;
 import backend.xxx.chat.message.dto.MessageHistoryResponse;
 import backend.xxx.chat.message.dto.MessagePinResponse;
 import backend.xxx.chat.message.dto.MessageResponse;
@@ -22,8 +24,13 @@ import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.outbox.model.OutboxEvent;
+import backend.xxx.chat.outbox.repository.OutboxEventRepository;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +63,12 @@ class MessageServiceTest {
 
     @Autowired
     private MessagePinRepository messagePinRepository;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private EntityManager entityManager;
@@ -135,6 +148,35 @@ class MessageServiceTest {
     }
 
     @Test
+    void sendMessageWritesMessageCreatedOutboxPayload() throws Exception {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+
+        MessageResponse response = messageService.sendMessage(
+                alice.getUsername(),
+                new SendMessageRequest(
+                        conversation.getId(),
+                        UUID.randomUUID(),
+                        "hello outbox",
+                        MessageType.TEXT,
+                        null
+                )
+        );
+
+        OutboxEvent savedEvent = outboxEventRepository.findAll().get(0);
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(response.id());
+        assertThat(savedEvent.getEventType()).isEqualTo("message.created");
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("messageId").asLong()).isEqualTo(response.id());
+    }
+
+    @Test
     void sendMessageRejectsDeletedReplyMessage() {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
@@ -189,7 +231,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void pinMessageCreatesPinAndReturnsExistingPinWhenCalledAgain() {
+    void pinMessageCreatesPinAndReturnsExistingPinWhenCalledAgain() throws Exception {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
@@ -211,6 +253,14 @@ class MessageServiceTest {
         assertThat(firstResponse.message().id()).isEqualTo(message.getId());
         assertThat(firstResponse.pinnedBy().id()).isEqualTo(alice.getId());
         assertThat(messagePinRepository.countByConversationId(conversation.getId())).isEqualTo(1L);
+
+        OutboxEvent savedEvent = onlyOutboxEvent();
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE_PIN");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(firstResponse.pinId());
+        assertThat(savedEvent.getEventType()).isEqualTo(RealtimeEventType.MESSAGE_PINNED.getValue());
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("messagePinId").asLong()).isEqualTo(firstResponse.pinId());
     }
 
     @Test
@@ -235,7 +285,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void unPinMessageDeletesPinAndReturnsOriginalMessageId() {
+    void unPinMessageDeletesPinAndReturnsOriginalMessageId() throws Exception {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
@@ -256,6 +306,15 @@ class MessageServiceTest {
         assertThat(unPinResponse.messageId()).isEqualTo(targetMessage.getId());
         assertThat(unPinResponse.unpinnedAt()).isNotNull();
         assertThat(messagePinRepository.findByMessageIdWithDetails(targetMessage.getId())).isEmpty();
+
+        OutboxEvent savedEvent = lastOutboxEvent();
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(targetMessage.getId());
+        assertThat(savedEvent.getEventType()).isEqualTo(RealtimeEventType.MESSAGE_UNPINNED.getValue());
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("messageId").asLong()).isEqualTo(targetMessage.getId());
+        assertThat(payload.get("unPinnedAt").asText()).isNotBlank();
     }
 
     @Test
@@ -289,7 +348,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void editMessageUpdatesOwnTextMessageAndReturnsEditedAt() {
+    void editMessageUpdatesOwnTextMessageAndReturnsEditedAt() throws Exception {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
@@ -312,6 +371,14 @@ class MessageServiceTest {
         Message savedMessage = messageRepository.findById(message.getId()).orElseThrow();
         assertThat(savedMessage.getContent()).isEqualTo("edited content");
         assertThat(savedMessage.getEditedAt()).isNotNull();
+
+        OutboxEvent savedEvent = onlyOutboxEvent();
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(message.getId());
+        assertThat(savedEvent.getEventType()).isEqualTo(RealtimeEventType.MESSAGE_UPDATED.getValue());
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("messageId").asLong()).isEqualTo(message.getId());
     }
 
     @Test
@@ -356,7 +423,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void deleteMessageSoftDeletesOwnMessageAndHidesContent() {
+    void deleteMessageSoftDeletesOwnMessageAndHidesContent() throws Exception {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
@@ -387,6 +454,43 @@ class MessageServiceTest {
                     assertThat(item.deletedAt()).isNotNull();
                     assertThat(item.deletedBy().id()).isEqualTo(alice.getId());
                 });
+
+        OutboxEvent savedEvent = onlyOutboxEvent();
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(message.getId());
+        assertThat(savedEvent.getEventType()).isEqualTo(RealtimeEventType.MESSAGE_DELETED.getValue());
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("messageId").asLong()).isEqualTo(message.getId());
+    }
+
+    @Test
+    void readMessageWritesMessageReadOutboxPayload() throws Exception {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        ConversationParticipant aliceParticipant =
+                conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        Message message = saveMessage(conversation, bob, "message to read", Instant.parse("2026-01-01T00:00:00Z"));
+        aliceParticipant.incrementUnreadCount();
+        entityManager.flush();
+        entityManager.clear();
+
+        messageService.readMessage(
+                alice.getUsername(),
+                new MarkReadRequest(conversation.getId(), message.getId())
+        );
+
+        OutboxEvent savedEvent = onlyOutboxEvent();
+        JsonNode payload = objectMapper.readTree(savedEvent.getPayload());
+        assertThat(savedEvent.getAggregateType()).isEqualTo("MESSAGE");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(message.getId());
+        assertThat(savedEvent.getEventType()).isEqualTo(RealtimeEventType.MESSAGE_READ.getValue());
+        assertThat(payload.get("conversationId").asLong()).isEqualTo(conversation.getId());
+        assertThat(payload.get("readerId").asLong()).isEqualTo(alice.getId());
+        assertThat(payload.get("lastReadMessageId").asLong()).isEqualTo(message.getId());
+        assertThat(payload.get("readAt").asText()).isNotBlank();
     }
 
     @Test
@@ -420,5 +524,19 @@ class MessageServiceTest {
                 .executeUpdate();
         message.setCreatedAt(createdAt);
         return message;
+    }
+
+    private OutboxEvent onlyOutboxEvent() {
+        List<OutboxEvent> events = outboxEventRepository.findAll();
+        assertThat(events).hasSize(1);
+        return events.get(0);
+    }
+
+    private OutboxEvent lastOutboxEvent() {
+        List<OutboxEvent> events = outboxEventRepository.findAll();
+        assertThat(events).isNotEmpty();
+        return events.stream()
+                .max((left, right) -> left.getId().compareTo(right.getId()))
+                .orElseThrow();
     }
 }

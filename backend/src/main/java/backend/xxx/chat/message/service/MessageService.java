@@ -25,16 +25,16 @@ import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.strategy.MessageTypeStrategy;
 import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
-import backend.xxx.chat.realtime.event.MessageCreatedDomainEvent;
-import backend.xxx.chat.realtime.event.MessageDeletedDomainEvent;
-import backend.xxx.chat.realtime.event.MessagePinnedDomainEvent;
-import backend.xxx.chat.realtime.event.MessageReadDomainEvent;
-import backend.xxx.chat.realtime.event.MessageUnPinnedDomainEvent;
-import backend.xxx.chat.realtime.event.MessageUpdatedDomainEvent;
+import backend.xxx.chat.outbox.payload.MessageCreatedOutboxPayload;
+import backend.xxx.chat.outbox.payload.MessageOutboxPayload;
+import backend.xxx.chat.outbox.payload.MessagePinnedOutboxPayload;
+import backend.xxx.chat.outbox.payload.MessageReadOutboxPayload;
+import backend.xxx.chat.outbox.payload.MessageUnPinnedOutboxPayload;
+import backend.xxx.chat.outbox.service.OutBoxService;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -57,7 +57,7 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final OutBoxService outBoxService;
 
     @Transactional(readOnly = true)
     public MessageHistoryResponse getHistory(String currentUsername, Long conversationId, Short limit, String cursor) {
@@ -157,8 +157,11 @@ public class MessageService {
             }
         });
 
-        applicationEventPublisher.publishEvent(
-                new MessageCreatedDomainEvent(conversation.getId(), savedMessage.getId())
+        outBoxService.pushEvent(
+                "MESSAGE",
+                savedMessage.getId(),
+                RealtimeEventType.MESSAGE_CREATED.getValue(),
+                new MessageCreatedOutboxPayload(conversation.getId(), savedMessage.getId())
         );
 
         return messageMapper.toResponse(savedMessage);
@@ -204,8 +207,11 @@ public class MessageService {
                 MessagePin.create(conversation, message, currentUser, Instant.now())
         );
 
-        applicationEventPublisher.publishEvent(
-                new MessagePinnedDomainEvent(conversationId, savedPin.getId())
+        outBoxService.pushEvent(
+                "MESSAGE_PIN",
+                savedPin.getId(),
+                RealtimeEventType.MESSAGE_PINNED.getValue(),
+                new MessagePinnedOutboxPayload(conversationId, savedPin.getId())
         );
 
         return new PinMessageResult(messagePinMapper.toResponse(savedPin), true);
@@ -261,12 +267,16 @@ public class MessageService {
 
         currentParticipant.markRead(lastReadMessage.getId());
 
-        applicationEventPublisher.publishEvent(
-                new MessageReadDomainEvent(
-                        conversation.getId() ,
+        outBoxService.pushEvent(
+                "MESSAGE",
+                lastReadMessage.getId(),
+                RealtimeEventType.MESSAGE_READ.getValue(),
+                new MessageReadOutboxPayload(
+                        conversation.getId(),
                         currentUser.getId(),
                         lastReadMessage.getId(),
-                        readAt)
+                        readAt
+                )
         );
 
         return new MarkReadResponse(
@@ -295,8 +305,11 @@ public class MessageService {
         Instant unPinnedAt = Instant.now();
         messagePinRepository.delete(unPinMessage);
 
-        applicationEventPublisher.publishEvent(
-                new MessageUnPinnedDomainEvent(conversationId, unPinnedMessageId, unPinnedAt)
+        outBoxService.pushEvent(
+                "MESSAGE",
+                unPinnedMessageId,
+                RealtimeEventType.MESSAGE_UNPINNED.getValue(),
+                new MessageUnPinnedOutboxPayload(conversationId, unPinnedMessageId, unPinnedAt)
         );
 
         return messagePinMapper.toUnPinMessageResponse(conversationId, unPinnedMessageId, unPinnedAt);
@@ -339,8 +352,11 @@ public class MessageService {
 
         message.editContent(request.newContent(), Instant.now());
 
-        applicationEventPublisher.publishEvent(
-                new MessageUpdatedDomainEvent(conversationId, message.getId())
+        outBoxService.pushEvent(
+                "MESSAGE",
+                message.getId(),
+                RealtimeEventType.MESSAGE_UPDATED.getValue(),
+                new MessageOutboxPayload(conversationId, message.getId())
         );
 
         return messageMapper.toResponse(message);
@@ -374,8 +390,11 @@ public class MessageService {
         if (!message.isDeleted()) {
             message.deleteForEveryone(currentUser, Instant.now());
 
-            applicationEventPublisher.publishEvent(
-                    new MessageDeletedDomainEvent(conversationId, message.getId())
+            outBoxService.pushEvent(
+                    "MESSAGE",
+                    message.getId(),
+                    RealtimeEventType.MESSAGE_DELETED.getValue(),
+                    new MessageOutboxPayload(conversationId, message.getId())
             );
         }
 

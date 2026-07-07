@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowRight, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthChatArtwork from "../components/assets/AuthChatArtwork";
@@ -57,30 +57,34 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#0e1621] text-white lg:grid-cols-[1.08fr_0.92fr]">
-      <section className="relative flex min-h-[46vh] flex-col justify-between overflow-hidden border-b border-black/30 bg-[#17212b] p-6 sm:p-10 lg:min-h-screen lg:border-b-0 lg:border-r">
+    <main className="grid min-h-screen bg-[#0a0f1a] text-white lg:grid-cols-[1.08fr_0.92fr]">
+      <section className="relative flex min-h-[46vh] flex-col justify-between overflow-hidden border-b border-white/5 bg-[#111827] p-6 sm:p-10 lg:min-h-screen lg:border-b-0 lg:border-r">
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-cyan-500/15 blur-3xl"
+          className="pointer-events-none absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-indigo-500/15 blur-[100px]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl"
+          className="pointer-events-none absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-purple-500/10 blur-[100px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-500/5 blur-[80px]"
         />
 
         <div className="relative z-10 max-w-xl animate-enter-up">
-          <div className="mb-7 inline-flex items-center gap-3 rounded-xl bg-[#242f3d] px-4 py-3 text-cyan-100 shadow-panel-soft transition-transform duration-300 hover:-translate-y-0.5">
+          <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-indigo-100 shadow-card backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-400/30 hover:shadow-glow">
             <BrandMark className="h-7 w-7" />
-            <span className="font-semibold">Pulse Chat</span>
+            <span className="font-semibold tracking-wide">Pulse Chat</span>
           </div>
-          <h1 className="max-w-lg bg-gradient-to-br from-white via-cyan-100 to-white bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">
+          <h1 className="max-w-lg bg-gradient-to-br from-white via-indigo-100 to-purple-200 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
             Realtime chat that feels alive.
           </h1>
-          <p className="mt-5 max-w-lg text-base leading-7 text-slate-300">
+          <p className="mt-5 max-w-lg text-base leading-7 text-slate-400">
             Sign in to your live workspace, pick up conversations, and keep presence in sync.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <StatusPill tone="cyan">Secure session</StatusPill>
+            <StatusPill tone="indigo">Secure session</StatusPill>
             <StatusPill tone="emerald">Realtime sync</StatusPill>
             <StatusPill tone="amber">Direct chat</StatusPill>
           </div>
@@ -93,18 +97,21 @@ export default function LoginPage() {
       <section className="flex items-center justify-center p-6 sm:p-10">
         <form
           onSubmit={handleSubmit}
-          className="w-full max-w-md animate-enter-up rounded-2xl border border-white/5 bg-[#17212b] p-6 shadow-panel sm:p-8"
+          className="glass-card w-full max-w-md animate-enter-up rounded-3xl p-6 sm:p-8"
         >
           <div className="mb-8">
-            <p className="text-sm font-medium text-[#6ab7ee]">Welcome back</p>
-            <h2 className="mt-2 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-3xl font-semibold tracking-tight text-transparent">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1.5 text-xs font-medium text-indigo-300">
+              <Sparkles size={12} />
+              Welcome back
+            </div>
+            <h2 className="bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
               Sign in
             </h2>
           </div>
 
           <label className="block">
             <span className="text-sm font-medium text-slate-300">Username or email</span>
-            <div className="field-shell mt-2 flex items-center gap-3 rounded-xl bg-[#242f3d] px-4 py-3">
+            <div className="field-shell mt-2 flex items-center gap-3 rounded-xl border border-white/5 bg-[#1e293b] px-4 py-3.5">
               <Mail size={18} className="text-slate-500" />
               <input
                 type="text"
@@ -119,7 +126,7 @@ export default function LoginPage() {
 
           <label className="mt-5 block">
             <span className="text-sm font-medium text-slate-300">Password</span>
-            <div className="field-shell mt-2 flex items-center gap-3 rounded-xl bg-[#242f3d] px-4 py-3">
+            <div className="field-shell mt-2 flex items-center gap-3 rounded-xl border border-white/5 bg-[#1e293b] px-4 py-3.5">
               <LockKeyhole size={18} className="text-slate-500" />
               <input
                 type="password"
@@ -138,20 +145,20 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberSession}
                 onChange={(event) => setRememberSession(event.target.checked)}
-                className="h-4 w-4 rounded border-white/20 bg-slate-900 accent-cyan-300"
+                className="h-4 w-4 rounded border-white/20 bg-slate-800 accent-indigo-400"
               />
               Remember session
             </label>
             <Link
               to="/register"
-              className="font-medium text-[#6ab7ee] transition-colors hover:text-[#9ed3f7]"
+              className="font-medium text-indigo-400 transition-colors hover:text-indigo-300"
             >
               Create account
             </Link>
           </div>
 
           {error ? (
-            <div className="mt-5 flex animate-scale-in items-start gap-3 rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-sm leading-5 text-rose-100">
+            <div className="mt-5 flex animate-scale-in items-start gap-3 rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm leading-5 text-rose-200">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -160,21 +167,19 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="send-button mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#3cb8f5] to-[#2aabee] px-5 py-3.5 font-semibold text-white shadow-send hover:shadow-send-hover disabled:cursor-not-allowed disabled:bg-[#242f3d] disabled:bg-none disabled:text-slate-500 disabled:shadow-none"
+            className="send-button mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-5 py-3.5 font-semibold text-white shadow-send hover:shadow-send-hover disabled:cursor-not-allowed disabled:bg-slate-800 disabled:bg-none disabled:text-slate-500 disabled:shadow-none"
           >
             <span className="relative z-[1] flex items-center gap-2">
               {isSubmitting ? "Signing in..." : "Enter app"}
               <ArrowRight
                 size={19}
-                className={`transition-transform duration-300 ease-out-soft ${
-                  isSubmitting ? "" : "group-hover:translate-x-1"
-                }`}
+                className="transition-transform duration-300 ease-out-soft"
               />
             </span>
           </button>
 
-          <div className="mt-6 flex items-center gap-3 rounded-xl bg-[#242f3d] p-3 text-sm text-slate-300">
-            <ShieldCheck size={18} className="shrink-0 text-emerald-300" />
+          <div className="mt-6 flex items-center gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-3 text-sm text-slate-300">
+            <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
             Your session is protected and ready for realtime chat.
           </div>
         </form>

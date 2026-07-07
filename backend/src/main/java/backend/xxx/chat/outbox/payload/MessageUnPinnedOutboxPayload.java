@@ -1,8 +1,8 @@
-package backend.xxx.chat.realtime.event;
+package backend.xxx.chat.outbox.payload;
 
 import java.time.Instant;
 
-public record MessageUnPinnedDomainEvent(
+public record MessageUnPinnedOutboxPayload(
         Long conversationId,
         Long messageId,
         Instant unPinnedAt

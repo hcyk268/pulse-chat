@@ -11,12 +11,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { clampPreview, formatShortTime } from "../../utils/formatters";
+import { isSameId } from "../../utils/chat";
 import { EmptyChatsAsset } from "../assets/MicroAssets";
 import Avatar from "../ui/Avatar";
-
-function isSameId(left, right) {
-  return left != null && right != null && String(left) === String(right);
-}
 
 const REALTIME_TONE = {
   connected: {
@@ -92,26 +89,26 @@ export default function ConversationList({
   }
 
   return (
-    <section className="flex h-full min-h-0 w-full flex-col border-r border-black/30 bg-[#17212b] md:max-w-[370px]">
-      <div className="relative border-b border-black/30 px-3 py-3">
+    <section className="flex h-full min-h-0 w-full flex-col border-r border-white/[0.04] bg-[#111827] md:max-w-[380px]">
+      <div className="relative border-b border-white/[0.04] px-4 py-4">
         <div className="flex items-center gap-3">
           <div ref={menuRef} className="relative shrink-0">
             <button
               type="button"
               aria-expanded={isMenuOpen}
               onClick={() => setIsMenuOpen((open) => !open)}
-              className="press flex h-10 w-10 items-center justify-center rounded-full text-slate-300 hover:bg-white/10 hover:text-white"
+              className="press flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-white/5 hover:text-white"
               title="Menu"
             >
-              <Menu size={21} />
+              <Menu size={20} />
             </button>
 
             {isMenuOpen ? (
-              <div className="menu-pop absolute left-0 top-12 z-30 w-56 overflow-hidden rounded-xl border border-white/5 bg-[#202b36]/98 py-2 shadow-panel backdrop-blur">
+              <div className="menu-pop absolute left-0 top-12 z-30 w-56 overflow-hidden rounded-2xl border border-white/5 bg-[#1f2937]/98 py-2 shadow-panel backdrop-blur-xl">
                 <Link
                   to="/profile"
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/5 hover:text-white"
                 >
                   <UserRound size={17} />
                   Profile
@@ -119,7 +116,7 @@ export default function ConversationList({
                 <button
                   type="button"
                   onClick={handleOpenPeopleFromMenu}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/5 hover:text-white"
                 >
                   <MessageSquarePlus size={17} />
                   New chat
@@ -128,7 +125,7 @@ export default function ConversationList({
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-rose-100 transition-colors duration-150 hover:bg-rose-400/10"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-rose-300 transition-colors duration-150 hover:bg-rose-400/10"
                 >
                   <LogOut size={17} />
                   Sign out
@@ -147,7 +144,7 @@ export default function ConversationList({
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="truncate bg-gradient-to-r from-white to-slate-300 bg-clip-text text-lg font-semibold tracking-tight text-transparent">
+              <h1 className="truncate bg-gradient-to-r from-white to-slate-300 bg-clip-text text-lg font-bold tracking-tight text-transparent">
                 Pulse
               </h1>
               <span
@@ -155,41 +152,41 @@ export default function ConversationList({
                 title={`Realtime ${realtime.label.toLowerCase()}`}
               />
             </div>
-            <p className="truncate text-xs text-slate-400">
-              {stats.onlineCount} online / {stats.unreadTotal} unread
+            <p className="truncate text-xs text-slate-500">
+              {stats.onlineCount} online · {stats.unreadTotal} unread
             </p>
           </div>
 
           <button
             type="button"
             onClick={onOpenPeople}
-            className="send-button flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#3cb8f5] to-[#2aabee] text-white shadow-send hover:shadow-send-hover"
+            className="send-button flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-send hover:shadow-send-hover"
             title="New chat"
           >
-            <Plus size={20} />
+            <Plus size={19} />
           </button>
         </div>
 
-        <div className="field-shell mt-3 flex items-center gap-2 rounded-full bg-[#242f3d] px-3 py-2">
-          <Search size={18} className="text-slate-400" />
+        <div className="field-shell mt-4 flex items-center gap-2.5 rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-2.5">
+          <Search size={16} className="text-slate-500" />
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search"
-            className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
+            placeholder="Search conversations..."
+            className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
           />
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {isLoading ? (
           <ConversationListSkeleton />
         ) : error ? (
-          <div className="flex h-full items-center justify-center px-8 text-center text-sm leading-6 text-rose-100">
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm leading-6 text-rose-200">
             {error}
           </div>
         ) : conversations.length > 0 ? (
-          <div className="py-1">
+          <div className="space-y-0.5">
             {conversations.map((conversation, index) => {
               const participant = conversation.otherParticipant;
               const isActive = String(selectedId) === String(conversation.id);
@@ -209,7 +206,9 @@ export default function ConversationList({
                   style={{ animationDelay: `${Math.min(index, 8) * 24}ms` }}
                   className={[
                     "conv-row group flex animate-enter-up gap-3 px-3 py-3",
-                    isActive ? "bg-[#2b5278]" : "hover:bg-[#202b36]",
+                    isActive
+                      ? "bg-gradient-to-r from-indigo-500/15 to-purple-500/10 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.2)]"
+                      : "hover:bg-white/[0.03]",
                   ].join(" ")}
                 >
                   <Avatar user={participant} size="md" showStatus />
@@ -217,26 +216,21 @@ export default function ConversationList({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p
-                            className={[
-                              "truncate text-sm font-semibold transition-colors duration-200",
-                              isActive ? "text-white" : "text-white",
-                            ].join(" ")}
-                          >
+                          <p className="truncate text-sm font-semibold text-white">
                             {participant?.displayName}
                           </p>
                           {conversation.pinned ? (
-                            <Pin size={13} className="text-[#6ab7ee]" />
+                            <Pin size={12} className="text-indigo-400" />
                           ) : null}
                           {conversation.muted ? (
-                            <BellOff size={13} className="text-slate-400" />
+                            <BellOff size={12} className="text-slate-500" />
                           ) : null}
                         </div>
                       </div>
                       <span
                         className={[
-                          "shrink-0 text-xs transition-colors duration-200",
-                          isActive ? "text-cyan-100/80" : "text-slate-400",
+                          "shrink-0 text-[11px] font-medium",
+                          isActive ? "text-indigo-300" : "text-slate-500",
                         ].join(" ")}
                       >
                         {formatShortTime(conversation.lastMessageAt || conversation.updatedAt)}
@@ -246,19 +240,19 @@ export default function ConversationList({
                     <div className="mt-1.5 flex items-center justify-between gap-3">
                       <p
                         className={[
-                          "truncate text-sm",
+                          "truncate text-[13px]",
                           isActive
-                            ? "text-cyan-50/90"
+                            ? "text-slate-200"
                             : conversation.unreadCount > 0
-                              ? "font-medium text-slate-100"
-                              : "text-slate-400",
+                              ? "font-medium text-slate-200"
+                              : "text-slate-500",
                         ].join(" ")}
                       >
-                        {isOwnLast ? <span className="text-slate-400">You: </span> : ""}
+                        {isOwnLast ? <span className="text-slate-500">You: </span> : ""}
                         {preview}
                       </p>
                       {conversation.unreadCount > 0 ? (
-                        <span className="min-w-5 animate-scale-in rounded-full bg-gradient-to-br from-[#3cb8f5] to-[#2aabee] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_4px_12px_rgba(42,171,238,0.45)]">
+                        <span className="min-w-5 animate-scale-in rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_4px_12px_rgba(99,102,241,0.4)]">
                           {conversation.unreadCount}
                         </span>
                       ) : null}
@@ -273,7 +267,7 @@ export default function ConversationList({
                   type="button"
                   onClick={onLoadMore}
                   disabled={isLoadingMore}
-                  className="press lift w-full rounded-lg bg-[#242f3d] px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-[#2b3948] disabled:cursor-not-allowed disabled:text-slate-500"
+                  className="press lift w-full rounded-xl border border-white/5 bg-[#1e293b] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-[#334155] disabled:cursor-not-allowed disabled:text-slate-500"
                 >
                   {isLoadingMore ? "Loading..." : "Load more"}
                 </button>
@@ -294,13 +288,13 @@ export default function ConversationList({
 
 function ConversationListSkeleton() {
   return (
-    <div className="space-y-1 px-3 py-2">
+    <div className="space-y-1 px-1 py-2">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="flex items-center gap-3 px-1 py-3">
+        <div key={index} className="flex items-center gap-3 rounded-xl px-3 py-3">
           <div className="skeleton h-11 w-11 shrink-0 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <div className="skeleton h-3.5 w-2/5 rounded" />
-            <div className="skeleton h-3 w-3/4 rounded" />
+          <div className="flex-1 space-y-2.5">
+            <div className="skeleton h-3.5 w-2/5 rounded-md" />
+            <div className="skeleton h-3 w-3/4 rounded-md" />
           </div>
         </div>
       ))}

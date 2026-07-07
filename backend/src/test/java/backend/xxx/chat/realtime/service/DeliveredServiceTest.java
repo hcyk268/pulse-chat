@@ -13,7 +13,9 @@ import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
-import backend.xxx.chat.realtime.event.MessageDeliveredDomainEvent;
+import backend.xxx.chat.outbox.payload.MessageDeliveredOutboxPayload;
+import backend.xxx.chat.outbox.service.OutBoxService;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,13 +49,13 @@ class DeliveredServiceTest {
     private ConversationAccessPolicy conversationAccessPolicy;
 
     @Mock
-    private ApplicationEventPublisher applicationEventPublisher;
+    private OutBoxService outBoxService;
 
     @InjectMocks
     private DeliveredService deliveredService;
 
     @Test
-    void messageDeliveredMarksIncomingMessagesUpToCutoffAndPublishesDomainEvent() {
+    void messageDeliveredMarksIncomingMessagesUpToCutoffAndWritesOutboxEvent() {
         User alice = user(1L, "alice");
         User bob = user(2L, "bob");
         Conversation conversation = conversation(10L);
@@ -92,16 +93,21 @@ class DeliveredServiceTest {
                 deliveredAtCaptor.capture()
         );
 
-        ArgumentCaptor<MessageDeliveredDomainEvent> eventCaptor =
-                ArgumentCaptor.forClass(MessageDeliveredDomainEvent.class);
-        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        ArgumentCaptor<MessageDeliveredOutboxPayload> payloadCaptor =
+                ArgumentCaptor.forClass(MessageDeliveredOutboxPayload.class);
+        verify(outBoxService).pushEvent(
+                eq("MESSAGE"),
+                eq(message.getId()),
+                eq(RealtimeEventType.MESSAGE_STATUS_UPDATED.getValue()),
+                payloadCaptor.capture()
+        );
 
-        MessageDeliveredDomainEvent event = eventCaptor.getValue();
-        assertThat(event.conversationId()).isEqualTo(conversation.getId());
-        assertThat(event.receiverId()).isEqualTo(bob.getId());
-        assertThat(event.senderId()).isEqualTo(alice.getId());
-        assertThat(event.lastDeliveredMessageId()).isEqualTo(message.getId());
-        assertThat(event.deliveredAt()).isEqualTo(deliveredAtCaptor.getValue());
+        MessageDeliveredOutboxPayload payload = payloadCaptor.getValue();
+        assertThat(payload.conversationId()).isEqualTo(conversation.getId());
+        assertThat(payload.receiverId()).isEqualTo(bob.getId());
+        assertThat(payload.senderId()).isEqualTo(alice.getId());
+        assertThat(payload.lastDeliveredMessageId()).isEqualTo(message.getId());
+        assertThat(payload.deliveredAt()).isEqualTo(deliveredAtCaptor.getValue());
     }
 
     @Test
@@ -142,7 +148,7 @@ class DeliveredServiceTest {
                 any(),
                 any()
         );
-        verifyNoInteractions(applicationEventPublisher);
+        verifyNoInteractions(outBoxService);
     }
 
     @Test
@@ -177,7 +183,7 @@ class DeliveredServiceTest {
                 any(),
                 any()
         );
-        verifyNoInteractions(applicationEventPublisher);
+        verifyNoInteractions(outBoxService);
     }
 
     @Test
@@ -208,7 +214,7 @@ class DeliveredServiceTest {
 
         deliveredService.messageDelivered("bob", message.getId());
 
-        verifyNoInteractions(applicationEventPublisher);
+        verifyNoInteractions(outBoxService);
     }
 
     private User user(Long id, String username) {

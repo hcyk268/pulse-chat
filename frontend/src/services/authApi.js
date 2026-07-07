@@ -34,3 +34,13 @@ export function refreshToken(refreshTokenValue) {
     }),
   });
 }
+
+export function logout(refreshTokenValue) {
+  return apiRequest("/api/v1/auth/logout", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({
+      refreshToken: refreshTokenValue,
+    }),
+  });
+}

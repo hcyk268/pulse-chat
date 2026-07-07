@@ -1,4 +1,4 @@
-package backend.xxx.chat.realtime.listener;
+package backend.xxx.chat.realtime.service;
 
 import backend.xxx.chat.conversation.dto.ConversationResponse;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
@@ -11,23 +11,27 @@ import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.service.MessageMapper;
 import backend.xxx.chat.message.service.MessagePinMapper;
-import backend.xxx.chat.realtime.event.*;
-import backend.xxx.chat.realtime.model.*;
-import backend.xxx.chat.realtime.service.RealtimeEventPublisher;
+import backend.xxx.chat.realtime.model.ConversationUpdatedEventData;
+import backend.xxx.chat.realtime.model.MessageCreatedEventData;
+import backend.xxx.chat.realtime.model.MessageDeletedEventData;
+import backend.xxx.chat.realtime.model.MessageDeliveredEventData;
+import backend.xxx.chat.realtime.model.MessagePinnedEventData;
+import backend.xxx.chat.realtime.model.MessageReadEventData;
+import backend.xxx.chat.realtime.model.MessageUnPinnedEventData;
+import backend.xxx.chat.realtime.model.MessageUpdatedEventData;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-@Component
+@Service
 @RequiredArgsConstructor
-public class MessageRealtimeEventListener {
+public class MessageRealtimeNotifier {
 
     private final MessageRepository messageRepository;
     private final MessagePinRepository messagePinRepository;
@@ -37,18 +41,16 @@ public class MessageRealtimeEventListener {
     private final ConversationResponseBuilder conversationResponseBuilder;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageCreated(MessageCreatedDomainEvent event) {
-        Message message = messageRepository.findByIdInWithSender(List.of(event.messageId()))
+    @Transactional(readOnly = true)
+    public void notifyCreated(Long conversationId, Long messageId) {
+        Message message = messageRepository.findByIdInWithSender(List.of(messageId))
                 .stream()
                 .findFirst()
                 .orElseThrow();
 
         MessageResponse messageResponse = messageMapper.toResponse(message);
-
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
         Map<String, ConversationResponse> conversationByUsername =
                 conversationResponseBuilder.buildByUsernameForParticipants(participants);
 
@@ -60,7 +62,7 @@ public class MessageRealtimeEventListener {
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.MESSAGE_CREATED,
-                    event.conversationId(),
+                    conversationId,
                     messageData
             );
 
@@ -69,26 +71,23 @@ public class MessageRealtimeEventListener {
                 continue;
             }
 
-            ConversationUpdatedEventData conversationData = new ConversationUpdatedEventData(conversationResponse);
-
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
-                    event.conversationId(),
-                    conversationData
+                    conversationId,
+                    new ConversationUpdatedEventData(conversationResponse)
             );
         }
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageUpdated(MessageUpdatedDomainEvent event) {
-        Message message = messageRepository.findByIdWithConversationAndSender(event.messageId())
+    @Transactional(readOnly = true)
+    public void notifyUpdated(Long conversationId, Long messageId) {
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
         MessageUpdatedEventData messageData = new MessageUpdatedEventData(messageMapper.toResponse(message));
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
         Map<String, ConversationResponse> conversationByUsername = Objects.equals(
                 message.getConversation().getLastMessageId(),
@@ -103,7 +102,7 @@ public class MessageRealtimeEventListener {
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.MESSAGE_UPDATED,
-                    event.conversationId(),
+                    conversationId,
                     messageData
             );
 
@@ -115,21 +114,20 @@ public class MessageRealtimeEventListener {
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
-                    event.conversationId(),
+                    conversationId,
                     new ConversationUpdatedEventData(conversationResponse)
             );
         }
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageDeleted(MessageDeletedDomainEvent event) {
-        Message message = messageRepository.findByIdWithConversationAndSender(event.messageId())
+    @Transactional(readOnly = true)
+    public void notifyDeleted(Long conversationId, Long messageId) {
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
         MessageDeletedEventData messageData = new MessageDeletedEventData(messageMapper.toResponse(message));
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
         Map<String, ConversationResponse> conversationByUsername = Objects.equals(
                 message.getConversation().getLastMessageId(),
@@ -144,7 +142,7 @@ public class MessageRealtimeEventListener {
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.MESSAGE_DELETED,
-                    event.conversationId(),
+                    conversationId,
                     messageData
             );
 
@@ -156,81 +154,82 @@ public class MessageRealtimeEventListener {
             realtimeEventPublisher.sendToUser(
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
-                    event.conversationId(),
+                    conversationId,
                     new ConversationUpdatedEventData(conversationResponse)
             );
         }
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessagePinned(MessagePinnedDomainEvent event) {
-        MessagePinnedEventData data = messagePinRepository.findByIdWithDetails(event.messagePinId())
+    @Transactional(readOnly = true)
+    public void notifyPinned(Long conversationId, Long messagePinId) {
+        MessagePinnedEventData data = messagePinRepository.findByIdWithDetails(messagePinId)
                 .map(messagePinMapper::toResponse)
                 .map(MessagePinnedEventData::new)
                 .orElseThrow();
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
-        sendToConversationParticipants(participants, event.conversationId(), RealtimeEventType.MESSAGE_PINNED, data);
+        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_PINNED, data);
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageRead(MessageReadDomainEvent event) {
+    @Transactional(readOnly = true)
+    public void notifyRead(Long conversationId, Long readerId, Long lastReadMessageId, Instant readAt) {
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
         ConversationParticipant readParticipant = participants.stream()
-                .filter(p -> p.getUser().getId().equals(event.readerId()))
+                .filter(p -> p.getUser().getId().equals(readerId))
                 .findFirst()
                 .orElseThrow();
 
         MessageReadEventData data = new MessageReadEventData(
-                event.readerId(),
+                readerId,
                 readParticipant.getUser().getUsername(),
-                event.lastReadMessageId(),
-                event.readAt()
+                lastReadMessageId,
+                readAt
         );
 
-        sendToConversationParticipants(participants, event.conversationId(), RealtimeEventType.MESSAGE_READ, data);
+        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_READ, data);
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageDelivered(MessageDeliveredDomainEvent event) {
+    @Transactional(readOnly = true)
+    public void notifyDelivered(
+            Long conversationId,
+            Long senderId,
+            Long lastDeliveredMessageId,
+            Instant deliveredAt
+    ) {
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
         ConversationParticipant senderParticipant = participants.stream()
-                .filter(p -> p.getUser().getId().equals(event.senderId()))
+                .filter(p -> p.getUser().getId().equals(senderId))
                 .findFirst()
                 .orElseThrow();
 
         MessageDeliveredEventData data = new MessageDeliveredEventData(
-                event.lastDeliveredMessageId(),
+                lastDeliveredMessageId,
                 MessageStatus.DELIVERED,
-                event.deliveredAt()
+                deliveredAt
         );
 
         sendToConversationParticipants(
                 List.of(senderParticipant),
-                event.conversationId(),
+                conversationId,
                 RealtimeEventType.MESSAGE_STATUS_UPDATED,
                 data
         );
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public void onMessageUnPinned(MessageUnPinnedDomainEvent event) {
-        MessageUnPinnedEventData data = new MessageUnPinnedEventData(event.messageId(), event.unPinnedAt());
+    @Transactional(readOnly = true)
+    public void notifyUnPinned(Long conversationId, Long messageId, Instant unPinnedAt) {
+        MessageUnPinnedEventData data = new MessageUnPinnedEventData(messageId, unPinnedAt);
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(event.conversationId());
+                participantRepository.findByConversationIdWithUser(conversationId);
 
-        sendToConversationParticipants(participants, event.conversationId(), RealtimeEventType.MESSAGE_UNPINNED, data);
+        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
     }
 
     private void sendToConversationParticipants(
