@@ -1,5 +1,6 @@
 package backend.xxx.chat.message.strategy;
 
+import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.message.dto.SendMessageRequest;
 import backend.xxx.chat.message.model.Message;
@@ -22,6 +23,10 @@ public class TextMessageStrategy implements MessageTypeStrategy {
             SendMessageRequest request,
             Message replyToMessage
     ) {
+        if (request.attachments() != null && !request.attachments().isEmpty()) {
+            throw new ValidationException("Text message does not support attachments");
+        }
+
         return Message.createTextMessage(
                 conversation,
                 sender,

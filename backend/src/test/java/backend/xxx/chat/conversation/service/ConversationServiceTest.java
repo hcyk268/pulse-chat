@@ -11,6 +11,8 @@ import backend.xxx.chat.conversation.model.ConversationParticipantId;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageAttachment;
+import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
@@ -162,6 +164,29 @@ class ConversationServiceTest {
         assertThat(secondPage.paging().nextCursor()).isNull();
     }
 
+    @Test
+    void getConversationsUsesAttachmentFileNameWhenLastMediaMessageHasNoCaption() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+
+        Conversation conversation = createVisibleDirectConversationWithMediaMessage(
+                alice,
+                bob,
+                Instant.parse("2026-01-05T00:00:00Z")
+        );
+
+        ConversationBoxResponse response = conversationService.getConversations(
+                (short) 20,
+                null,
+                Instant.parse("2026-12-31T00:00:00Z"),
+                alice.getUsername()
+        );
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).id()).isEqualTo(conversation.getId());
+        assertThat(response.items().get(0).lastMessage().contentPreview()).isEqualTo("holiday-video.mp4");
+    }
+
     private Conversation createVisibleDirectConversationWithMessage(
             User currentUser,
             User otherUser,
@@ -177,6 +202,40 @@ class ConversationServiceTest {
         Message message = messageRepository.saveAndFlush(
                 Message.createTextMessage(conversation, otherUser, UUID.randomUUID(), content)
         );
+
+        conversation.updateLastMessage(message.getId(), lastMessageAt);
+        return conversationRepository.saveAndFlush(conversation);
+    }
+
+    private Conversation createVisibleDirectConversationWithMediaMessage(
+            User currentUser,
+            User otherUser,
+            Instant lastMessageAt
+    ) {
+        ConversationService.CreateOrOpenDirectConversationResult result =
+                conversationService.createOrOpenDirectConversation(
+                        currentUser.getUsername(),
+                        new CreateDirectConversationRequest(otherUser.getId())
+                );
+        Conversation conversation = conversationRepository.findById(result.response().id()).orElseThrow();
+
+        Message message = Message.createMediaMessage(conversation, otherUser, UUID.randomUUID(), null, null);
+        message.addAttachment(MessageAttachment.create(
+                "message-attachments/20260708/holiday-video.mp4",
+                "https://cdn.example.com/message-attachments/20260708/holiday-video.mp4",
+                "holiday-video.mp4",
+                "video/mp4",
+                5000L,
+                1920,
+                1080,
+                12,
+                "https://cdn.example.com/message-attachments/20260708/holiday-video-thumb.jpg",
+                0
+        ));
+        message = messageRepository.saveAndFlush(message);
+
+        assertThat(message.getMessageType()).isEqualTo(MessageType.MEDIA);
+        assertThat(message.getAttachments()).hasSize(1);
 
         conversation.updateLastMessage(message.getId(), lastMessageAt);
         return conversationRepository.saveAndFlush(conversation);

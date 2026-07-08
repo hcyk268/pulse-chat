@@ -1,6 +1,7 @@
 package backend.xxx.chat.message.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.model.MessageType;
@@ -13,6 +14,7 @@ public record MessageResponse(
         SummarizeUserResponse sender,
         String content,
         MessageReplyResponse replyTo,
+        List<AttachmentResponse> attachments,
         MessageType messageType,
         MessageStatus status,
         Instant createdAt,

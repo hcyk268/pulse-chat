@@ -5,10 +5,14 @@ import backend.xxx.chat.message.dto.MessageReplyResponse;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.user.dto.SummarizeUserResponse;
 import backend.xxx.chat.user.model.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class MessageMapper {
+
+    private final MessageAttachmentMapper messageAttachmentMapper;
 
     public MessageResponse toResponse(Message message) {
         User sender = message.getSender();
@@ -25,6 +29,7 @@ public class MessageMapper {
                 ),
                 message.isDeleted() ? null : message.getContent(),
                 toReplyResponse(message.getReplyToMessage()),
+                message.isDeleted() ? java.util.List.of() : messageAttachmentMapper.toResponses(message.getAttachments()),
                 message.getMessageType(),
                 message.getStatus(),
                 message.getCreatedAt(),
@@ -45,6 +50,7 @@ public class MessageMapper {
                 replyToMessage.getId(),
                 toSummaryUserResponse(replyToMessage.getSender()),
                 replyToMessage.isDeleted() ? null : replyToMessage.getContent(),
+                replyToMessage.isDeleted() ? java.util.List.of() : messageAttachmentMapper.toResponses(replyToMessage.getAttachments()),
                 replyToMessage.getMessageType(),
                 replyToMessage.getCreatedAt(),
                 replyToMessage.getDeletedAt()

@@ -1,12 +1,15 @@
 package backend.xxx.chat.message.model;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 import backend.xxx.chat.common.model.AbstractBaseEntity;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.user.model.User;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,12 +17,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Getter
 @Entity
@@ -49,7 +53,7 @@ public class Message extends AbstractBaseEntity<Long> {
     @JoinColumn(name = "sender_id", nullable = false)
     private User sender;
 
-    @Column(name = "content", nullable = false, length = CONTENT_MAX_LENGTH)
+    @Column(name = "content", length = CONTENT_MAX_LENGTH)
     private String content;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -80,6 +84,10 @@ public class Message extends AbstractBaseEntity<Long> {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder asc, id asc")
+    private final List<MessageAttachment> attachments = new ArrayList<>();
+
     public static Message createTextMessage(
             Conversation conversation,
             User sender,
@@ -105,6 +113,31 @@ public class Message extends AbstractBaseEntity<Long> {
         message.messageType = MessageType.TEXT;
         message.status = MessageStatus.SENT;
         return message;
+    }
+
+    public static Message createMediaMessage(
+            Conversation conversation,
+            User sender,
+            UUID clientMessageId,
+            String content,
+            Message replyToMessage
+    ) {
+        Message message = new Message();
+        message.conversation = Objects.requireNonNull(conversation, "conversation must not be null");
+        message.sender = Objects.requireNonNull(sender, "sender must not be null");
+        message.clientMessageId = Objects.requireNonNull(clientMessageId, "clientMessageId must not be null");
+        message.content = normalizeOptionalContent(content);
+        message.replyToMessage = replyToMessage;
+        message.messageType = MessageType.MEDIA;
+        message.status = MessageStatus.SENT;
+        return message;
+    }
+
+    public void addAttachment(MessageAttachment attachment) {
+        ensureNotDeleted();
+        MessageAttachment requiredAttachment = Objects.requireNonNull(attachment, "attachment must not be null");
+        requiredAttachment.attachTo(this);
+        attachments.add(requiredAttachment);
     }
 
     public void markDelivered(Instant deliveredAt) {
@@ -144,6 +177,23 @@ public class Message extends AbstractBaseEntity<Long> {
 
         if (trimmedContent.isEmpty()) {
             throw new IllegalArgumentException("content must not be blank");
+        }
+
+        if (trimmedContent.length() > CONTENT_MAX_LENGTH) {
+            throw new IllegalArgumentException("content exceeds max length " + CONTENT_MAX_LENGTH);
+        }
+
+        return trimmedContent;
+    }
+
+    private static String normalizeOptionalContent(String content) {
+        if (content == null) {
+            return null;
+        }
+
+        String trimmedContent = content.trim();
+        if (trimmedContent.isEmpty()) {
+            return null;
         }
 
         if (trimmedContent.length() > CONTENT_MAX_LENGTH) {

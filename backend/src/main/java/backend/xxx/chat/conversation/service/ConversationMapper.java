@@ -14,6 +14,7 @@ import backend.xxx.chat.conversation.dto.DirectConversationResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.user.dto.PresenceResponse;
 import backend.xxx.chat.user.model.Presence;
 import backend.xxx.chat.user.model.User;
@@ -129,14 +130,31 @@ public class ConversationMapper {
         return new ConversationLastMessageResponse(
                 message.getId(),
                 message.getSender().getId(),
-                message.isDeleted() ? null : toContentPreview(message.getContent()),
+                message.isDeleted() ? null : toContentPreview(message),
                 message.getStatus(),
                 message.getCreatedAt(),
                 message.getDeletedAt()
         );
     }
 
-    private String toContentPreview(String content) {
+    private String toContentPreview(Message message) {
+        String content = message.getContent();
+        if (content != null && !content.isBlank()) {
+            return trimPreview(content);
+        }
+
+        if (message.getMessageType() == MessageType.MEDIA && !message.getAttachments().isEmpty()) {
+            if (message.getAttachments().size() == 1) {
+                return trimPreview(message.getAttachments().get(0).getFileName());
+            }
+
+            return message.getAttachments().size() + " attachments";
+        }
+
+        return null;
+    }
+
+    private String trimPreview(String content) {
         if (content.length() <= LAST_MESSAGE_PREVIEW_LENGTH) {
             return content;
         }

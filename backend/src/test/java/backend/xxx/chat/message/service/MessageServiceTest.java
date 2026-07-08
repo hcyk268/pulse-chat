@@ -11,6 +11,7 @@ import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.message.dto.AttachmentRequest;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.message.dto.EditMessageRequest;
@@ -133,7 +134,8 @@ class MessageServiceTest {
                         UUID.randomUUID(),
                         "reply content",
                         MessageType.TEXT,
-                        repliedMessage.getId()
+                        repliedMessage.getId(),
+                        null
                 )
         );
 
@@ -162,6 +164,7 @@ class MessageServiceTest {
                         UUID.randomUUID(),
                         "hello outbox",
                         MessageType.TEXT,
+                        null,
                         null
                 )
         );
@@ -195,7 +198,8 @@ class MessageServiceTest {
                         UUID.randomUUID(),
                         "reply content",
                         MessageType.TEXT,
-                        repliedMessage.getId()
+                        repliedMessage.getId(),
+                        null
                 )
         ))
                 .isInstanceOf(ValidationException.class)
@@ -223,11 +227,93 @@ class MessageServiceTest {
                         UUID.randomUUID(),
                         "reply content",
                         MessageType.TEXT,
-                        repliedMessage.getId()
+                        repliedMessage.getId(),
+                        null
                 )
         ))
                 .isInstanceOf(ValidationException.class)
                 .hasMessage("Reply message must belong to the same conversation");
+    }
+
+    @Test
+    void sendMediaMessageStoresAttachmentsAndOptionalCaption() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+
+        MessageResponse response = messageService.sendMessage(
+                alice.getUsername(),
+                new SendMessageRequest(
+                        conversation.getId(),
+                        UUID.randomUUID(),
+                        "album mới",
+                        MessageType.MEDIA,
+                        null,
+                        List.of(
+                                new AttachmentRequest(
+                                        "message-attachments/20260708/photo-1.png",
+                                        "https://cdn.example.com/message-attachments/20260708/photo-1.png",
+                                        "photo-1.png",
+                                        "image/png",
+                                        1200L,
+                                        800,
+                                        600,
+                                        null,
+                                        null
+                                ),
+                                new AttachmentRequest(
+                                        "message-attachments/20260708/clip-1.mp4",
+                                        "https://cdn.example.com/message-attachments/20260708/clip-1.mp4",
+                                        "clip-1.mp4",
+                                        "video/mp4",
+                                        3200L,
+                                        1280,
+                                        720,
+                                        8,
+                                        "https://cdn.example.com/message-attachments/20260708/clip-1-thumb.jpg"
+                                )
+                        )
+                )
+        );
+
+        assertThat(response.messageType()).isEqualTo(MessageType.MEDIA);
+        assertThat(response.content()).isEqualTo("album mới");
+        assertThat(response.attachments()).hasSize(2);
+        assertThat(response.attachments().get(0).objectKey())
+                .isEqualTo("message-attachments/20260708/photo-1.png");
+        assertThat(response.attachments().get(1).thumbnailUrl())
+                .isEqualTo("https://cdn.example.com/message-attachments/20260708/clip-1-thumb.jpg");
+
+        Message savedMessage = messageRepository.findById(response.id()).orElseThrow();
+        assertThat(savedMessage.getAttachments()).hasSize(2);
+        assertThat(savedMessage.getAttachments())
+                .extracting("fileName")
+                .containsExactly("photo-1.png", "clip-1.mp4");
+    }
+
+    @Test
+    void sendMediaMessageRejectsMissingAttachments() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+
+        assertThatThrownBy(() -> messageService.sendMessage(
+                alice.getUsername(),
+                new SendMessageRequest(
+                        conversation.getId(),
+                        UUID.randomUUID(),
+                        null,
+                        MessageType.MEDIA,
+                        null,
+                        List.of()
+                )
+        ))
+                .isInstanceOf(ValidationException.class)
+                .hasMessage("Media message must contain at least one attachment");
     }
 
     @Test
