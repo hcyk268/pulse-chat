@@ -42,7 +42,7 @@ public class MessageRealtimeNotifier {
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
-    public void notifyCreated(Long conversationId, Long messageId) {
+    public void notifyCreated(Long outboxEventId, Long conversationId, Long messageId) {
         Message message = messageRepository.findByIdInWithSender(List.of(messageId))
                 .stream()
                 .findFirst()
@@ -60,6 +60,7 @@ public class MessageRealtimeNotifier {
             String username = participant.getUser().getUsername();
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.MESSAGE_CREATED),
                     username,
                     RealtimeEventType.MESSAGE_CREATED,
                     conversationId,
@@ -72,6 +73,7 @@ public class MessageRealtimeNotifier {
             }
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.CONVERSATION_UPDATED),
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
                     conversationId,
@@ -81,7 +83,7 @@ public class MessageRealtimeNotifier {
     }
 
     @Transactional(readOnly = true)
-    public void notifyUpdated(Long conversationId, Long messageId) {
+    public void notifyUpdated(Long outboxEventId, Long conversationId, Long messageId) {
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
         MessageUpdatedEventData messageData = new MessageUpdatedEventData(messageMapper.toResponse(message));
@@ -100,6 +102,7 @@ public class MessageRealtimeNotifier {
             String username = participant.getUser().getUsername();
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.MESSAGE_UPDATED),
                     username,
                     RealtimeEventType.MESSAGE_UPDATED,
                     conversationId,
@@ -112,6 +115,7 @@ public class MessageRealtimeNotifier {
             }
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.CONVERSATION_UPDATED),
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
                     conversationId,
@@ -121,7 +125,7 @@ public class MessageRealtimeNotifier {
     }
 
     @Transactional(readOnly = true)
-    public void notifyDeleted(Long conversationId, Long messageId) {
+    public void notifyDeleted(Long outboxEventId, Long conversationId, Long messageId) {
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
         MessageDeletedEventData messageData = new MessageDeletedEventData(messageMapper.toResponse(message));
@@ -140,6 +144,7 @@ public class MessageRealtimeNotifier {
             String username = participant.getUser().getUsername();
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.MESSAGE_DELETED),
                     username,
                     RealtimeEventType.MESSAGE_DELETED,
                     conversationId,
@@ -152,6 +157,7 @@ public class MessageRealtimeNotifier {
             }
 
             realtimeEventPublisher.sendToUser(
+                    buildOutboxEventId(outboxEventId, RealtimeEventType.CONVERSATION_UPDATED),
                     username,
                     RealtimeEventType.CONVERSATION_UPDATED,
                     conversationId,
@@ -161,7 +167,7 @@ public class MessageRealtimeNotifier {
     }
 
     @Transactional(readOnly = true)
-    public void notifyPinned(Long conversationId, Long messagePinId) {
+    public void notifyPinned(Long outboxEventId, Long conversationId, Long messagePinId) {
         MessagePinnedEventData data = messagePinRepository.findByIdWithDetails(messagePinId)
                 .map(messagePinMapper::toResponse)
                 .map(MessagePinnedEventData::new)
@@ -170,11 +176,11 @@ public class MessageRealtimeNotifier {
         List<ConversationParticipant> participants =
                 participantRepository.findByConversationIdWithUser(conversationId);
 
-        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_PINNED, data);
+        sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_PINNED, data);
     }
 
     @Transactional(readOnly = true)
-    public void notifyRead(Long conversationId, Long readerId, Long lastReadMessageId, Instant readAt) {
+    public void notifyRead(Long outboxEventId, Long conversationId, Long readerId, Long lastReadMessageId, Instant readAt) {
         List<ConversationParticipant> participants =
                 participantRepository.findByConversationIdWithUser(conversationId);
 
@@ -190,16 +196,11 @@ public class MessageRealtimeNotifier {
                 readAt
         );
 
-        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_READ, data);
+        sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_READ, data);
     }
 
     @Transactional(readOnly = true)
-    public void notifyDelivered(
-            Long conversationId,
-            Long senderId,
-            Long lastDeliveredMessageId,
-            Instant deliveredAt
-    ) {
+    public void notifyDelivered(Long outboxEventId, Long conversationId, Long senderId, Long lastDeliveredMessageId, Instant deliveredAt) {
         List<ConversationParticipant> participants =
                 participantRepository.findByConversationIdWithUser(conversationId);
 
@@ -214,37 +215,44 @@ public class MessageRealtimeNotifier {
                 deliveredAt
         );
 
-        sendToConversationParticipants(
-                List.of(senderParticipant),
-                conversationId,
-                RealtimeEventType.MESSAGE_STATUS_UPDATED,
-                data
-        );
+        sendToConversationParticipants(outboxEventId, List.of(senderParticipant), conversationId, RealtimeEventType.MESSAGE_STATUS_UPDATED, data);
     }
 
     @Transactional(readOnly = true)
-    public void notifyUnPinned(Long conversationId, Long messageId, Instant unPinnedAt) {
+    public void notifyUnPinned(Long outboxEventId, Long conversationId, Long messageId, Instant unPinnedAt) {
         MessageUnPinnedEventData data = new MessageUnPinnedEventData(messageId, unPinnedAt);
 
         List<ConversationParticipant> participants =
                 participantRepository.findByConversationIdWithUser(conversationId);
 
-        sendToConversationParticipants(participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
+        sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
     }
 
     private void sendToConversationParticipants(
+            Long outboxEventId,
             List<ConversationParticipant> participants,
             Long conversationId,
             RealtimeEventType eventType,
             Object data
     ) {
+        String realtimeEventId = buildOutboxEventId(outboxEventId, eventType);
+
         for (ConversationParticipant participant : participants) {
             realtimeEventPublisher.sendToUser(
+                    realtimeEventId,
                     participant.getUser().getUsername(),
                     eventType,
                     conversationId,
                     data
             );
         }
+    }
+
+    private String buildOutboxEventId(Long outboxEventId, RealtimeEventType eventType) {
+        if (outboxEventId == null) {
+            return null;
+        }
+
+        return "outbox_" + outboxEventId + "_" + eventType.getValue();
     }
 }

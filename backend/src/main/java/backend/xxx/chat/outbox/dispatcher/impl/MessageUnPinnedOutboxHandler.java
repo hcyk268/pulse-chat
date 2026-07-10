@@ -28,7 +28,7 @@ public class MessageUnPinnedOutboxHandler implements OutboxEventHandler {
                     event.getPayload(),
                     MessageUnPinnedOutboxPayload.class
             );
-            notifier.notifyUnPinned(payload.conversationId(), payload.messageId(), payload.unPinnedAt());
+            notifier.notifyUnPinned(event.getId(), payload.conversationId(), payload.messageId(), payload.unPinnedAt());
         } catch (Exception ex) {
             throw new IllegalArgumentException("Failed to handle message.unpinned", ex);
         }

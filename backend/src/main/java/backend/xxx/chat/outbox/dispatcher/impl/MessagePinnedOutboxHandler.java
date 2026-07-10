@@ -28,7 +28,7 @@ public class MessagePinnedOutboxHandler implements OutboxEventHandler {
                     event.getPayload(),
                     MessagePinnedOutboxPayload.class
             );
-            notifier.notifyPinned(payload.conversationId(), payload.messagePinId());
+            notifier.notifyPinned(event.getId(), payload.conversationId(), payload.messagePinId());
         } catch (Exception ex) {
             throw new IllegalArgumentException("Failed to handle message.pinned", ex);
         }

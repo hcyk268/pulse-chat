@@ -21,8 +21,8 @@ public class OutBoxWorker {
     private final OutboxProcessingService outboxProcessingService;
 
     @Scheduled(
-            fixedDelayString = "500",
-            initialDelayString = "1000",
+            fixedDelayString = "${app.outbox.worker.fixed-delay-ms:500}",
+            initialDelayString = "${app.outbox.worker.initial-delay-ms:1000}",
             scheduler = "outboxTaskScheduler"
     )
     public void process() {

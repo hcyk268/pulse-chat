@@ -20,13 +20,14 @@ public class StompRealtimeEventPublisher implements RealtimeEventPublisher {
 
     @Override
     public <T> void sendToUser(
+            String eventId,
             String username,
             RealtimeEventType eventType,
             Long conversationId,
             T data
     ) {
         RealtimeEventEnvelope<T> envelope = new RealtimeEventEnvelope<>(
-                buildEventId(),
+                resolveEventId(eventId),
                 eventType,
                 Instant.now(),
                 conversationId,
@@ -40,22 +41,11 @@ public class StompRealtimeEventPublisher implements RealtimeEventPublisher {
         );
     }
 
-    @Override
-    public <T> void sendToUsers(
-            Collection<String> usernames,
-            RealtimeEventType eventType,
-            Long conversationId,
-            T data
-    ) {
-        usernames.forEach(username -> sendToUser(
-                username,
-                eventType,
-                conversationId,
-                data
-        ));
-    }
+    private String resolveEventId(String eventId) {
+        if (eventId != null && !eventId.isBlank()) {
+            return eventId;
+        }
 
-    private String buildEventId() {
         return "evt_" + UUID.randomUUID();
     }
 }

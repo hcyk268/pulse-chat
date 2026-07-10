@@ -25,7 +25,7 @@ public class MessageUpdatedOutboxHandler implements OutboxEventHandler {
     public void handle(OutboxEvent event) {
         try {
             MessageOutboxPayload payload = objectMapper.readValue(event.getPayload(), MessageOutboxPayload.class);
-            notifier.notifyUpdated(payload.conversationId(), payload.messageId());
+            notifier.notifyUpdated(event.getId(), payload.conversationId(), payload.messageId());
         } catch (Exception ex) {
             throw new IllegalArgumentException("Failed to handle message.updated", ex);
         }

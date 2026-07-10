@@ -25,7 +25,7 @@ public class MessageDeletedOutboxHandler implements OutboxEventHandler {
     public void handle(OutboxEvent event) {
         try {
             MessageOutboxPayload payload = objectMapper.readValue(event.getPayload(), MessageOutboxPayload.class);
-            notifier.notifyDeleted(payload.conversationId(), payload.messageId());
+            notifier.notifyDeleted(event.getId(), payload.conversationId(), payload.messageId());
         } catch (Exception ex) {
             throw new IllegalArgumentException("Failed to handle message.deleted", ex);
         }

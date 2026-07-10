@@ -29,7 +29,7 @@ public class MessageCreatedOutboxHandler implements OutboxEventHandler {
                     MessageCreatedOutboxPayload.class
             );
 
-            notifier.notifyCreated(payload.conversationId(), payload.messageId());
+            notifier.notifyCreated(event.getId(), payload.conversationId(), payload.messageId());
         } catch (Exception ex) {
             throw new IllegalArgumentException("Failed to handle message.created", ex);
         }

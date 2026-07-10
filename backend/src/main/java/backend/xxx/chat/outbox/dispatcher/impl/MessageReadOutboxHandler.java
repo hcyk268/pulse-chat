@@ -26,6 +26,7 @@ public class MessageReadOutboxHandler implements OutboxEventHandler {
         try {
             MessageReadOutboxPayload payload = objectMapper.readValue(event.getPayload(), MessageReadOutboxPayload.class);
             notifier.notifyRead(
+                    event.getId(),
                     payload.conversationId(),
                     payload.readerId(),
                     payload.lastReadMessageId(),

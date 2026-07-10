@@ -29,6 +29,7 @@ public class MessageStatusUpdatedOutboxHandler implements OutboxEventHandler {
                     MessageDeliveredOutboxPayload.class
             );
             notifier.notifyDelivered(
+                    event.getId(),
                     payload.conversationId(),
                     payload.senderId(),
                     payload.lastDeliveredMessageId(),

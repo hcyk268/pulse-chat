@@ -50,6 +50,15 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
     @Column(name = "last_error", length = LAST_ERROR_MAX_LENGTH)
     private String lastError;
 
+    @Column(name = "locked_at")
+    private Instant lockedAt;
+
+    @Column(name = "locked_by", length = 100)
+    private String lockedBy;
+
+    @Column(name = "event_version", nullable = false)
+    private int eventVersion = 1;
+
     public static OutboxEvent pending(
             String aggregateType,
             Long aggregateId,
@@ -74,11 +83,14 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
         event.status = OutboxStatus.PENDING;
         event.attemptCount = 0;
         event.availableAt = Objects.requireNonNull(availableAt, "availableAt must not be null");
+        event.eventVersion = 1;
         return event;
     }
 
-    public void markProcessing() {
+    public void markProcessing(Instant lockedAt, String lockedBy) {
         this.status = OutboxStatus.PROCESSING;
+        this.lockedAt = Objects.requireNonNull(lockedAt, "lockedAt must not be null");
+        this.lockedBy = trimToLength(lockedBy, 100);
         this.lastError = null;
     }
 
@@ -86,6 +98,7 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
         this.status = OutboxStatus.DONE;
         this.processedAt = Objects.requireNonNull(processedAt, "processedAt must not be null");
         this.lastError = null;
+        this.clearLock();
     }
 
     public void markFailed(String errorMessage, Instant nextAttemptAt) {
@@ -93,11 +106,26 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
         this.attemptCount++;
         this.lastError = trimToLength(errorMessage, LAST_ERROR_MAX_LENGTH);
         this.availableAt = Objects.requireNonNull(nextAttemptAt, "nextAttemptAt must not be null");
+        this.clearLock();
+    }
+
+    public void markDead(String errorMessage, Instant deadAt) {
+        this.status = OutboxStatus.DEAD;
+        this.attemptCount++;
+        this.processedAt = Objects.requireNonNull(deadAt, "deadAt must not be null");
+        this.lastError = trimToLength(errorMessage, LAST_ERROR_MAX_LENGTH);
+        this.clearLock();
+    }
+
+    private void clearLock() {
+        this.lockedAt = null;
+        this.lockedBy = null;
     }
 
     public void retry(Instant nextAttemptAt) {
         this.status = OutboxStatus.PENDING;
         this.availableAt = Objects.requireNonNull(nextAttemptAt, "nextAttemptAt must not be null");
+        this.clearLock();
     }
 
     private static String requirePayload(String payload) {
