@@ -12,7 +12,11 @@ public enum RealtimeEventType {
     MESSAGE_STATUS_UPDATED("message.status.updated"),
     CONVERSATION_UPDATED("conversation.updated"),
     TYPING_UPDATED("typing.updated"),
-    PRESENCE_UPDATED("presence.updated");
+    PRESENCE_UPDATED("presence.updated"),
+    GROUP_CREATED("group.created"),
+    GROUP_MEMBER_ADDED("group.member.added"),
+    GROUP_MEMBER_REMOVED("group.member.removed"),
+    GROUP_UPDATED("group.updated");
 
     private final String value;
 

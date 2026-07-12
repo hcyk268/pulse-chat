@@ -1,7 +1,6 @@
 package backend.xxx.chat.message.service;
 
-import backend.xxx.chat.common.exception.ApiException;
-import backend.xxx.chat.common.exception.ErrorCode;
+import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.dto.MessageReactionRequest;
@@ -15,7 +14,6 @@ import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -95,11 +93,7 @@ public class MessageReactionService {
 
     private Message getMessage(Long messageId) {
         return messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
     }
 
     private void validateReactionRequest(Long messageId, MessageReactionRequest request) {

@@ -8,7 +8,7 @@ import java.util.UUID;
 import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ConflictException;
 import backend.xxx.chat.common.exception.ValidationException;
-import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
+import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.message.dto.AttachmentRequest;
@@ -404,7 +404,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void getConversationPinsReturnsAllPinnedMessagesNewestFirst() {
+    void getPinnedMessagesReturnsAllPinnedMessagesNewestFirst() {
         User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
         User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
@@ -419,7 +419,7 @@ class MessageServiceTest {
         messageService.pinMessage(alice.getUsername(), firstMessage.getId());
         messageService.pinMessage(alice.getUsername(), secondMessage.getId());
 
-        ConversationPinsResponse response = messageService.getConversationPins(alice.getUsername(), conversation.getId());
+        ConversationPinnedMessagesResponse response = messageService.getPinnedMessages(alice.getUsername(), conversation.getId());
 
         assertThat(response.conversationId()).isEqualTo(conversation.getId());
         assertThat(response.items())

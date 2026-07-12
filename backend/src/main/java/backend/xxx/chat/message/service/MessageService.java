@@ -6,14 +6,14 @@ import java.util.Collections;
 import java.util.List;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
-import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ConflictException;
-import backend.xxx.chat.common.exception.ErrorCode;
+import backend.xxx.chat.common.exception.NotFoundException;
+import backend.xxx.chat.common.exception.ForbiddenException;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
-import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
+import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.dto.*;
@@ -36,7 +36,6 @@ import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,11 +64,7 @@ public class MessageService {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(
-                        () -> new ApiException(
-                                HttpStatus.NOT_FOUND,
-                                ErrorCode.NOT_FOUND,
-                                "Conversation not found"
-                        )
+                        () -> new NotFoundException("Conversation not found")
                 );
 
         conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
@@ -117,11 +112,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(request.conversationId())
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Conversation not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         List<ConversationParticipant> participants =
                 conversationAccessPolicy.requireParticipants(conversation.getId());
@@ -172,21 +163,13 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
 
         Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Conversation not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         MessagePin existingPin = messagePinRepository.findByMessageIdWithDetails(message.getId())
                 .orElse(null);
@@ -218,16 +201,16 @@ public class MessageService {
     }
 
     @Transactional(readOnly = true)
-    public ConversationPinsResponse getConversationPins(String currentUsername, Long conversationId) {
+    public ConversationPinnedMessagesResponse getPinnedMessages(String currentUsername, Long conversationId) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
-        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
         List<MessagePinResponse> items = messagePinRepository.findByConversationIdWithDetails(conversationId)
                 .stream()
                 .map(messagePinMapper::toResponse)
                 .toList();
 
-        return new ConversationPinsResponse(conversationId, items);
+        return new ConversationPinnedMessagesResponse(conversationId, items);
     }
 
     @Transactional
@@ -235,11 +218,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(request.conversationId())
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Conversation not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         ConversationParticipant currentParticipant =
                 conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
@@ -248,11 +227,7 @@ public class MessageService {
                         request.lastReadMessageId(),
                         conversation.getId()
                 )
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Instant readAt = Instant.now();
 
@@ -292,11 +267,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         MessagePin unPinMessage = messagePinRepository.findByMessageIdWithDetails(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message is not pinned before"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message is not pinned before"));
 
         Long conversationId = unPinMessage.getConversation().getId();
         conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
@@ -321,21 +292,13 @@ public class MessageService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
 
         if (!message.getSender().getId().equals(currentUser.getId())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "Only message sender can edit this message"
-            );
+            throw new ForbiddenException("Only message sender can edit this message");
         }
 
         if (message.isDeleted()) {
@@ -370,21 +333,13 @@ public class MessageService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
 
         if (!message.getSender().getId().equals(currentUser.getId())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "Only message sender can delete this message"
-            );
+            throw new ForbiddenException("Only message sender can delete this message");
         }
 
         if (!message.isDeleted()) {
@@ -407,11 +362,7 @@ public class MessageService {
         }
 
         Message replyToMessage = messageRepository.findByIdWithConversationAndSender(replyToMessageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Reply message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Reply message not found"));
 
         if (!replyToMessage.getConversation().getId().equals(conversationId)) {
             throw new ValidationException("Reply message must belong to the same conversation");
