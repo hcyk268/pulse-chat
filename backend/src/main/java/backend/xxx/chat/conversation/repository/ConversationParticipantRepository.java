@@ -8,6 +8,7 @@ import java.util.Optional;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.model.ConversationParticipantId;
 import backend.xxx.chat.conversation.model.ConversationType;
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -108,6 +109,12 @@ public interface ConversationParticipantRepository
         """)
     List<ConversationParticipant> findByConversationIdInWithUser(
             @Param("conversationIds") Collection<Long> conversationIds
+    );
+
+    boolean existsByConversationIdAndUserIdAndStatus(
+            Long conversationId,
+            Long userId,
+            ParticipantStatus status
     );
 
     @Query("""

@@ -1,7 +1,7 @@
 package backend.xxx.chat.realtime.service;
 
-import backend.xxx.chat.common.exception.ApiException;
-import backend.xxx.chat.common.exception.ErrorCode;
+import backend.xxx.chat.common.exception.NotFoundException;
+import backend.xxx.chat.common.exception.ForbiddenException;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
@@ -14,7 +14,6 @@ import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,11 +36,7 @@ public class DeliveredService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        ErrorCode.NOT_FOUND,
-                        "Message not found"
-                ));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
         List<ConversationParticipant> participants =
@@ -49,11 +44,7 @@ public class DeliveredService {
         conversationAccessPolicy.assertCanUpdateMessageStatus(currentUser, participants);
 
         if (message.getSender().getId().equals(currentUser.getId())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    ErrorCode.FORBIDDEN,
-                    "Sender cannot mark their own message as delivered"
-            );
+            throw new ForbiddenException("Sender cannot mark their own message as delivered");
         }
 
         Instant deliveredAt = Instant.now();

@@ -1,12 +1,10 @@
 package backend.xxx.chat.auth.exception;
 
-import backend.xxx.chat.common.exception.ApiException;
-import backend.xxx.chat.common.exception.ErrorCode;
-import org.springframework.http.HttpStatus;
+import backend.xxx.chat.common.exception.ServiceUnavailableException;
 
-public class RedisUnavailable extends ApiException {
+public class RedisUnavailable extends ServiceUnavailableException {
 
     public RedisUnavailable() {
-        super(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.INTERNAL_SERVER_ERROR, "Redis is temporarily unavailable");
+        super("Redis is temporarily unavailable");
     }
 }

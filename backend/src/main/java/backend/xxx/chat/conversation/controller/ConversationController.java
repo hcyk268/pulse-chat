@@ -1,10 +1,7 @@
 package backend.xxx.chat.conversation.controller;
 
 import backend.xxx.chat.common.security.CurrentUserProvider;
-import backend.xxx.chat.conversation.dto.ConversationBoxResponse;
-import backend.xxx.chat.conversation.dto.ConversationPinsResponse;
-import backend.xxx.chat.conversation.dto.CreateDirectConversationRequest;
-import backend.xxx.chat.conversation.dto.DirectConversationResponse;
+import backend.xxx.chat.conversation.dto.*;
 import backend.xxx.chat.conversation.service.ConversationService;
 import backend.xxx.chat.message.service.MessageService;
 import jakarta.validation.Valid;
@@ -38,6 +35,83 @@ public class ConversationController {
         return ResponseEntity.status(status).body(result.response());
     }
 
+    @PostMapping("/group")
+    public ResponseEntity<ConversationDetailResponse> createGroupConversation(@Valid @RequestBody CreateGroupConversationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                conversationService.createGroupConversation(currentUserProvider.getCurrentUsername(), request)
+        );
+    }
+
+    @PostMapping("/{conversationId}/members")
+    public ResponseEntity<ConversationDetailResponse> inviteGroupMembers(
+            @Positive @PathVariable Long conversationId,
+            @Valid @RequestBody AddGroupMembersRequest request
+    ) {
+        return ResponseEntity.ok(conversationService.inviteGroupMembers(
+                currentUserProvider.getCurrentUsername(),
+                conversationId,
+                request
+        ));
+    }
+
+    @PostMapping("/{conversationId}/invitations/accept")
+    public ResponseEntity<ConversationDetailResponse> acceptGroupInvitation(@Positive @PathVariable Long conversationId) {
+        return ResponseEntity.ok(conversationService.acceptGroupInvitation(
+                currentUserProvider.getCurrentUsername(),
+                conversationId
+        ));
+    }
+
+    @PostMapping("/{conversationId}/invitations/reject")
+    public ResponseEntity<Void> rejectGroupInvitation(@Positive @PathVariable Long conversationId) {
+        conversationService.rejectGroupInvitation(currentUserProvider.getCurrentUsername(), conversationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{conversationId}/members/{memberId}")
+    public ResponseEntity<ConversationDetailResponse> removeGroupMember(
+            @Positive @PathVariable Long conversationId,
+            @Positive @PathVariable Long memberId
+    ) {
+        return ResponseEntity.ok(conversationService.removeGroupMember(
+                currentUserProvider.getCurrentUsername(),
+                conversationId,
+                memberId
+        ));
+    }
+
+    @PostMapping("/{conversationId}/leave")
+    public ResponseEntity<Void> leaveGroup(@Positive @PathVariable Long conversationId) {
+        conversationService.leaveGroup(currentUserProvider.getCurrentUsername(), conversationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{conversationId}/group-profile")
+    public ResponseEntity<ConversationDetailResponse> updateGroupProfile(
+            @Positive @PathVariable Long conversationId,
+            @Valid @RequestBody UpdateGroupProfileRequest request
+    ) {
+        return ResponseEntity.ok(conversationService.updateGroupProfile(
+                currentUserProvider.getCurrentUsername(),
+                conversationId,
+                request
+        ));
+    }
+
+    @PatchMapping("/{conversationId}/members/{memberId}/role")
+    public ResponseEntity<ConversationDetailResponse> updateGroupMemberRole(
+            @Positive @PathVariable Long conversationId,
+            @Positive @PathVariable Long memberId,
+            @Valid @RequestBody UpdateGroupMemberRoleRequest request
+    ) {
+        return ResponseEntity.ok(conversationService.updateGroupMemberRole(
+                currentUserProvider.getCurrentUsername(),
+                conversationId,
+                memberId,
+                request
+        ));
+    }
+
     @GetMapping
     public ResponseEntity<ConversationBoxResponse> getConversations(
             @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
@@ -50,13 +124,13 @@ public class ConversationController {
     }
 
     @GetMapping("/{conversationId}")
-    public ResponseEntity<DirectConversationResponse> getDetailConversation(@Positive @PathVariable Long conversationId) {
+    public ResponseEntity<ConversationDetailResponse> getDetailConversation(@Positive @PathVariable Long conversationId) {
         return ResponseEntity.ok(conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
     }
 
     @GetMapping("/{conversationId}/pins")
-    public ResponseEntity<ConversationPinsResponse> getConversationPins(@Positive @PathVariable Long conversationId) {
-        return ResponseEntity.ok(messageService.getConversationPins(
+    public ResponseEntity<ConversationPinnedMessagesResponse> getPinnedMessages(@Positive @PathVariable Long conversationId) {
+        return ResponseEntity.ok(messageService.getPinnedMessages(
                 currentUserProvider.getCurrentUsername(),
                 conversationId
         ));

@@ -1,5 +1,6 @@
 package backend.xxx.chat.conversation.model;
 
 public enum ConversationType {
-    DIRECT
+    DIRECT,
+    GROUP
 }

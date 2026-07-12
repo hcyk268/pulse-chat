@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import backend.xxx.chat.conversation.dto.ConversationDetailResponse;
 import backend.xxx.chat.conversation.dto.ConversationResponse;
 import backend.xxx.chat.conversation.dto.DirectConversationResponse;
 import backend.xxx.chat.conversation.model.Conversation;
@@ -88,6 +89,23 @@ public class ConversationResponseBuilder {
                         (existing, replacement) -> existing,
                         LinkedHashMap::new
                 ));
+    }
+
+    public ConversationDetailResponse buildConversationDetailResponse(
+            Conversation conversation,
+            User currentUser,
+            List<ConversationParticipant> participants
+    ) {
+        Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
+        Message lastMessage = findLastMessage(conversation);
+
+        return conversationMapper.toConversationDetailResponse(
+                conversation,
+                currentUser,
+                participants,
+                presenceByUserId,
+                lastMessage
+        );
     }
 
     public DirectConversationResponse buildDirectConversationResponse(
