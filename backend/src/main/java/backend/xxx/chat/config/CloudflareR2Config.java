@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @Configuration
@@ -22,15 +23,29 @@ public class CloudflareR2Config {
         return S3Presigner.builder()
                 .endpointOverride(properties.endpoint())
                 .region(Region.of("auto"))
-                .credentialsProvider(
-                        StaticCredentialsProvider.create(
-                                AwsBasicCredentials.create(
-                                        properties.accessKeyId(),
-                                        properties.secretAccessKey()
-                                )
-                        )
-                )
+                .credentialsProvider(credentialsProvider(properties))
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.storage.r2", name = "enabled", havingValue = "true")
+    public S3Client s3Client(CloudflareR2Properties properties) {
+        validateRequiredProperties(properties);
+
+        return S3Client.builder()
+                .endpointOverride(properties.endpoint())
+                .region(Region.of("auto"))
+                .credentialsProvider(credentialsProvider(properties))
+                .build();
+    }
+
+    private StaticCredentialsProvider credentialsProvider(CloudflareR2Properties properties) {
+        return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(
+                        properties.accessKeyId(),
+                        properties.secretAccessKey()
+                )
+        );
     }
 
     private void validateRequiredProperties(CloudflareR2Properties properties) {

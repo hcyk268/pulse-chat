@@ -13,6 +13,8 @@ import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.message.service.MessageAccessPolicy;
+import backend.xxx.chat.message.service.MessageValidator;
 import backend.xxx.chat.outbox.payload.MessageDeliveredOutboxPayload;
 import backend.xxx.chat.outbox.service.OutBoxService;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
@@ -47,6 +49,12 @@ class DeliveredServiceTest {
 
     @Mock
     private ConversationAccessPolicy conversationAccessPolicy;
+
+    @Mock
+    private MessageValidator messageValidator;
+
+    @Mock
+    private MessageAccessPolicy messageAccessPolicy;
 
     @Mock
     private OutBoxService outBoxService;
@@ -166,6 +174,15 @@ class DeliveredServiceTest {
         when(messageRepository.findById(message.getId())).thenReturn(Optional.of(message));
         when(conversationAccessPolicy.requireParticipants(conversation.getId()))
                 .thenReturn(participants);
+        doThrow(new ApiException(
+                HttpStatus.FORBIDDEN,
+                ErrorCode.FORBIDDEN,
+                "Sender cannot mark their own message as delivered"
+        )).when(messageAccessPolicy).requireNotSender(
+                eq(message),
+                eq(alice),
+                eq("Sender cannot mark their own message as delivered")
+        );
 
         ApiException exception = assertThrows(
                 ApiException.class,

@@ -3,6 +3,7 @@ package backend.xxx.chat.message.model;
 import java.util.Objects;
 
 import backend.xxx.chat.common.model.AbstractBaseEntity;
+import backend.xxx.chat.storage.model.UploadedAsset;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -26,6 +27,10 @@ public class MessageAttachment extends AbstractBaseEntity<Long> {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "message_id", nullable = false)
     private Message message;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "uploaded_asset_id")
+    private UploadedAsset uploadedAsset;
 
     @Column(name = "object_key", nullable = false, length = OBJECT_KEY_MAX_LENGTH)
     private String objectKey;
@@ -80,6 +85,24 @@ public class MessageAttachment extends AbstractBaseEntity<Long> {
         attachment.durationSeconds = normalizePositive(durationSeconds, "durationSeconds must be greater than 0");
         attachment.thumbnailUrl = normalizeOptional(thumbnailUrl);
         attachment.sortOrder = sortOrder;
+        return attachment;
+    }
+
+    public static MessageAttachment createFromAsset(UploadedAsset asset, int sortOrder) {
+        Objects.requireNonNull(asset, "asset must not be null");
+        MessageAttachment attachment = create(
+                asset.getObjectKey(),
+                asset.getPublicUrl(),
+                asset.getFileName(),
+                asset.getContentType(),
+                asset.getSizeBytes(),
+                asset.getWidth(),
+                asset.getHeight(),
+                asset.getDurationSeconds(),
+                asset.getThumbnailUrl(),
+                sortOrder
+        );
+        attachment.uploadedAsset = asset;
         return attachment;
     }
 
