@@ -42,6 +42,9 @@ class TypingServiceTest {
     @Mock
     private RealtimeEventPublisher realtimeEventPublisher;
 
+    @Mock
+    private RealtimeValidator realtimeValidator;
+
     @InjectMocks
     private TypingService typingService;
 
