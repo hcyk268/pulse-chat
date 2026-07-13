@@ -1,8 +1,11 @@
 package backend.xxx.chat.message.service;
 
+import backend.xxx.chat.message.dto.MessageReadReceiptResponse;
+import backend.xxx.chat.message.dto.MessageReadReceiptsResponse;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.dto.MessageReplyResponse;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageRead;
 import backend.xxx.chat.user.dto.SummarizeUserResponse;
 import backend.xxx.chat.user.model.User;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +44,22 @@ public class MessageMapper {
         );
     }
 
+
+    public MessageReadReceiptsResponse toReadReceiptsResponse(Long messageId, java.util.List<MessageRead> reads) {
+        return new MessageReadReceiptsResponse(
+                messageId,
+                reads.stream()
+                        .map(this::toReadReceiptResponse)
+                        .toList()
+        );
+    }
+
+    private MessageReadReceiptResponse toReadReceiptResponse(MessageRead read) {
+        return new MessageReadReceiptResponse(
+                toSummaryUserResponse(read.getUser()),
+                read.getReadAt()
+        );
+    }
     private MessageReplyResponse toReplyResponse(Message replyToMessage) {
         if (replyToMessage == null) {
             return null;

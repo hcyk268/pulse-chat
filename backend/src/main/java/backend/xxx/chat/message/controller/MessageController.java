@@ -44,6 +44,14 @@ public class MessageController {
         return ResponseEntity.ok(messageService.readMessage(currentUserProvider.getCurrentUsername(), request));
     }
 
+
+    @GetMapping("/{messageId}/reads")
+    public ResponseEntity<MessageReadReceiptsResponse> getReadReceipts(@Positive @PathVariable Long messageId) {
+        return ResponseEntity.ok(messageService.getReadReceipts(
+                currentUserProvider.getCurrentUsername(),
+                messageId
+        ));
+    }
     @PostMapping("/{messageId}/pin")
     public ResponseEntity<MessagePinResponse> pinMessage(@Positive @PathVariable Long messageId) {
         MessageService.PinMessageResult result =

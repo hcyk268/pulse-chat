@@ -3,6 +3,7 @@ package backend.xxx.chat.outbox.repository.impl;
 import backend.xxx.chat.outbox.repository.OutboxEventRepositoryCustom;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.hibernate.Session;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -20,6 +21,10 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
             int limit,
             String lockedBy
     ) {
+        if (isH2()) {
+            return claimDispatchableEventIdsForH2(availableAt, limit, lockedBy);
+        }
+
         String sql = """
                 WITH picked AS (
                     SELECT id
@@ -48,10 +53,7 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                 .setParameter("lockedBy", lockedBy)
                 .getResultList();
 
-        return rows.stream()
-                .map(Number.class::cast)
-                .map(Number::longValue)
-                .toList();
+        return toLongIds(rows);
     }
 
     @Override
@@ -75,5 +77,60 @@ public class OutboxEventRepositoryImpl implements OutboxEventRepositoryCustom {
                 .setParameter("now", now)
                 .setParameter("timeoutBefore", timeoutBefore)
                 .executeUpdate();
+    }
+
+    private List<Long> claimDispatchableEventIdsForH2(
+            Instant availableAt,
+            int limit,
+            String lockedBy
+    ) {
+        String selectSql = """
+                SELECT id
+                FROM outbox_events
+                WHERE status IN ('PENDING', 'FAILED')
+                  AND available_at <= :availableAt
+                ORDER BY created_at ASC, id ASC
+                LIMIT :limit
+                """;
+
+        List<Long> ids = toLongIds(entityManager.createNativeQuery(selectSql)
+                .setParameter("availableAt", availableAt)
+                .setParameter("limit", limit)
+                .getResultList());
+
+        if (ids.isEmpty()) {
+            return ids;
+        }
+
+        String updateSql = """
+                UPDATE outbox_events
+                SET status = 'PROCESSING',
+                    locked_at = :lockedAt,
+                    locked_by = :lockedBy,
+                    last_error = NULL,
+                    updated_at = :lockedAt
+                WHERE id IN (:ids)
+                """;
+
+        entityManager.createNativeQuery(updateSql)
+                .setParameter("lockedAt", availableAt)
+                .setParameter("lockedBy", lockedBy)
+                .setParameter("ids", ids)
+                .executeUpdate();
+
+        return ids;
+    }
+
+    private boolean isH2() {
+        String databaseProductName = entityManager.unwrap(Session.class)
+                .doReturningWork(connection -> connection.getMetaData().getDatabaseProductName());
+        return "H2".equalsIgnoreCase(databaseProductName);
+    }
+
+    private List<Long> toLongIds(List<?> rows) {
+        return rows.stream()
+                .map(Number.class::cast)
+                .map(Number::longValue)
+                .toList();
     }
 }

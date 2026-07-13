@@ -1,13 +1,13 @@
 package backend.xxx.chat.realtime.service;
 
 import backend.xxx.chat.common.exception.NotFoundException;
-import backend.xxx.chat.common.exception.ForbiddenException;
-import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.message.service.MessageAccessPolicy;
+import backend.xxx.chat.message.service.MessageValidator;
 import backend.xxx.chat.outbox.payload.MessageDeliveredOutboxPayload;
 import backend.xxx.chat.outbox.service.OutBoxService;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
@@ -27,11 +27,13 @@ public class DeliveredService {
     private final UserLookupService userLookupService;
     private final MessageRepository messageRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final MessageValidator messageValidator;
+    private final MessageAccessPolicy messageAccessPolicy;
     private final OutBoxService outBoxService;
 
     @Transactional
     public void messageDelivered(String currentUsername, Long messageId) {
-        validateRequest(currentUsername, messageId);
+        messageValidator.validateDeliveredRequest(currentUsername, messageId);
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
@@ -43,9 +45,7 @@ public class DeliveredService {
                 conversationAccessPolicy.requireParticipants(conversationId);
         conversationAccessPolicy.assertCanUpdateMessageStatus(currentUser, participants);
 
-        if (message.getSender().getId().equals(currentUser.getId())) {
-            throw new ForbiddenException("Sender cannot mark their own message as delivered");
-        }
+        messageAccessPolicy.requireNotSender(message, currentUser, "Sender cannot mark their own message as delivered");
 
         Instant deliveredAt = Instant.now();
         int updatedCount = messageRepository.markMessagesDeliveredUpTo(
@@ -72,14 +72,5 @@ public class DeliveredService {
             );
         }
     }
-
-    private void validateRequest(String name, Long messageId) {
-        if (name == null) {
-            throw new ValidationException("Username must not be null");
-        }
-
-        if (messageId == null) {
-            throw new ValidationException("MessageId must not be null");
-        }
-    }
 }
+

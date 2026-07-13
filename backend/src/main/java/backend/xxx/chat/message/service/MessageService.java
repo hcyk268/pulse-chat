@@ -6,22 +6,21 @@ import java.util.Collections;
 import java.util.List;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
-import backend.xxx.chat.common.exception.ConflictException;
 import backend.xxx.chat.common.exception.NotFoundException;
-import backend.xxx.chat.common.exception.ForbiddenException;
-import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessagePin;
+import backend.xxx.chat.message.model.MessageRead;
 import backend.xxx.chat.message.model.MessageStatus;
-import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessagePinRepository;
+import backend.xxx.chat.message.repository.MessageReadRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.strategy.MessageTypeStrategy;
 import backend.xxx.chat.message.strategy.MessageTypeStrategyRegistry;
@@ -49,12 +48,15 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final MessagePinRepository messagePinRepository;
+    private final MessageReadRepository messageReadRepository;
     private final CursorCodec cursorCodec;
     private final UserLookupService userLookupService;
     private final ConversationRepository conversationRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
+    private final MessageValidator messageValidator;
+    private final MessageAccessPolicy messageAccessPolicy;
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
     private final OutBoxService outBoxService;
 
@@ -67,9 +69,13 @@ public class MessageService {
                         () -> new NotFoundException("Conversation not found")
                 );
 
-        conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversation.getId(), currentUser.getId());
 
-        int pageLimit = normalizeLimit(limit);
+        int pageLimit = messageValidator.normalizeLimit(
+                limit,
+                DEFAULT_MESSAGE_LIMIT,
+                MAX_MESSAGE_LIMIT
+        );
         MessageCursor messageCursor = decodeCursor(cursor);
 
         PageRequest pageRequest = PageRequest.of(0, pageLimit + 1);
@@ -141,7 +147,7 @@ public class MessageService {
 
         conversation.updateLastMessage(savedMessage.getId(), savedMessage.getCreatedAt());
 
-        participants.forEach(participant -> {
+        conversationAccessPolicy.filterActiveParticipants(participants).forEach(participant -> {
             participant.markVisibleInList();
             if (!participant.getUser().getId().equals(currentUser.getId())) {
                 participant.incrementUnreadCount();
@@ -158,6 +164,22 @@ public class MessageService {
         return messageMapper.toResponse(savedMessage);
     }
 
+
+    @Transactional(readOnly = true)
+    public MessageReadReceiptsResponse getReadReceipts(String currentUsername, Long messageId) {
+        messageValidator.validateMessageId(messageId);
+
+        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        Message message = messageRepository.findByIdWithConversationAndSender(messageId)
+                .orElseThrow(() -> new NotFoundException("Message not found"));
+
+        conversationAccessPolicy.requireActiveParticipant(message.getConversation().getId(), currentUser.getId());
+
+        return messageMapper.toReadReceiptsResponse(
+                message.getId(),
+                messageReadRepository.findByMessageIdWithUserOrderByReadAtAsc(message.getId())
+        );
+    }
     @Transactional
     public PinMessageResult pinMessage(String currentUsername, Long messageId) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
@@ -166,7 +188,7 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
         Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
@@ -177,14 +199,8 @@ public class MessageService {
             return new PinMessageResult(messagePinMapper.toResponse(existingPin), false);
         }
 
-        if (message.isDeleted()) {
-            throw new ValidationException("Deleted message cannot be pinned");
-        }
-
         long pinnedCount = messagePinRepository.countByConversationId(conversationId);
-        if (pinnedCount >= MAX_PINS_PER_CONVERSATION) {
-            throw new ConflictException("Conversation can only have 20 pinned messages");
-        }
+        messageValidator.validateCanPinMessage(message, pinnedCount, MAX_PINS_PER_CONVERSATION);
 
         MessagePin savedPin = messagePinRepository.save(
                 MessagePin.create(conversation, message, currentUser, Instant.now())
@@ -221,7 +237,7 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         ConversationParticipant currentParticipant =
-                conversationAccessPolicy.requireParticipant(conversation.getId(), currentUser.getId());
+                conversationAccessPolicy.requireActiveParticipant(conversation.getId(), currentUser.getId());
 
         Message lastReadMessage = messageRepository.findByIdAndConversationId(
                         request.lastReadMessageId(),
@@ -231,14 +247,18 @@ public class MessageService {
 
         Instant readAt = Instant.now();
 
-        messageRepository.markMessagesReadUpTo(
-                conversation.getId(),
-                currentUser.getId(),
-                lastReadMessage.getCreatedAt(),
-                lastReadMessage.getId(),
-                MessageStatus.READ,
-                readAt
-        );
+        saveReadReceipts(conversation.getId(), currentUser, lastReadMessage, readAt);
+
+        if (conversation.getType() == ConversationType.DIRECT) {
+            messageRepository.markMessagesReadUpTo(
+                    conversation.getId(),
+                    currentUser.getId(),
+                    lastReadMessage.getCreatedAt(),
+                    lastReadMessage.getId(),
+                    MessageStatus.READ,
+                    readAt
+            );
+        }
 
         currentParticipant.markRead(lastReadMessage.getId());
 
@@ -270,7 +290,7 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("Message is not pinned before"));
 
         Long conversationId = unPinMessage.getConversation().getId();
-        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
         Long unPinnedMessageId = unPinMessage.getMessage().getId();
         Instant unPinnedAt = Instant.now();
@@ -288,30 +308,17 @@ public class MessageService {
 
     @Transactional
     public MessageResponse editMessage(String currentUsername, Long messageId, EditMessageRequest request) {
-        validateEditMessageRequest(messageId, request);
+        messageValidator.validateEditMessageRequest(messageId, request);
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
-        if (!message.getSender().getId().equals(currentUser.getId())) {
-            throw new ForbiddenException("Only message sender can edit this message");
-        }
-
-        if (message.isDeleted()) {
-            throw new ValidationException("Deleted message cannot be edited");
-        }
-
-        if (request.type() != null && request.type() != message.getMessageType()) {
-            throw new ValidationException("message type cannot be changed");
-        }
-
-        if (message.getMessageType() != MessageType.TEXT) {
-            throw new ValidationException("Only text message can be edited");
-        }
+        messageAccessPolicy.requireSender(message, currentUser, "Only message sender can edit this message");
+        messageValidator.validateCanEditMessage(message, request);
 
         message.editContent(request.newContent(), Instant.now());
 
@@ -327,20 +334,17 @@ public class MessageService {
 
     @Transactional
     public MessageResponse deleteMessage(String currentUsername, Long messageId) {
-        if (messageId == null) {
-            throw new ValidationException("messageId must not be null");
-        }
+        messageValidator.validateMessageId(messageId);
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
-        if (!message.getSender().getId().equals(currentUser.getId())) {
-            throw new ForbiddenException("Only message sender can delete this message");
-        }
+        messageAccessPolicy.requireSender(message, currentUser, "Only message sender can delete this message");
+        messageValidator.validateCanDeleteMessage(message);
 
         if (!message.isDeleted()) {
             message.deleteForEveryone(currentUser, Instant.now());
@@ -356,6 +360,23 @@ public class MessageService {
         return messageMapper.toResponse(message);
     }
 
+
+    private void saveReadReceipts(Long conversationId, User reader, Message lastReadMessage, Instant readAt) {
+        List<Message> unreadMessages = messageReadRepository.findUnreadMessagesByReaderUpTo(
+                conversationId,
+                reader.getId(),
+                lastReadMessage.getCreatedAt(),
+                lastReadMessage.getId()
+        );
+
+        if (unreadMessages.isEmpty()) {
+            return;
+        }
+
+        messageReadRepository.saveAll(unreadMessages.stream()
+                .map(message -> MessageRead.create(message, reader, readAt))
+                .toList());
+    }
     private Message resolveReplyToMessage(Long replyToMessageId, Long conversationId) {
         if (replyToMessageId == null) {
             return null;
@@ -364,43 +385,15 @@ public class MessageService {
         Message replyToMessage = messageRepository.findByIdWithConversationAndSender(replyToMessageId)
                 .orElseThrow(() -> new NotFoundException("Reply message not found"));
 
-        if (!replyToMessage.getConversation().getId().equals(conversationId)) {
-            throw new ValidationException("Reply message must belong to the same conversation");
-        }
-
-        if (replyToMessage.isDeleted()) {
-            throw new ValidationException("Deleted message cannot be replied");
-        }
+        messageValidator.validateReplyToMessage(replyToMessage, conversationId);
 
         return replyToMessage;
-    }
-
-    private void validateEditMessageRequest(Long messageId, EditMessageRequest request) {
-        if (messageId == null) {
-            throw new ValidationException("messageId must not be null");
-        }
-
-        if (request == null || request.newContent() == null || request.newContent().trim().isEmpty()) {
-            throw new ValidationException("newContent must not be blank");
-        }
-    }
-
-    private int normalizeLimit(Short limit) {
-        int pageLimit = limit == null ? DEFAULT_MESSAGE_LIMIT : limit;
-
-        if (pageLimit < 1 || pageLimit > MAX_MESSAGE_LIMIT) {
-            throw new ValidationException("limit must be between 1 and " + MAX_MESSAGE_LIMIT);
-        }
-
-        return pageLimit;
     }
 
     private MessageCursor decodeCursor(String cursor) {
         MessageCursor messageCursor = cursorCodec.decode(cursor, MessageCursor.class, "Invalid message cursor");
 
-        if (messageCursor != null && (messageCursor.createdAt() == null || messageCursor.messageId() == null)) {
-            throw new ValidationException("Invalid message cursor");
-        }
+        messageValidator.validateMessageCursor(messageCursor);
 
         return messageCursor;
     }
@@ -415,3 +408,4 @@ public class MessageService {
     ) {
     }
 }
+

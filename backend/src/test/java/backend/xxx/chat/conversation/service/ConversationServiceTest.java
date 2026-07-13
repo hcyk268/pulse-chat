@@ -3,11 +3,15 @@ package backend.xxx.chat.conversation.service;
 import java.time.Instant;
 import java.util.UUID;
 
+import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.UserNotFoundException;
 import backend.xxx.chat.conversation.dto.ConversationBoxResponse;
 import backend.xxx.chat.conversation.dto.CreateDirectConversationRequest;
+import backend.xxx.chat.conversation.dto.UpdateGroupMemberRoleRequest;
 import backend.xxx.chat.conversation.model.Conversation;
+import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.model.ConversationParticipantId;
+import backend.xxx.chat.conversation.model.ParticipantRole;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.message.model.Message;
@@ -187,6 +191,36 @@ class ConversationServiceTest {
         assertThat(response.items().get(0).lastMessage().contentPreview()).isEqualTo("holiday-video.mp4");
     }
 
+
+    @Test
+    void nonOwnerCannotRemoveMemberOrChangeMemberRole() {
+        User ownerUser = userRepository.save(User.create("owner", "owner@example.com", "hashed-password", "Owner"));
+        User memberUser = userRepository.save(User.create("member", "member@example.com", "hashed-password", "Member"));
+        User targetUser = userRepository.save(User.create("target", "target@example.com", "hashed-password", "Target"));
+        Conversation conversation = conversationRepository.save(Conversation.createGroupConversation("Team", null, ownerUser));
+        ConversationParticipant owner = ConversationParticipant.create(conversation, ownerUser, true);
+        owner.promoteToOwner();
+        conversationParticipantRepository.save(owner);
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, memberUser, true));
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, targetUser, true));
+
+        assertThatThrownBy(() -> conversationService.removeGroupMember(
+                memberUser.getUsername(),
+                conversation.getId(),
+                targetUser.getId()
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("Only group owner can perform this action");
+
+        assertThatThrownBy(() -> conversationService.updateGroupMemberRole(
+                memberUser.getUsername(),
+                conversation.getId(),
+                targetUser.getId(),
+                new UpdateGroupMemberRoleRequest(ParticipantRole.OWNER)
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("Only group owner can perform this action");
+    }
     private Conversation createVisibleDirectConversationWithMessage(
             User currentUser,
             User otherUser,

@@ -1,14 +1,11 @@
 package backend.xxx.chat.conversation.service;
 
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
-import backend.xxx.chat.common.exception.ConflictException;
 import backend.xxx.chat.common.exception.NotFoundException;
-import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.dto.*;
 import backend.xxx.chat.conversation.model.Conversation;
@@ -18,7 +15,6 @@ import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.model.ParticipantRole;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
-import backend.xxx.chat.user.model.AccountStatus;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
 import backend.xxx.chat.user.service.UserLookupService;
@@ -40,6 +36,7 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final ConversationResponseBuilder conversationResponseBuilder;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final ConversationValidator conversationValidator;
     private final CursorCodec cursorCodec;
 
     @Transactional
@@ -49,7 +46,7 @@ public class ConversationService {
     ) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         User targetUser = userLookupService.getUser(request.targetUserId());
-        validateDirectConversationTarget(currentUser, targetUser);
+        conversationValidator.validateDirectConversationTarget(currentUser, targetUser);
 
         return conversationParticipantRepository.findDirectConversationIdBetween(
                         currentUser.getId(),
@@ -69,8 +66,8 @@ public class ConversationService {
         List<User> invitedUsers = resolveGroupInvitees(currentUser, request.memberIds(), 2);
 
         Conversation conversation = conversationRepository.save(Conversation.createGroupConversation(
-                normalizeRequiredGroupName(request.name()),
-                normalizeOptionalText(request.avatarUrl()),
+                conversationValidator.normalizeRequiredGroupName(request.name()),
+                conversationValidator.normalizeOptionalText(request.avatarUrl()),
                 currentUser
         ));
 
@@ -94,7 +91,7 @@ public class ConversationService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Conversation conversation = conversationAccessPolicy.requireGroupConversation(conversationId);
         conversationAccessPolicy.requireActiveMember(conversationId, currentUser.getId());
-        List<User> invitedUsers = resolveGroupInvitees(currentUser, request.memberIds(), 2);
+        List<User> invitedUsers = resolveGroupInvitees(currentUser, request.memberIds(), 1);
 
         for (User invitedUser : invitedUsers) {
             ConversationParticipant participant = conversationParticipantRepository.findById(
@@ -110,10 +107,7 @@ public class ConversationService {
                 continue;
             }
 
-            if (participant.isActive() || participant.isPending()) {
-                throw conflict("User is already a member or has a pending invitation");
-            }
-
+            conversationValidator.validateCanInviteParticipant(participant);
             participant.markPendingInvitation(currentUser);
         }
 
@@ -126,9 +120,7 @@ public class ConversationService {
         Conversation conversation = conversationAccessPolicy.requireGroupConversation(conversationId);
         ConversationParticipant participant = conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
 
-        if (!participant.isPending()) {
-            throw conflict("No pending group invitation found");
-        }
+        conversationValidator.validatePendingInvitation(participant);
 
         participant.acceptInvitation();
         return buildConversationDetailResponse(conversation, currentUser);
@@ -140,9 +132,7 @@ public class ConversationService {
         conversationAccessPolicy.requireGroupConversation(conversationId);
         ConversationParticipant participant = conversationAccessPolicy.requireParticipant(conversationId, currentUser.getId());
 
-        if (!participant.isPending()) {
-            throw conflict("No pending group invitation found");
-        }
+        conversationValidator.validatePendingInvitation(participant);
 
         participant.markLeft(Instant.now());
         participant.hideFromList();
@@ -158,14 +148,10 @@ public class ConversationService {
         Conversation conversation = conversationAccessPolicy.requireGroupConversation(conversationId);
         conversationAccessPolicy.requireOwner(conversationId, currentUser.getId());
 
-        if (currentUser.getId().equals(memberId)) {
-            throw new ValidationException("Owner must use leave group instead of remove member");
-        }
+        conversationValidator.validateOwnerCannotRemoveSelf(currentUser.getId(), memberId);
 
         ConversationParticipant targetParticipant = conversationAccessPolicy.requireParticipant(conversationId, memberId);
-        if (targetParticipant.isLeft()) {
-            throw conflict("Member already left this group");
-        }
+        conversationValidator.validateMemberNotLeft(targetParticipant);
 
         targetParticipant.markLeft(Instant.now());
         targetParticipant.hideFromList();
@@ -198,10 +184,10 @@ public class ConversationService {
 
         String name = request.name() == null
                 ? conversation.getName()
-                : normalizeRequiredGroupName(request.name());
+                : conversationValidator.normalizeRequiredGroupName(request.name());
         String avatarUrl = request.avatarUrl() == null
                 ? conversation.getAvatarUrl()
-                : normalizeOptionalText(request.avatarUrl());
+                : conversationValidator.normalizeOptionalText(request.avatarUrl());
 
         conversation.updateProfile(name, avatarUrl);
         return buildConversationDetailResponse(conversation, currentUser);
@@ -219,10 +205,11 @@ public class ConversationService {
         conversationAccessPolicy.requireOwner(conversationId, currentUser.getId());
 
         ConversationParticipant targetParticipant = conversationAccessPolicy.requireActiveMember(conversationId, memberId);
-        if (targetParticipant.getRole() == ParticipantRole.OWNER && request.role() == ParticipantRole.MEMBER
-                && !hasAnotherActiveOwner(conversationId, memberId)) {
-            throw conflict("Group must have at least one owner");
-        }
+        conversationValidator.validateRoleChange(
+                targetParticipant.getRole(),
+                request.role(),
+                hasAnotherActiveOwner(conversationId, memberId)
+        );
 
         targetParticipant.changeRole(request.role());
         return buildConversationDetailResponse(conversation, currentUser);
@@ -263,7 +250,11 @@ public class ConversationService {
     @Transactional(readOnly = true)
     public ConversationBoxResponse getConversations(Short limit, String cursor, Instant snapshotAt, String currentUsername)  {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
-        int pageLimit = normalizeConversationLimit(limit);
+        int pageLimit = conversationValidator.normalizeConversationLimit(
+                limit,
+                DEFAULT_CONVERSATION_LIMIT,
+                MAX_CONVERSATION_LIMIT
+        );
 
         Instant snapshot = snapshotAt == null ? Instant.now() : snapshotAt;
 
@@ -336,26 +327,14 @@ public class ConversationService {
     }
 
     private List<User> resolveGroupInvitees(User currentUser, List<Long> memberIds, int minDistinctMembers) {
-        Set<Long> distinctMemberIds = new LinkedHashSet<>(memberIds == null ? List.of() : memberIds);
-        if (distinctMemberIds.contains(currentUser.getId())) {
-            throw new ValidationException("memberIds must not contain the current user");
-        }
-
-        if (distinctMemberIds.size() < minDistinctMembers) {
-            throw new ValidationException("memberIds must contain at least " + minDistinctMembers + " distinct users");
-        }
+        Set<Long> distinctMemberIds = conversationValidator.validateMemberIds(
+                currentUser.getId(),
+                memberIds,
+                minDistinctMembers
+        );
 
         List<User> users = userRepository.findAllById(distinctMemberIds);
-        if (users.size() != distinctMemberIds.size()) {
-            throw new NotFoundException("One or more users not found");
-        }
-
-        users.forEach(user -> {
-            if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-                throw new ValidationException("All group members must be active users");
-            }
-        });
-
+        conversationValidator.validateResolvedInvitees(distinctMemberIds, users);
         return users;
     }
 
@@ -386,26 +365,6 @@ public class ConversationService {
                         && !participant.getUser().getId().equals(userId));
     }
 
-    private String normalizeRequiredGroupName(String name) {
-        String normalized = normalizeOptionalText(name);
-        if (normalized == null) {
-            throw new ValidationException("Group name must not be blank");
-        }
-        return normalized;
-    }
-
-    private String normalizeOptionalText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private ConflictException conflict(String message) {
-        return new ConflictException(message);
-    }
-
     private String buildConversationNextCursor(ConversationCursor conversationCursor) {
         return cursorCodec.encode(conversationCursor, "Failed to build conversation cursor");
     }
@@ -414,22 +373,9 @@ public class ConversationService {
         ConversationCursor conversationCursor =
                 cursorCodec.decode(cursor, ConversationCursor.class, "Invalid conversation cursor");
 
-        if (conversationCursor != null
-                && (conversationCursor.cursorAt() == null || conversationCursor.conversationId() == null)) {
-            throw new ValidationException("Invalid conversation cursor");
-        }
+        conversationValidator.validateConversationCursor(conversationCursor);
 
         return conversationCursor;
-    }
-
-    private int normalizeConversationLimit(Short limit) {
-        int pageLimit = limit == null ? DEFAULT_CONVERSATION_LIMIT : limit;
-
-        if (pageLimit < 1 || pageLimit > MAX_CONVERSATION_LIMIT) {
-            throw new ValidationException("limit must be between 1 and " + MAX_CONVERSATION_LIMIT);
-        }
-
-        return pageLimit;
     }
 
     private Instant getConversationSortAt(Conversation conversation) {
@@ -442,16 +388,6 @@ public class ConversationService {
             DirectConversationResponse response,
             boolean created
     ) {
-    }
-
-    private void validateDirectConversationTarget(User currentUser, User targetUser) {
-        if (currentUser.getId().equals(targetUser.getId())) {
-            throw new ValidationException("targetUserId must not be the current user");
-        }
-
-        if (targetUser.getAccountStatus() != AccountStatus.ACTIVE) {
-            throw new ValidationException("Target user is not active");
-        }
     }
 
 }

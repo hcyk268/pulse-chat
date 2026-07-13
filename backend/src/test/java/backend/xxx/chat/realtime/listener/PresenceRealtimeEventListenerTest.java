@@ -3,6 +3,7 @@ package backend.xxx.chat.realtime.listener;
 import java.time.Instant;
 import java.util.List;
 
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.realtime.event.PresenceUpdatedDomainEvent;
 import backend.xxx.chat.realtime.model.PresenceUpdatedEventData;
@@ -43,7 +44,7 @@ class PresenceRealtimeEventListenerTest {
                 lastActiveAt
         );
 
-        when(participantRepository.findVisiblePeerUsernamesByUserId(1L))
+        when(participantRepository.findVisiblePeerUsernamesByUserId(1L, ParticipantStatus.ACTIVE))
                 .thenReturn(List.of("bob", "carol"));
 
         listener.onPresenceUpdated(event);
@@ -73,7 +74,7 @@ class PresenceRealtimeEventListenerTest {
                 Instant.parse("2026-01-01T00:00:00Z")
         );
 
-        when(participantRepository.findVisiblePeerUsernamesByUserId(1L))
+        when(participantRepository.findVisiblePeerUsernamesByUserId(1L, ParticipantStatus.ACTIVE))
                 .thenReturn(List.of());
 
         listener.onPresenceUpdated(event);

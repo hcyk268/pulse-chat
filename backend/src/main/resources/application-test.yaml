@@ -11,21 +11,24 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: create-drop
     properties:
       hibernate:
         format_sql: false
 
   flyway:
-    enabled: true
+    enabled: false
 
 jwt:
   access-token-secret: test-only-access-token-secret-at-least-32-characters
   refresh-token-secret: test-only-refresh-token-secret-at-least-32-characters
-  refresh-token-hash-secret: test-only-refresh-token-hash-secret-at-least-32-characters
+  refresh-token-hash-secret: test-only-refresh-token-secret-at-least-32-characters
   access-token-expiration-ms: 900000
   refresh-token-expiration-ms: 604800000
 
 app:
   cors:
     allowed-origins: http://localhost:5173
+  outbox:
+    worker:
+      enabled: false
