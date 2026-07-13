@@ -35,6 +35,7 @@ public class UserService {
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final UserMapper userMapper;
     private final UserLookupService userLookupService;
+    private final UserValidator userValidator;
 
     @Transactional(readOnly = true)
     public UserResponse getMyProfile(String username) {
@@ -52,8 +53,12 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserSearchResponse search(String currentUsername, String keyword, Short limit) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
-        String normalizedKeyword = normalizeSearchKeyword(keyword);
-        int normalizedLimit = normalizeSearchLimit(limit);
+        String normalizedKeyword = userValidator.normalizeSearchKeyword(keyword, MAX_SEARCH_KEYWORD_LENGTH);
+        int normalizedLimit = userValidator.normalizeSearchLimit(
+                limit,
+                DEFAULT_SEARCH_LIMIT,
+                MAX_SEARCH_LIMIT
+        );
 
         List<User> users = userRepository.searchActiveUsers(
                 currentUser.getId(),
@@ -117,30 +122,4 @@ public class UserService {
                         ConversationParticipantRepository.DirectConversationLookup::getUserId,
                         ConversationParticipantRepository.DirectConversationLookup::getConversationId
                 ));
-    }
-
-    private String normalizeSearchKeyword(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            throw new IllegalArgumentException("q must not be blank");
-        }
-
-        String normalizedKeyword = keyword.trim();
-        if (normalizedKeyword.length() > MAX_SEARCH_KEYWORD_LENGTH) {
-            throw new IllegalArgumentException("q exceeds max length " + MAX_SEARCH_KEYWORD_LENGTH);
-        }
-
-        return normalizedKeyword;
-    }
-
-    private int normalizeSearchLimit(Short limit) {
-        if (limit == null) {
-            return DEFAULT_SEARCH_LIMIT;
-        }
-
-        if (limit < 1 || limit > MAX_SEARCH_LIMIT) {
-            throw new IllegalArgumentException("limit must be between 1 and " + MAX_SEARCH_LIMIT);
-        }
-
-        return limit;
-    }
-}
+    }}

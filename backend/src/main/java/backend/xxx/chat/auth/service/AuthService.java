@@ -1,14 +1,16 @@
 package backend.xxx.chat.auth.service;
 
 import java.time.Duration;
-import java.util.Locale;
 import java.util.UUID;
 
 import backend.xxx.chat.auth.dto.AuthResponse;
 import backend.xxx.chat.auth.dto.LoginRequest;
 import backend.xxx.chat.auth.dto.RefreshTokenRequest;
 import backend.xxx.chat.auth.dto.RegisterRequest;
-import backend.xxx.chat.auth.exception.*;
+import backend.xxx.chat.auth.exception.EmailAlreadyExistsException;
+import backend.xxx.chat.auth.exception.InvalidRefreshTokenException;
+import backend.xxx.chat.auth.exception.RedisUnavailable;
+import backend.xxx.chat.auth.exception.UsernameAlreadyExistsException;
 import backend.xxx.chat.auth.model.RefreshTokenSession;
 import backend.xxx.chat.common.exception.AccountInactiveException;
 import backend.xxx.chat.common.exception.AccountLockedException;
@@ -42,13 +44,14 @@ public class AuthService {
     private final AuthMapper authMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final TokenHash tokenHash;
+    private final AuthValidator authValidator;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        validatePasswordConfirmation(request.password(), request.confirmPassword());
+        authValidator.validatePasswordConfirmation(request.password(), request.confirmPassword());
 
-        String normalizedUsername = normalizeUsername(request.username());
-        String normalizedEmail = normalizeEmail(request.email());
+        String normalizedUsername = authValidator.normalizeUsername(request.username());
+        String normalizedEmail = authValidator.normalizeEmail(request.email());
 
         checkUserRegisterUnique(normalizedUsername, normalizedEmail);
 
@@ -83,7 +86,7 @@ public class AuthService {
 
         try {
             RefreshTokenSession session = getRefreshTokenSession(refreshToken);
-            
+
             String username = jwtService.extractUsername(refreshToken);
             User user = userRepository.findByUsernameIgnoreCase(username)
                     .orElseThrow(InvalidRefreshTokenException::new);
@@ -108,12 +111,6 @@ public class AuthService {
 
     public void logout(RefreshTokenRequest request) {
         deleteRefreshToken(request.refreshToken());
-    }
-
-    private void validatePasswordConfirmation(String password, String confirmPassword) {
-        if (!password.equals(confirmPassword)) {
-            throw new PasswordConfirmationMismatchException();
-        }
     }
 
     private void checkUserRegisterUnique(String username, String email) {
@@ -164,17 +161,7 @@ public class AuthService {
     }
 
     private void setValueRedis(String keyName, Object value, Duration timeToLive) {
-        if (keyName == null || keyName.isBlank()) {
-            throw new IllegalArgumentException("Redis key must not be blank");
-        }
-
-        if (value == null) {
-            throw new IllegalArgumentException("Redis value must not be null");
-        }
-
-        if (timeToLive == null || timeToLive.isZero() || timeToLive.isNegative()) {
-            throw new IllegalArgumentException("Redis TTL must be positive");
-        }
+        authValidator.validateRedisValue(keyName, value, timeToLive);
 
         try {
             redisTemplate.opsForValue().set(keyName, value, timeToLive);
@@ -212,13 +199,5 @@ public class AuthService {
 
     private String refreshTokenKey(String hash) {
         return REFRESH_TOKEN_KEY_PREFIX + hash;
-    }
-
-    private String normalizeUsername(String username) {
-        return username.trim();
-    }
-
-    private String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

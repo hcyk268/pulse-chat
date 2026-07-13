@@ -122,13 +122,18 @@ public interface ConversationParticipantRepository
         from ConversationParticipant participant
         where participant.user.id <> :userId
             and participant.isVisibleInList = true
+            and participant.status = :status
             and participant.conversation.id in (
                 select actorParticipant.conversation.id
                 from ConversationParticipant actorParticipant
                 where actorParticipant.user.id = :userId
+                    and actorParticipant.status = :status
             )
         """)
-    List<String> findVisiblePeerUsernamesByUserId(@Param("userId") Long userId);
+    List<String> findVisiblePeerUsernamesByUserId(
+            @Param("userId") Long userId,
+            @Param("status") ParticipantStatus status
+    );
 
     interface DirectConversationLookup {
         Long getUserId();

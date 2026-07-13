@@ -11,11 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@ActiveProfiles("test")
 @Import(JpaAuditingConfig.class)
 class OutboxEventRepositoryTest {
 
@@ -26,7 +27,7 @@ class OutboxEventRepositoryTest {
     private EntityManager entityManager;
 
     @Test
-    void findDispatchableEventsReturnsOnlyReadyEventsInCreatedOrder() {
+    void claimDispatchableEventIdsReturnsOnlyReadyEventsInCreatedOrder() {
         Instant now = Instant.parse("2026-05-23T12:00:00Z");
 
         OutboxEvent firstReady = outboxEventRepository.saveAndFlush(
@@ -46,17 +47,13 @@ class OutboxEventRepositoryTest {
 
         entityManager.clear();
 
-        List<OutboxEvent> events = outboxEventRepository.findDispatchableEvents(
-                List.of(OutboxStatus.PENDING, OutboxStatus.FAILED),
+        List<Long> eventIds = outboxEventRepository.claimDispatchableEventIds(
                 now,
-                PageRequest.of(0, 10)
+                10,
+                "test-worker"
         );
 
-        assertThat(events)
-                .extracting(OutboxEvent::getId)
+        assertThat(eventIds)
                 .containsExactly(firstReady.getId(), secondReady.getId());
-        assertThat(events)
-                .extracting(OutboxEvent::getStatus)
-                .containsExactly(OutboxStatus.PENDING, OutboxStatus.PENDING);
     }
 }

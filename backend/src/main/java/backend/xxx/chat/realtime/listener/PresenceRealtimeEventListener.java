@@ -2,6 +2,7 @@ package backend.xxx.chat.realtime.listener;
 
 import java.util.List;
 
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.realtime.event.PresenceUpdatedDomainEvent;
 import backend.xxx.chat.realtime.model.PresenceUpdatedEventData;
@@ -24,7 +25,7 @@ public class PresenceRealtimeEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public void onPresenceUpdated(PresenceUpdatedDomainEvent event) {
-        List<String> peerUsernames = participantRepository.findVisiblePeerUsernamesByUserId(event.userId());
+        List<String> peerUsernames = participantRepository.findVisiblePeerUsernamesByUserId(event.userId(), ParticipantStatus.ACTIVE);
         if (peerUsernames.isEmpty()) {
             return;
         }

@@ -6,11 +6,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.config.CloudflareR2Properties;
 import backend.xxx.chat.storage.dto.CreatePresignedUploadRequest;
 import backend.xxx.chat.storage.dto.PresignedUploadResponse;
@@ -31,12 +29,13 @@ public class CloudflareR2ObjectStorageService implements ObjectStorageService {
 
     private final S3Presigner s3Presigner;
     private final CloudflareR2Properties properties;
+    private final ObjectStorageValidator objectStorageValidator;
 
     @Override
     public PresignedUploadResponse createPresignedUpload(CreatePresignedUploadRequest request) {
-        String normalizedContentType = normalizeContentType(request.contentType());
-        validateContentType(normalizedContentType);
-        validateFileSize(request.sizeBytes());
+        String normalizedContentType = objectStorageValidator.normalizeContentType(request.contentType());
+        objectStorageValidator.validateContentType(normalizedContentType, properties.allowedContentTypes());
+        objectStorageValidator.validateFileSize(request.sizeBytes(), properties.maxFileSizeBytes());
 
         String objectKey = buildObjectKey(request.purpose().keyPrefix(), request.fileName());
         PresignedPutObjectRequest presignedRequest = s3Presigner.presignPutObject(
@@ -66,34 +65,6 @@ public class CloudflareR2ObjectStorageService implements ObjectStorageService {
         );
     }
 
-    private void validateContentType(String contentType) {
-        List<String> allowedContentTypes = properties.allowedContentTypes();
-        if (allowedContentTypes == null || allowedContentTypes.isEmpty()) {
-            return;
-        }
-
-        boolean allowed = allowedContentTypes.stream()
-                .map(String::trim)
-                .filter(value -> !value.isEmpty())
-                .anyMatch(value -> value.equalsIgnoreCase(contentType));
-
-        if (!allowed) {
-            throw new ValidationException("contentType is not allowed: " + contentType);
-        }
-    }
-
-    private void validateFileSize(Long sizeBytes) {
-        if (sizeBytes == null || sizeBytes <= 0) {
-            throw new ValidationException("sizeBytes must be greater than 0");
-        }
-
-        if (sizeBytes > properties.maxFileSizeBytes()) {
-            throw new ValidationException(
-                    "sizeBytes exceeds max allowed size " + properties.maxFileSizeBytes()
-            );
-        }
-    }
-
     private String buildObjectKey(String prefix, String originalFileName) {
         String dateFolder = LocalDate.now(ZoneOffset.UTC).format(DATE_FORMATTER);
         String sanitizedFileName = sanitizeFileName(originalFileName);
@@ -111,19 +82,6 @@ public class CloudflareR2ObjectStorageService implements ObjectStorageService {
         }
 
         return sanitized.length() > 120 ? sanitized.substring(sanitized.length() - 120) : sanitized;
-    }
-
-    private String normalizeContentType(String contentType) {
-        if (contentType == null) {
-            throw new ValidationException("contentType must not be blank");
-        }
-
-        String normalized = contentType.trim().toLowerCase();
-        if (normalized.isEmpty()) {
-            throw new ValidationException("contentType must not be blank");
-        }
-
-        return normalized;
     }
 
     private String buildPublicUrl(String objectKey) {

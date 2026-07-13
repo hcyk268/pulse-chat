@@ -114,6 +114,15 @@ public class ConversationAccessPolicy {
         }
     }
 
+    public List<ConversationParticipant> filterActiveParticipants(List<ConversationParticipant> participants) {
+        if (participants == null) {
+            return List.of();
+        }
+
+        return participants.stream()
+                .filter(ConversationParticipant::isActive)
+                .toList();
+    }
     private boolean isParticipant(User user, List<ConversationParticipant> participants) {
         if (user == null || user.getId() == null || participants == null) {
             return false;

@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 
+import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
@@ -26,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -172,6 +174,32 @@ class MessageReactionServiceTest {
         assertThat(loveGroup.reactedByMe()).isTrue();
     }
 
+
+    @Test
+    void pendingGroupMemberCannotReactToMessage() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        User carol = userRepository.save(User.create("carol", "carol@example.com", "hashed-password", "Carol"));
+        Conversation conversation = conversationRepository.save(Conversation.createGroupConversation("Team", null, alice));
+        ConversationParticipant owner = ConversationParticipant.create(conversation, alice, true);
+        owner.promoteToOwner();
+        conversationParticipantRepository.save(owner);
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        conversationParticipantRepository.save(ConversationParticipant.createPending(conversation, carol, alice));
+        Message message = saveMessage(conversation, alice, "message to react", Instant.parse("2026-01-01T00:00:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThatThrownBy(() -> messageReactionService.reactMessage(
+                carol.getUsername(),
+                message.getId(),
+                new MessageReactionRequest(MessageReactionEmoji.LIKE)
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("You are not allowed to access this conversation");
+
+        assertThat(messageReactionRepository.findByMessageIdWithUser(message.getId())).isEmpty();
+    }
     private MessageReactionGroupResponse findGroup(
             MessageReactionsResponse response,
             MessageReactionEmoji emoji

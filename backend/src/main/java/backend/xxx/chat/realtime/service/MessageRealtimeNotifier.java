@@ -3,6 +3,7 @@ package backend.xxx.chat.realtime.service;
 import backend.xxx.chat.conversation.dto.ConversationResponse;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
+import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.conversation.service.ConversationResponseBuilder;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.model.Message;
@@ -39,6 +40,7 @@ public class MessageRealtimeNotifier {
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
     private final ConversationResponseBuilder conversationResponseBuilder;
+    private final ConversationAccessPolicy conversationAccessPolicy;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
@@ -50,7 +52,7 @@ public class MessageRealtimeNotifier {
 
         MessageResponse messageResponse = messageMapper.toResponse(message);
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
         Map<String, ConversationResponse> conversationByUsername =
                 conversationResponseBuilder.buildByUsernameForParticipants(participants);
 
@@ -89,7 +91,7 @@ public class MessageRealtimeNotifier {
         MessageUpdatedEventData messageData = new MessageUpdatedEventData(messageMapper.toResponse(message));
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         Map<String, ConversationResponse> conversationByUsername = Objects.equals(
                 message.getConversation().getLastMessageId(),
@@ -131,7 +133,7 @@ public class MessageRealtimeNotifier {
         MessageDeletedEventData messageData = new MessageDeletedEventData(messageMapper.toResponse(message));
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         Map<String, ConversationResponse> conversationByUsername = Objects.equals(
                 message.getConversation().getLastMessageId(),
@@ -174,7 +176,7 @@ public class MessageRealtimeNotifier {
                 .orElseThrow();
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_PINNED, data);
     }
@@ -182,12 +184,15 @@ public class MessageRealtimeNotifier {
     @Transactional(readOnly = true)
     public void notifyRead(Long outboxEventId, Long conversationId, Long readerId, Long lastReadMessageId, Instant readAt) {
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         ConversationParticipant readParticipant = participants.stream()
                 .filter(p -> p.getUser().getId().equals(readerId))
                 .findFirst()
-                .orElseThrow();
+                .orElse(null);
+        if (readParticipant == null) {
+            return;
+        }
 
         MessageReadEventData data = new MessageReadEventData(
                 readerId,
@@ -202,12 +207,15 @@ public class MessageRealtimeNotifier {
     @Transactional(readOnly = true)
     public void notifyDelivered(Long outboxEventId, Long conversationId, Long senderId, Long lastDeliveredMessageId, Instant deliveredAt) {
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         ConversationParticipant senderParticipant = participants.stream()
                 .filter(p -> p.getUser().getId().equals(senderId))
                 .findFirst()
-                .orElseThrow();
+                .orElse(null);
+        if (senderParticipant == null) {
+            return;
+        }
 
         MessageDeliveredEventData data = new MessageDeliveredEventData(
                 lastDeliveredMessageId,
@@ -223,9 +231,16 @@ public class MessageRealtimeNotifier {
         MessageUnPinnedEventData data = new MessageUnPinnedEventData(messageId, unPinnedAt);
 
         List<ConversationParticipant> participants =
-                participantRepository.findByConversationIdWithUser(conversationId);
+                findActiveParticipants(conversationId);
 
         sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
+    }
+
+
+    private List<ConversationParticipant> findActiveParticipants(Long conversationId) {
+        return conversationAccessPolicy.filterActiveParticipants(
+                participantRepository.findByConversationIdWithUser(conversationId)
+        );
     }
 
     private void sendToConversationParticipants(

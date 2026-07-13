@@ -11,6 +11,7 @@ import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.conversation.model.ConversationParticipantId;
 import backend.xxx.chat.message.dto.AttachmentRequest;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
@@ -22,8 +23,10 @@ import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.dto.SendMessageRequest;
 import backend.xxx.chat.message.dto.UnPinMessageResponse;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageStatus;
 import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.message.repository.MessagePinRepository;
+import backend.xxx.chat.message.repository.MessageReadRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.outbox.model.OutboxEvent;
 import backend.xxx.chat.outbox.repository.OutboxEventRepository;
@@ -64,6 +67,9 @@ class MessageServiceTest {
 
     @Autowired
     private MessagePinRepository messagePinRepository;
+
+    @Autowired
+    private MessageReadRepository messageReadRepository;
 
     @Autowired
     private OutboxEventRepository outboxEventRepository;
@@ -248,7 +254,7 @@ class MessageServiceTest {
                 new SendMessageRequest(
                         conversation.getId(),
                         UUID.randomUUID(),
-                        "album mới",
+                        "album má»›i",
                         MessageType.MEDIA,
                         null,
                         List.of(
@@ -279,7 +285,7 @@ class MessageServiceTest {
         );
 
         assertThat(response.messageType()).isEqualTo(MessageType.MEDIA);
-        assertThat(response.content()).isEqualTo("album mới");
+        assertThat(response.content()).isEqualTo("album má»›i");
         assertThat(response.attachments()).hasSize(2);
         assertThat(response.attachments().get(0).objectKey())
                 .isEqualTo("message-attachments/20260708/photo-1.png");
@@ -595,6 +601,119 @@ class MessageServiceTest {
                 .hasMessage("Only message sender can delete this message");
     }
 
+
+    @Test
+    void pendingGroupMemberCannotSendOrReadMessages() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        User carol = userRepository.save(User.create("carol", "carol@example.com", "hashed-password", "Carol"));
+        Conversation conversation = conversationRepository.save(Conversation.createGroupConversation("Team", null, alice));
+        ConversationParticipant owner = ConversationParticipant.create(conversation, alice, true);
+        owner.promoteToOwner();
+        conversationParticipantRepository.save(owner);
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        conversationParticipantRepository.save(ConversationParticipant.createPending(conversation, carol, alice));
+        Message message = saveMessage(conversation, alice, "group message", Instant.parse("2026-01-01T00:00:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThatThrownBy(() -> messageService.sendMessage(
+                carol.getUsername(),
+                new SendMessageRequest(
+                        conversation.getId(),
+                        UUID.randomUUID(),
+                        "pending cannot send",
+                        MessageType.TEXT,
+                        null,
+                        null
+                )
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("You are not allowed to send message to this conversation");
+
+        assertThatThrownBy(() -> messageService.readMessage(
+                carol.getUsername(),
+                new MarkReadRequest(conversation.getId(), message.getId())
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("You are not allowed to access this conversation");
+    }
+
+    @Test
+    void leftGroupMemberDoesNotBecomeVisibleOrUnreadWhenMessageSent() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        User carol = userRepository.save(User.create("carol", "carol@example.com", "hashed-password", "Carol"));
+        Conversation conversation = conversationRepository.save(Conversation.createGroupConversation("Team", null, alice));
+        ConversationParticipant owner = ConversationParticipant.create(conversation, alice, true);
+        owner.promoteToOwner();
+        conversationParticipantRepository.save(owner);
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        ConversationParticipant leftParticipant = ConversationParticipant.create(conversation, carol, false);
+        leftParticipant.markLeft(Instant.parse("2026-01-01T00:00:00Z"));
+        leftParticipant.hideFromList();
+        conversationParticipantRepository.save(leftParticipant);
+        entityManager.flush();
+        entityManager.clear();
+
+        messageService.sendMessage(
+                alice.getUsername(),
+                new SendMessageRequest(
+                        conversation.getId(),
+                        UUID.randomUUID(),
+                        "hello active members",
+                        MessageType.TEXT,
+                        null,
+                        null
+                )
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        ConversationParticipant bobParticipant = conversationParticipantRepository.findById(
+                new ConversationParticipantId(conversation.getId(), bob.getId())
+        ).orElseThrow();
+        ConversationParticipant carolParticipant = conversationParticipantRepository.findById(
+                new ConversationParticipantId(conversation.getId(), carol.getId())
+        ).orElseThrow();
+
+        assertThat(bobParticipant.getUnreadCount()).isEqualTo(1L);
+        assertThat(bobParticipant.isVisibleInList()).isTrue();
+        assertThat(carolParticipant.getUnreadCount()).isZero();
+        assertThat(carolParticipant.isVisibleInList()).isFalse();
+        assertThat(carolParticipant.isLeft()).isTrue();
+    }
+
+    @Test
+    void groupReadStoresPerUserReadReceiptWithoutSettingGlobalMessageReadStatus() {
+        User alice = userRepository.save(User.create("alice", "alice@example.com", "hashed-password", "Alice"));
+        User bob = userRepository.save(User.create("bob", "bob@example.com", "hashed-password", "Bob"));
+        Conversation conversation = conversationRepository.save(Conversation.createGroupConversation("Team", null, alice));
+        ConversationParticipant owner = ConversationParticipant.create(conversation, alice, true);
+        owner.promoteToOwner();
+        conversationParticipantRepository.save(owner);
+        conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
+        Message message = saveMessage(conversation, alice, "message to read", Instant.parse("2026-01-01T00:00:00Z"));
+        entityManager.flush();
+        entityManager.clear();
+
+        messageService.readMessage(
+                bob.getUsername(),
+                new MarkReadRequest(conversation.getId(), message.getId())
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        Message savedMessage = messageRepository.findById(message.getId()).orElseThrow();
+        assertThat(savedMessage.getStatus()).isEqualTo(MessageStatus.SENT);
+        assertThat(savedMessage.getReadAt()).isNull();
+        assertThat(messageReadRepository.findByMessageIdWithUserOrderByReadAtAsc(message.getId()))
+                .singleElement()
+                .satisfies(read -> {
+                    assertThat(read.getUser().getId()).isEqualTo(bob.getId());
+                    assertThat(read.getReadAt()).isNotNull();
+                });
+    }
     private Message saveMessage(
             Conversation conversation,
             User sender,

@@ -2,7 +2,6 @@ package backend.xxx.chat.realtime.service;
 
 import java.util.List;
 
-import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.realtime.dto.TypingStatusRequest;
@@ -21,10 +20,11 @@ public class TypingService {
     private final UserLookupService userLookupService;
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final RealtimeValidator realtimeValidator;
 
     @Transactional(readOnly = true)
     public void updateTyping(String currentUsername, Long conversationId, TypingStatusRequest request) {
-        validateRequest(conversationId, request);
+        realtimeValidator.validateTypingRequest(conversationId, request);
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
@@ -47,15 +47,5 @@ public class TypingService {
                         conversationId,
                         data
                 ));
-    }
-
-    private void validateRequest(Long conversationId, TypingStatusRequest request) {
-        if (conversationId == null) {
-            throw new ValidationException("conversationId must not be null");
-        }
-
-        if (request == null || request.typing() == null) {
-            throw new ValidationException("typing must not be null");
-        }
     }
 }
