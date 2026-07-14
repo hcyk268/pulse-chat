@@ -3,7 +3,6 @@ import { PublicOnlyRoute, RequireAuth } from "../components/auth/AuthRoutes";
 import ChatPage from "../pages/ChatPage";
 import LoginPage from "../pages/LoginPage";
 import NotFoundPage from "../pages/NotFoundPage";
-import ProfilePage from "../pages/ProfilePage";
 import RegisterPage from "../pages/RegisterPage";
 
 const publicRoutes = [
@@ -14,7 +13,7 @@ const publicRoutes = [
 const protectedRoutes = [
   { path: "/chat", element: <ChatPage /> },
   { path: "/chat/:conversationId", element: <ChatPage /> },
-  { path: "/profile", element: <ProfilePage /> },
+  { path: "/profile", element: <Navigate to="/chat" replace /> },
 ];
 
 export default function AppRouter() {

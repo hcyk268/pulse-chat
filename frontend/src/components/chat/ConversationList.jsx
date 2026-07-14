@@ -44,6 +44,7 @@ export default function ConversationList({
   query,
   onLoadMore,
   onOpenPeople,
+  onOpenProfile,
   onQueryChange,
   onSignOut,
   realtimeStatus = "idle",
@@ -105,14 +106,17 @@ export default function ConversationList({
 
             {isMenuOpen ? (
               <div className="menu-pop absolute left-0 top-12 z-30 w-56 overflow-hidden rounded-2xl border border-white/5 bg-[#1f2937]/98 py-2 shadow-panel backdrop-blur-xl">
-                <Link
-                  to="/profile"
-                  onClick={() => setIsMenuOpen(false)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onOpenProfile();
+                  }}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/5 hover:text-white"
                 >
                   <UserRound size={17} />
                   Profile
-                </Link>
+                </button>
                 <button
                   type="button"
                   onClick={handleOpenPeopleFromMenu}
@@ -134,13 +138,14 @@ export default function ConversationList({
             ) : null}
           </div>
 
-          <Link
-            to="/profile"
+          <button
+            type="button"
+            onClick={onOpenProfile}
             className="shrink-0 transition-transform duration-200 ease-out-soft hover:scale-105"
             title="Profile"
           >
             <Avatar user={currentUser} size="sm" />
-          </Link>
+          </button>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">

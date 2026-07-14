@@ -1,136 +1,77 @@
+import { Client } from "@stomp/stompjs";
 import { getAccessToken } from "../utils/authStorage";
 import { REALTIME_HOST, REALTIME_URL } from "./apiConfig";
 
 const USER_EVENTS_DESTINATION = "/user/queue/events";
 const USER_ERRORS_DESTINATION = "/user/queue/errors";
-const USER_EVENTS_SUBSCRIPTION_ID = "user-events";
-const USER_ERRORS_SUBSCRIPTION_ID = "user-errors";
 
-function buildFrame(command, headers = {}, body = "") {
-  const headerLines = Object.entries(headers)
-    .filter(([, value]) => value !== undefined && value !== null)
-    .map(([key, value]) => `${key}:${value}`);
+function parseMessageBody(message) {
+  if (!message?.body) return null;
 
-  return `${command}\n${headerLines.join("\n")}\n\n${body}\0`;
-}
-
-function parseFrame(rawFrame) {
-  const [headerBlock, ...bodyParts] = rawFrame.split("\n\n");
-  const [command, ...headerLines] = headerBlock.split("\n").filter(Boolean);
-  const headers = {};
-
-  headerLines.forEach((line) => {
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex === -1) return;
-
-    headers[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 1);
-  });
-
-  return {
-    body: bodyParts.join("\n\n"),
-    command,
-    headers,
-  };
+  try {
+    return JSON.parse(message.body);
+  } catch (error) {
+    throw new Error(error.message || "Could not parse realtime event.");
+  }
 }
 
 export function createRealtimeClient({ onEvent, onStatus, onError }) {
-  let socket = null;
-  let heartbeatTimer = null;
-  let reconnectTimer = null;
+  let client = null;
   let shouldReconnect = true;
-  let reconnectAttempt = 0;
+  let hasConnected = false;
 
   function setStatus(status) {
     onStatus?.(status);
   }
 
-  function clearTimers() {
-    window.clearInterval(heartbeatTimer);
-    window.clearTimeout(reconnectTimer);
-    heartbeatTimer = null;
-    reconnectTimer = null;
-  }
+  function buildClient() {
+    const accessToken = getAccessToken();
 
-  function sendFrame(command, headers = {}, body = "") {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
-
-    socket.send(buildFrame(command, headers, body));
-    return true;
-  }
-
-  function subscribeToEvents() {
-    sendFrame("SUBSCRIBE", {
-      ack: "auto",
-      destination: USER_EVENTS_DESTINATION,
-      id: USER_EVENTS_SUBSCRIPTION_ID,
-    });
-    sendFrame("SUBSCRIBE", {
-      ack: "auto",
-      destination: USER_ERRORS_DESTINATION,
-      id: USER_ERRORS_SUBSCRIPTION_ID,
-    });
-  }
-
-  function sendJson(destination, payload) {
-    return sendFrame(
-      "SEND",
-      {
-        "content-type": "application/json",
-        destination,
+    return new Client({
+      brokerURL: REALTIME_URL,
+      connectHeaders: {
+        Authorization: `Bearer ${accessToken}`,
+        host: REALTIME_HOST,
       },
-      JSON.stringify(payload),
-    );
-  }
-
-  function scheduleReconnect() {
-    if (!shouldReconnect) return;
-
-    const delay = Math.min(1000 * 2 ** reconnectAttempt, 10000);
-    reconnectAttempt += 1;
-    setStatus("reconnecting");
-    reconnectTimer = window.setTimeout(connect, delay);
-  }
-
-  function handleMessage(event) {
-    const frames = String(event.data)
-      .split("\0")
-      .map((frame) => frame.trim())
-      .filter(Boolean);
-
-    frames.forEach((rawFrame) => {
-      const frame = parseFrame(rawFrame);
-
-      if (frame.command === "CONNECTED") {
-        reconnectAttempt = 0;
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      reconnectDelay: 1000,
+      maxWebSocketChunkSize: 8 * 1024,
+      onConnect() {
+        hasConnected = true;
         setStatus("connected");
-        subscribeToEvents();
-        heartbeatTimer = window.setInterval(() => {
-          if (socket?.readyState === WebSocket.OPEN) {
-            socket.send("\n");
+
+        client?.subscribe(USER_EVENTS_DESTINATION, (message) => {
+          try {
+            onEvent?.(parseMessageBody(message));
+          } catch (error) {
+            onError?.(error.message || "Could not parse realtime event.");
           }
-        }, 10000);
-        return;
-      }
+        });
 
-      if (frame.command === "MESSAGE") {
-        try {
-          const body = JSON.parse(frame.body);
-
-          if (frame.headers.subscription === USER_ERRORS_SUBSCRIPTION_ID) {
-            onError?.(body.message || "Realtime request failed.");
-            return;
+        client?.subscribe(USER_ERRORS_DESTINATION, (message) => {
+          try {
+            const body = parseMessageBody(message);
+            onError?.(body?.message || "Realtime request failed.");
+          } catch (error) {
+            onError?.(error.message || "Realtime request failed.");
           }
-
-          onEvent?.(body);
-        } catch (error) {
-          onError?.(error.message || "Could not parse realtime event.");
+        });
+      },
+      onStompError(frame) {
+        onError?.(frame.body || frame.headers?.message || "Realtime connection error.");
+      },
+      onWebSocketError() {
+        onError?.("Realtime connection error.");
+      },
+      onWebSocketClose() {
+        if (!shouldReconnect) {
+          setStatus("idle");
+          return;
         }
-        return;
-      }
 
-      if (frame.command === "ERROR") {
-        onError?.(frame.body || "Realtime connection error.");
-      }
+        setStatus(hasConnected ? "reconnecting" : "connecting");
+      },
     });
   }
 
@@ -142,44 +83,32 @@ export function createRealtimeClient({ onEvent, onStatus, onError }) {
     }
 
     shouldReconnect = true;
-    clearTimers();
-    setStatus(reconnectAttempt > 0 ? "reconnecting" : "connecting");
-    socket = new WebSocket(REALTIME_URL, ["v12.stomp"]);
-
-    socket.addEventListener("open", () => {
-      sendFrame("CONNECT", {
-        Authorization: `Bearer ${accessToken}`,
-        "accept-version": "1.2",
-        "heart-beat": "10000,10000",
-        host: REALTIME_HOST,
-      });
-    });
-
-    socket.addEventListener("message", handleMessage);
-
-    socket.addEventListener("error", () => {
-      onError?.("Realtime connection error.");
-    });
-
-    socket.addEventListener("close", () => {
-      clearTimers();
-      socket = null;
-
-      if (shouldReconnect) {
-        scheduleReconnect();
-      } else {
-        setStatus("idle");
-      }
-    });
+    hasConnected = false;
+    setStatus("connecting");
+    client?.deactivate();
+    client = buildClient();
+    client.activate();
   }
 
   function disconnect() {
     shouldReconnect = false;
-    clearTimers();
-    sendFrame("DISCONNECT");
-    socket?.close();
-    socket = null;
+    const currentClient = client;
+    client = null;
+    currentClient?.deactivate();
     setStatus("idle");
+  }
+
+  function publishJson(destination, payload) {
+    if (!client?.connected) return false;
+
+    client.publish({
+      destination,
+      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+    return true;
   }
 
   return {
@@ -188,12 +117,12 @@ export function createRealtimeClient({ onEvent, onStatus, onError }) {
     sendTypingStatus(conversationId, typing) {
       if (!conversationId) return false;
 
-      return sendJson(`/app/conversations/${conversationId}/typing`, { typing });
+      return publishJson(`/app/conversations/${conversationId}/typing`, { typing });
     },
     sendMessageDelivered(messageId) {
       if (!messageId) return false;
 
-      return sendJson(`/app/messages/${messageId}/delivered`, {});
+      return publishJson(`/app/messages/${messageId}/delivered`, {});
     },
   };
 }

@@ -17,6 +17,7 @@ export function sendMessage({
   content,
   messageType = "TEXT",
   replyToMessageId = null,
+  attachments = [],
 }) {
   return apiRequest("/api/v1/messages", {
     method: "POST",
@@ -26,6 +27,7 @@ export function sendMessage({
       content,
       messageType,
       replyToMessageId,
+      attachments,
     }),
   });
 }
@@ -54,6 +56,10 @@ export function markMessagesRead({ conversationId, lastReadMessageId }) {
       lastReadMessageId,
     }),
   });
+}
+
+export function getMessageReadReceipts(messageId) {
+  return apiRequest(`/api/v1/messages/${messageId}/reads`);
 }
 
 export function pinMessage(messageId) {

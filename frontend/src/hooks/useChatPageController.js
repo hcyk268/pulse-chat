@@ -11,6 +11,7 @@ export function useChatPageController() {
   const chatStoreRef = useLatestRef(chatStore);
   const [query, setQuery] = useState("");
   const [showPeople, setShowPeople] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const selectedConversation = conversationId
@@ -73,6 +74,18 @@ export function useChatPageController() {
     navigate(`/chat/${nextConversationId}`);
   }
 
+
+  async function handleCreateGroup(groupPayload) {
+    const nextConversationId = await chatStore.startGroupConversation(groupPayload);
+
+    if (!nextConversationId) {
+      return null;
+    }
+
+    setShowPeople(false);
+    navigate(`/chat/${nextConversationId}`);
+    return nextConversationId;
+  }
   return {
     chatStore,
     conversationId,
@@ -81,7 +94,10 @@ export function useChatPageController() {
     selectedConversation,
     setQuery,
     setShowPeople,
+    setShowProfile,
     showPeople,
+    showProfile,
+    handleCreateGroup,
     handleStartConversation,
   };
 }

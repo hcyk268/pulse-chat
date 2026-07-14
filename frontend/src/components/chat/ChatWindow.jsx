@@ -1,17 +1,45 @@
-import { ArrowLeft, MoreVertical, Pin, Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  MoreVertical,
+  Pin,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatDateSeparator, formatPresence } from "../../utils/formatters";
 import { getPinnedPreview, isSameId, isSameMessageDay } from "../../utils/chat";
 import ChatBackdrop from "../assets/ChatBackdrop";
 import EmptyChatArtwork from "../assets/EmptyChatArtwork";
 import Avatar from "../ui/Avatar";
+import IconButton from "../ui/IconButton";
 import Composer from "./Composer";
+import GroupPanel from "./GroupPanel";
 import InteractiveEmptyState from "./InteractiveEmptyState";
 import MessageBubble from "./MessageBubble";
+import ReadReceiptModal from "./ReadReceiptModal";
 import TypingIndicator from "./TypingIndicator";
 
+function getMessageSearchText(message) {
+  return [
+    message.content,
+    message.sender?.displayName,
+    message.sender?.username,
+    ...(message.attachments ?? []).map((attachment) => attachment.fileName),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 export default function ChatWindow({
+  acceptGroupInvitation,
+  addMembersToGroup,
+  clearUserSearch,
+  contacts = [],
   conversation,
   currentUser,
   error = "",
@@ -20,6 +48,8 @@ export default function ChatWindow({
   isLoadingMoreMessages = false,
   isSending = false,
   isTyping,
+  leaveCurrentGroup,
+  loadMessageReadReceipts,
   onDeleteMessage,
   onEditMessage,
   onLoadMessageReactions,
@@ -28,16 +58,37 @@ export default function ChatWindow({
   onToggleMessageReaction,
   onToggleMessagePin,
   onTypingChange,
+  readReceiptsByMessageId = {},
   reactionsByMessageId = {},
+  rejectGroupInvitation,
+  removeMemberFromGroup,
+  searchUsers,
   sendError = "",
+  updateGroup,
+  updateGroupMemberRole,
+  uploadProgress = null,
+  userSearchResults = [],
 }) {
   const bottomRef = useRef(null);
   const messageRefs = useRef(new Map());
   const [editingMessage, setEditingMessage] = useState(null);
+  const [isGroupPanelOpen, setIsGroupPanelOpen] = useState(false);
   const [isPinsOpen, setIsPinsOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [readReceiptMessage, setReadReceiptMessage] = useState(null);
   const [replyToMessage, setReplyToMessage] = useState(null);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
   const messageReactionKey = conversation?.messages.map((message) => message.id).join("|") ?? "";
   const pinnedMessages = conversation?.pinnedMessages ?? [];
+  const isGroup = conversation?.type === "GROUP";
+
+  const searchMatches = useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+    if (!conversation || !normalized) return [];
+
+    return conversation.messages.filter((message) => getMessageSearchText(message).includes(normalized));
+  }, [conversation, searchTerm]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -53,9 +104,21 @@ export default function ChatWindow({
 
   useEffect(() => {
     setEditingMessage(null);
+    setIsGroupPanelOpen(false);
     setIsPinsOpen(false);
+    setIsSearchOpen(false);
+    setReadReceiptMessage(null);
     setReplyToMessage(null);
+    setSearchIndex(0);
+    setSearchTerm("");
   }, [conversation?.id]);
+
+  useEffect(() => {
+    if (searchMatches.length === 0) return;
+
+    const current = searchMatches[Math.min(searchIndex, searchMatches.length - 1)];
+    messageRefs.current.get(String(current.id))?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [searchIndex, searchMatches]);
 
   if (!conversation && isLoading) {
     return (
@@ -83,7 +146,7 @@ export default function ChatWindow({
 
   const participant = conversation.otherParticipant;
 
-  async function handleComposerSend(content) {
+  async function handleComposerSend(content, options = {}) {
     if (editingMessage) {
       const updated = await onEditMessage?.(editingMessage.id, content);
       if (updated) {
@@ -93,6 +156,7 @@ export default function ChatWindow({
     }
 
     const sent = await onSendMessage(conversation.id, content, {
+      ...options,
       replyToMessageId: replyToMessage?.id ?? null,
     });
 
@@ -113,6 +177,11 @@ export default function ChatWindow({
     if (deleted && replyToMessage?.id === message.id) {
       setReplyToMessage(null);
     }
+  }
+
+  async function handleShowReadReceipts(message) {
+    setReadReceiptMessage(message);
+    await loadMessageReadReceipts?.(message.id, { force: true });
   }
 
   function scrollToMessage(messageId) {
@@ -136,7 +205,7 @@ export default function ChatWindow({
           >
             <ArrowLeft size={19} />
           </Link>
-          <Avatar user={participant} size="md" showStatus />
+          <Avatar user={participant} size="md" showStatus={!isGroup} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-base font-semibold text-white">
@@ -149,13 +218,16 @@ export default function ChatWindow({
                 participant?.presence?.isOnline ? "text-indigo-400" : "text-slate-500",
               ].join(" ")}
             >
-              {formatPresence(participant?.presence)}
+              {isGroup ? `${conversation.participantCount ?? conversation.participants.length} members` : formatPresence(participant?.presence)}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
-          <HeaderAction icon={Search} label="Search" />
+          <HeaderAction icon={Search} label="Search" onClick={() => setIsSearchOpen((open) => !open)} />
+          {isGroup ? (
+            <HeaderAction icon={Users} label="Group info" onClick={() => setIsGroupPanelOpen((open) => !open)} />
+          ) : null}
           <HeaderAction
             icon={MoreVertical}
             label="Pinned messages"
@@ -163,6 +235,49 @@ export default function ChatWindow({
           />
         </div>
       </header>
+
+      {isSearchOpen ? (
+        <div className="relative z-10 flex items-center gap-2 border-b border-white/[0.04] bg-[#111827]/95 px-4 py-2 backdrop-blur-xl">
+          <div className="field-shell flex min-h-10 flex-1 items-center gap-2 rounded-xl border border-white/5 bg-[#1e293b] px-3">
+            <Search size={15} className="text-slate-500" />
+            <input
+              value={searchTerm}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setSearchIndex(0);
+              }}
+              placeholder="Search messages..."
+              className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+              autoFocus
+            />
+          </div>
+          <span className="w-16 text-center text-xs text-slate-500">
+            {searchTerm ? `${searchMatches.length ? searchIndex + 1 : 0}/${searchMatches.length}` : ""}
+          </span>
+          <IconButton icon={ChevronUp} label="Previous" disabled={searchMatches.length === 0} onClick={() => setSearchIndex((index) => (index - 1 + searchMatches.length) % searchMatches.length)} />
+          <IconButton icon={ChevronDown} label="Next" disabled={searchMatches.length === 0} onClick={() => setSearchIndex((index) => (index + 1) % searchMatches.length)} />
+          <IconButton icon={X} label="Close search" onClick={() => setIsSearchOpen(false)} />
+        </div>
+      ) : null}
+
+      {isGroupPanelOpen ? (
+        <GroupPanel
+          contacts={contacts}
+          conversation={conversation}
+          currentUser={currentUser}
+          onAcceptInvitation={acceptGroupInvitation}
+          onAddMembers={addMembersToGroup}
+          onClearSearch={clearUserSearch}
+          onClose={() => setIsGroupPanelOpen(false)}
+          onLeaveGroup={leaveCurrentGroup}
+          onRejectInvitation={rejectGroupInvitation}
+          onRemoveMember={removeMemberFromGroup}
+          onSearchUsers={searchUsers}
+          onUpdateGroup={updateGroup}
+          onUpdateRole={updateGroupMemberRole}
+          searchResults={userSearchResults}
+        />
+      ) : null}
 
       {pinnedMessages.length > 0 ? (
         <div className="relative z-10 border-b border-white/[0.04] bg-[#111827]/95 px-4 py-2 backdrop-blur-xl">
@@ -191,14 +306,7 @@ export default function ChatWindow({
             <div className="absolute left-4 right-4 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-white/5 bg-[#1f2937]/98 py-2 shadow-panel backdrop-blur-xl">
               <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 pb-2">
                 <p className="text-sm font-semibold text-white">Pinned messages</p>
-                <button
-                  type="button"
-                  onClick={() => setIsPinsOpen(false)}
-                  className="press flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
-                  title="Close"
-                >
-                  <X size={16} />
-                </button>
+                <IconButton icon={X} label="Close" onClick={() => setIsPinsOpen(false)} />
               </div>
               <div className="max-h-72 overflow-y-auto py-1">
                 {pinnedMessages.map((pin) => (
@@ -218,14 +326,7 @@ export default function ChatWindow({
                         Pinned by {pin.pinnedBy?.displayName ?? pin.pinnedBy?.username ?? "participant"}
                       </p>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onToggleMessagePin?.(pin.message)}
-                      className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-indigo-400"
-                      title="Unpin message"
-                    >
-                      <Pin size={14} />
-                    </button>
+                    <IconButton icon={Pin} label="Unpin message" onClick={() => onToggleMessagePin?.(pin.message)} />
                   </div>
                 ))}
               </div>
@@ -258,10 +359,10 @@ export default function ChatWindow({
           {conversation.messages.length === 0 ? (
             <div className="mx-auto mt-12 max-w-sm animate-scale-in rounded-2xl border border-white/5 bg-[#111827]/90 p-6 text-center shadow-panel backdrop-blur">
               <EmptyChatArtwork compact />
-              <Avatar user={participant} size="xl" showStatus />
+              <Avatar user={participant} size="xl" showStatus={!isGroup} />
               <h3 className="mt-5 text-lg font-semibold text-white">{participant?.displayName}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                This direct conversation is ready.
+                {isGroup ? "This group is ready." : "This direct conversation is ready."}
               </p>
             </div>
           ) : (
@@ -310,6 +411,7 @@ export default function ChatWindow({
                       setEditingMessage(null);
                       setReplyToMessage(message);
                     }}
+                    onShowReadReceipts={handleShowReadReceipts}
                     onToggleReaction={(emoji) => onToggleMessageReaction?.(message, emoji)}
                     onTogglePin={onToggleMessagePin}
                   />
@@ -336,7 +438,16 @@ export default function ChatWindow({
         onTypingChange={onTypingChange}
         onSend={handleComposerSend}
         replyToMessage={replyToMessage}
+        uploadProgress={uploadProgress}
       />
+
+      {readReceiptMessage ? (
+        <ReadReceiptModal
+          message={readReceiptMessage}
+          onClose={() => setReadReceiptMessage(null)}
+          receipts={readReceiptsByMessageId[String(readReceiptMessage.id)] ?? []}
+        />
+      ) : null}
     </section>
   );
 }
