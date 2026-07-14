@@ -6,10 +6,12 @@ import {
   Pin,
   Plus,
   Search,
+  Settings,
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { clampPreview, formatShortTime } from "../../utils/formatters";
 import { isSameId } from "../../utils/chat";
 import { EmptyChatsAsset } from "../assets/MicroAssets";
@@ -52,6 +54,7 @@ export default function ConversationList({
   stats,
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { settings } = useAppSettings();
   const menuRef = useRef(null);
   const realtime = REALTIME_TONE[realtimeStatus] ?? REALTIME_TONE.idle;
 
@@ -90,8 +93,8 @@ export default function ConversationList({
   }
 
   return (
-    <section className="flex h-full min-h-0 w-full flex-col border-r border-white/[0.04] bg-[#111827] md:max-w-[380px]">
-      <div className="relative border-b border-white/[0.04] px-4 py-4">
+    <section className="conversation-list flex h-full min-h-0 w-full flex-col border-r border-white/[0.05] bg-[#111827]">
+      <div className="conversation-list__header relative border-b border-white/[0.05] px-4 py-4">
         <div className="flex items-center gap-3">
           <div ref={menuRef} className="relative shrink-0">
             <button
@@ -125,6 +128,14 @@ export default function ConversationList({
                   <MessageSquarePlus size={17} />
                   New chat
                 </button>
+                <Link
+                  to="/settings"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+                >
+                  <Settings size={17} />
+                  Settings
+                </Link>
                 <div className="my-2 h-px bg-white/5" />
                 <button
                   type="button"
@@ -158,7 +169,8 @@ export default function ConversationList({
               />
             </div>
             <p className="truncate text-xs text-slate-500">
-              {stats.onlineCount} online · {stats.unreadTotal} unread
+              {settings.showOnlineStatus ? `${stats.onlineCount} online · ` : ""}
+              {stats.unreadTotal} unread
             </p>
           </div>
 
@@ -175,6 +187,7 @@ export default function ConversationList({
         <div className="field-shell mt-4 flex items-center gap-2.5 rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-2.5">
           <Search size={16} className="text-slate-500" />
           <input
+            aria-label="Search conversations"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Search conversations..."
@@ -195,9 +208,11 @@ export default function ConversationList({
             {conversations.map((conversation, index) => {
               const participant = conversation.otherParticipant;
               const isActive = String(selectedId) === String(conversation.id);
-              const preview = conversation.lastMessage
-                ? clampPreview(conversation.lastMessage.contentPreview)
-                : "No messages yet";
+              const preview = settings.showMessagePreviews
+                ? conversation.lastMessage
+                  ? clampPreview(conversation.lastMessage.contentPreview)
+                  : "No messages yet"
+                : "Message preview hidden";
               const isOwnLast = isSameId(
                 conversation.lastMessage?.senderId,
                 currentUser.id,
@@ -253,7 +268,9 @@ export default function ConversationList({
                               : "text-slate-500",
                         ].join(" ")}
                       >
-                        {isOwnLast ? <span className="text-slate-500">You: </span> : ""}
+                        {settings.showMessagePreviews && isOwnLast ? (
+                          <span className="text-slate-500">You: </span>
+                        ) : ""}
                         {preview}
                       </p>
                       {conversation.unreadCount > 0 ? (
@@ -280,10 +297,28 @@ export default function ConversationList({
             ) : null}
           </div>
         ) : (
-          <div className="flex h-full animate-fade-in flex-col items-center justify-center px-8 text-center">
-            <EmptyChatsAsset className="mb-3 h-28 w-36 opacity-95" />
-            <p className="font-medium text-white">No matching chats</p>
-            <p className="mt-1 text-sm text-slate-500">Try a different name or username.</p>
+          <div className="conversation-list__empty flex h-full animate-fade-in flex-col items-center justify-center px-8 text-center">
+            <span className="conversation-list__empty-artwork mb-4 flex items-center justify-center rounded-[2rem] border border-white/[0.06] bg-white/[0.025]">
+              <EmptyChatsAsset className="h-28 w-36 opacity-95" />
+            </span>
+            <p className="font-semibold text-white">
+              {query ? "No matching chats" : "Your inbox is ready"}
+            </p>
+            <p className="mt-1.5 max-w-[250px] text-sm leading-6 text-slate-500">
+              {query
+                ? "Try a different name or username."
+                : "Find someone and start your first conversation."}
+            </p>
+            {!query ? (
+              <button
+                type="button"
+                onClick={onOpenPeople}
+                className="send-button mt-5 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 px-4 text-sm font-semibold text-white shadow-send hover:shadow-send-hover"
+              >
+                <MessageSquarePlus size={17} />
+                Start a chat
+              </button>
+            ) : null}
           </div>
         )}
       </div>

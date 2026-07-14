@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { formatDateSeparator, formatPresence } from "../../utils/formatters";
 import { getPinnedPreview, isSameId, isSameMessageDay } from "../../utils/chat";
 import ChatBackdrop from "../assets/ChatBackdrop";
@@ -54,6 +55,7 @@ export default function ChatWindow({
   onEditMessage,
   onLoadMessageReactions,
   onLoadMoreMessages,
+  onOpenPeople,
   onSendMessage,
   onToggleMessageReaction,
   onToggleMessagePin,
@@ -69,6 +71,7 @@ export default function ChatWindow({
   uploadProgress = null,
   userSearchResults = [],
 }) {
+  const { settings } = useAppSettings();
   const bottomRef = useRef(null);
   const messageRefs = useRef(new Map());
   const [editingMessage, setEditingMessage] = useState(null);
@@ -137,9 +140,9 @@ export default function ChatWindow({
 
   if (!conversation) {
     return (
-      <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0a0f1a] p-6">
+      <section className="chat-empty-view relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0a0f1a]">
         <ChatBackdrop />
-        <InteractiveEmptyState />
+        <InteractiveEmptyState onOpenPeople={onOpenPeople} />
       </section>
     );
   }
@@ -196,11 +199,11 @@ export default function ChatWindow({
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0f1a]">
       <ChatBackdrop />
 
-      <header className="relative z-10 flex animate-fade-in items-center justify-between gap-3 border-b border-white/[0.04] bg-[#111827]/95 px-4 py-3 backdrop-blur-xl">
+      <header className="chat-window-header relative z-10 flex animate-fade-in items-center justify-between gap-3 border-b border-white/[0.04] bg-[#111827]/95 px-4 py-3 backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/chat"
-            className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-white/5 hover:text-white md:hidden"
+            className="chat-back-link press h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-white/5 hover:text-white"
             title="Back"
           >
             <ArrowLeft size={19} />
@@ -218,7 +221,11 @@ export default function ChatWindow({
                 participant?.presence?.isOnline ? "text-indigo-400" : "text-slate-500",
               ].join(" ")}
             >
-              {isGroup ? `${conversation.participantCount ?? conversation.participants.length} members` : formatPresence(participant?.presence)}
+              {isGroup
+                ? `${conversation.participantCount ?? conversation.participants.length} members`
+                : settings.showOnlineStatus
+                  ? formatPresence(participant?.presence)
+                  : "Direct conversation"}
             </p>
           </div>
         </div>
@@ -241,6 +248,7 @@ export default function ChatWindow({
           <div className="field-shell flex min-h-10 flex-1 items-center gap-2 rounded-xl border border-white/5 bg-[#1e293b] px-3">
             <Search size={15} className="text-slate-500" />
             <input
+              aria-label="Search messages"
               value={searchTerm}
               onChange={(event) => {
                 setSearchTerm(event.target.value);

@@ -67,9 +67,14 @@ export default function ChatPage() {
   } = chatStore;
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0a0f1a] text-white">
-      <main className="mx-auto flex h-full max-w-[1520px] overflow-hidden rounded-none border-x border-white/[0.03] bg-[#0a0f1a] shadow-2xl xl:my-0">
-        <div className={`${conversationId ? "hidden md:flex" : "flex"} min-h-0 w-full md:w-[380px]`}>
+    <div className="chat-page-shell text-white">
+      <main className="chat-app-layout">
+        <div
+          className={[
+            "conversation-pane",
+            conversationId ? "conversation-pane--mobile-hidden" : "",
+          ].join(" ")}
+        >
           <ConversationList
             conversations={filteredConversations}
             error={conversationError}
@@ -89,7 +94,12 @@ export default function ChatPage() {
           />
         </div>
 
-        <div className={`${conversationId ? "flex" : "hidden md:flex"} min-w-0 flex-1`}>
+        <div
+          className={[
+            "chat-pane",
+            conversationId ? "" : "chat-pane--mobile-hidden",
+          ].join(" ")}
+        >
           <ChatWindow
             acceptGroupInvitation={acceptGroupInvitation}
             addMembersToGroup={addMembersToGroup}
@@ -109,6 +119,7 @@ export default function ChatPage() {
             loadMessageReadReceipts={loadMessageReadReceipts}
             onLoadMessageReactions={loadMessageReactions}
             onLoadMoreMessages={() => loadMoreMessages(conversationId)}
+            onOpenPeople={() => setShowPeople(true)}
             onSendMessage={sendMessage}
             onToggleMessageReaction={toggleMessageReaction}
             onToggleMessagePin={(message) => toggleMessagePin(conversationId, message)}
@@ -134,7 +145,7 @@ export default function ChatPage() {
             if (event.target === event.currentTarget) setShowPeople(false);
           }}
         >
-          <div className="sheet-panel ml-auto h-full w-full max-w-md border-l border-white/5 bg-[#111827] shadow-panel">
+          <div className="sheet-panel contact-sheet-panel ml-auto h-full border-l border-white/5 bg-[#111827] shadow-panel">
             <ContactPanel
               contacts={contacts}
               isSearching={isSearchingUsers}

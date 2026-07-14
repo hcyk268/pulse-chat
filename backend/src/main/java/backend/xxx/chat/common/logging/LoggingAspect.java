@@ -60,11 +60,12 @@ public class LoggingAspect {
         String layer = controller ? "controller" : "service";
         String invocation = targetClass.getSimpleName() + "." + signature.getName();
         String request = currentRequest();
+        String requestLabel = requestLabel(request);
         String args = summarizeArguments(joinPoint.getArgs());
 
         if (controller) {
-            log.info("Started {} {} request={} args={}", layer, invocation, request, args);
-        } else if (service && log.isDebugEnabled()) {
+            log.info("Started {} {} request={} args={}", layer, invocation, requestLabel, args);
+        } else if (service && hasHttpRequest(request) && log.isDebugEnabled()) {
             log.debug("Started {} {} args={}", layer, invocation, args);
         }
 
@@ -78,11 +79,11 @@ public class LoggingAspect {
                         "Completed {} {} request={} status={} elapsedMs={}",
                         layer,
                         invocation,
-                        request,
+                        requestLabel,
                         resolveHttpStatus(result),
                         elapsedMs
                 );
-            } else if (service && log.isDebugEnabled()) {
+            } else if (service && hasHttpRequest(request) && log.isDebugEnabled()) {
                 log.debug("Completed {} {} elapsedMs={}", layer, invocation, elapsedMs);
             }
 
@@ -93,7 +94,7 @@ public class LoggingAspect {
                     "Failed {} {} request={} exception={} message={} elapsedMs={}",
                     layer,
                     invocation,
-                    request,
+                    requestLabel,
                     ex.getClass().getSimpleName(),
                     summarizeExceptionMessage(ex),
                     elapsedMs
@@ -106,6 +107,14 @@ public class LoggingAspect {
         return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
+    private static boolean hasHttpRequest(String request) {
+        return request != null;
+    }
+
+    private static String requestLabel(String request) {
+        return request == null ? "none" : request;
+    }
+
     private static String currentRequest() {
         if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
             HttpServletRequest request = attributes.getRequest();
@@ -113,13 +122,13 @@ public class LoggingAspect {
             String requestUri = request.getRequestURI();
 
             if (method == null || method.isBlank() || requestUri == null || requestUri.isBlank()) {
-                return "none";
+                return null;
             }
 
             return method + " " + requestUri;
         }
 
-        return "none";
+        return null;
     }
 
     private static Integer resolveHttpStatus(Object result) {

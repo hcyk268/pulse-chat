@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { initials } from "../../utils/formatters";
 
 const sizeClasses = {
@@ -10,6 +11,7 @@ const sizeClasses = {
 };
 
 export default function Avatar({ user, size = "md", showStatus = false }) {
+  const { settings } = useAppSettings();
   const online = user?.presence?.isOnline;
   const accent = user?.accent ?? "from-indigo-400 to-purple-500";
   const avatarUrl = user?.avatarUrl || "";
@@ -39,7 +41,7 @@ export default function Avatar({ user, size = "md", showStatus = false }) {
           initials(user?.displayName || user?.username || "U")
         )}
       </div>
-      {showStatus ? (
+      {showStatus && settings.showOnlineStatus ? (
         <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#111827]">
           <span
             className={`h-2.5 w-2.5 rounded-full transition-colors duration-300 ${

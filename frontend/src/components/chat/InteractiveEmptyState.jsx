@@ -1,4 +1,4 @@
-import { MessageCircle, SendHorizontal, Sparkles } from "lucide-react";
+import { ArrowRight, MessageCircle, SendHorizontal, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 import EmptyChatArtwork from "../assets/EmptyChatArtwork";
 
@@ -26,7 +26,7 @@ const chips = [
   },
 ];
 
-export default function InteractiveEmptyState() {
+export default function InteractiveEmptyState({ onOpenPeople }) {
   const panelRef = useRef(null);
   const [pointer, setPointer] = useState({ x: 0, y: 0, active: false, pressed: false });
 
@@ -52,7 +52,7 @@ export default function InteractiveEmptyState() {
   return (
     <div
       ref={panelRef}
-      className="empty-physics-scene relative w-full max-w-[560px] animate-scale-in"
+      className="empty-physics-scene relative w-full max-w-[780px] animate-scale-in"
       onPointerMove={updatePointer}
       onPointerLeave={resetPointer}
       onPointerDown={() => setPointer((previous) => ({ ...previous, pressed: true }))}
@@ -78,17 +78,32 @@ export default function InteractiveEmptyState() {
         );
       })}
 
-      <div className="empty-physics-panel relative rounded-3xl border border-white/5 bg-[#111827]/94 px-7 pb-9 pt-8 text-center shadow-panel sm:px-9">
+      <div className="empty-physics-panel relative rounded-[2rem] border border-white/[0.07] bg-[#111827]/94 p-6 shadow-panel sm:p-8 lg:p-10">
         <div className="empty-physics-sheen pointer-events-none absolute inset-0 rounded-3xl" />
         <div className="empty-physics-orbit pointer-events-none absolute inset-5 rounded-2xl" />
-        <div className="relative">
-          <EmptyChatArtwork />
-          <h2 className="mt-4 bg-gradient-to-r from-white via-indigo-100 to-white bg-clip-text text-2xl font-bold text-transparent">
-            No conversation selected
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            Open a recent chat or start a new direct conversation from the people panel.
-          </p>
+        <div className="empty-physics-content relative grid items-center gap-5 text-center md:grid-cols-[1.05fr_0.95fr] md:gap-8 md:text-left">
+          <div className="min-w-0">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-indigo-300">
+              Your space to connect
+            </p>
+            <h2 className="empty-physics-title bg-gradient-to-r from-white via-indigo-100 to-slate-300 bg-clip-text font-bold tracking-[-0.035em] text-transparent">
+              Pick up where you left off.
+            </h2>
+            <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-400 md:mx-0 sm:text-[15px]">
+              Select a conversation from the sidebar or find someone new to start messaging in real time.
+            </p>
+            <button
+              type="button"
+              onClick={onOpenPeople}
+              className="send-button mx-auto mt-6 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 px-5 text-sm font-semibold text-white shadow-send hover:shadow-send-hover md:mx-0"
+            >
+              New conversation
+              <ArrowRight size={17} />
+            </button>
+          </div>
+          <div className="empty-physics-artwork min-w-0">
+            <EmptyChatArtwork />
+          </div>
         </div>
       </div>
     </div>

@@ -27,6 +27,10 @@ body,
   height: 100%;
 }
 
+html {
+  overflow: hidden;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -40,6 +44,173 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* === Responsive application shell === */
+.chat-page-shell {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #0a0f1a;
+}
+
+.chat-app-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #0a0f1a;
+}
+
+.conversation-pane {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: 0 0 clamp(340px, 25vw, 420px);
+  width: clamp(340px, 25vw, 420px);
+  min-width: 0;
+  min-height: 0;
+  box-shadow: 18px 0 50px rgba(0, 0, 0, 0.14);
+}
+
+.chat-pane {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-back-link {
+  display: none;
+}
+
+.contact-sheet-panel {
+  width: min(100%, 440px);
+}
+
+.chat-empty-view {
+  padding: clamp(24px, 5vw, 72px);
+}
+
+.empty-physics-title {
+  font-size: clamp(2rem, 3vw, 3.35rem);
+  line-height: 1.04;
+}
+
+.conversation-list__empty-artwork {
+  width: 176px;
+  height: 144px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+@media (min-width: 1280px) {
+  .conversation-list__header {
+    padding: 20px;
+  }
+
+  .chat-window-header {
+    padding-inline: 20px;
+  }
+}
+
+@media (min-width: 1800px) {
+  .conversation-pane {
+    flex-basis: 440px;
+    width: 440px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .conversation-pane {
+    flex-basis: clamp(320px, 32vw, 360px);
+    width: clamp(320px, 32vw, 360px);
+  }
+
+  .chat-empty-view {
+    padding: 28px;
+  }
+
+  .empty-physics-scene {
+    max-width: 540px;
+  }
+
+  .empty-physics-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .empty-physics-content p,
+  .empty-physics-content button {
+    margin-inline: auto;
+  }
+
+  .empty-physics-artwork {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .conversation-pane,
+  .chat-pane {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .conversation-pane {
+    box-shadow: none;
+  }
+
+  .conversation-pane--mobile-hidden,
+  .chat-pane--mobile-hidden {
+    display: none;
+  }
+
+  .chat-back-link {
+    display: flex;
+  }
+
+  .conversation-list {
+    border-right: 0;
+  }
+
+  .conversation-list__header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .chat-window-header {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 640px) {
+  .contact-sheet-panel {
+    border-left: 0;
+  }
+
+  .chat-empty-view {
+    padding: 18px;
+  }
+
+  .empty-physics-panel {
+    border-radius: 24px;
+  }
+
+  .empty-physics-artwork {
+    display: none;
+  }
+
+  .empty-physics-title {
+    font-size: clamp(1.85rem, 9vw, 2.5rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .conversation-list__empty-artwork {
+    width: 152px;
+    height: 124px;
+  }
 }
 
 button,
@@ -661,6 +832,42 @@ textarea:focus-visible {
   box-shadow:
     0 0 20px rgba(168, 85, 247, 0.15),
     0 0 60px rgba(168, 85, 247, 0.05);
+}
+
+/* === User preferences === */
+html[data-density="compact"] .conversation-list__header {
+  padding: 12px 14px;
+}
+
+html[data-density="compact"] .conversation-list__header .field-shell {
+  margin-top: 12px;
+  padding-block: 8px;
+}
+
+html[data-density="compact"] .conv-row {
+  padding-block: 8px;
+}
+
+html[data-density="compact"] .chat-window-header {
+  padding-block: 8px;
+}
+
+html[data-density="compact"] .chat-composer {
+  padding-block: 8px;
+}
+
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-reduce-motion="true"] .empty-physics-panel,
+html[data-reduce-motion="true"] .empty-physics-chip {
+  transform: none;
 }
 
 /* === Reduced motion === */

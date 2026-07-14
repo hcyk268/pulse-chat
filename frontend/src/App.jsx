@@ -1,10 +1,13 @@
 import AppRouter from "./routes/AppRouter";
+import { AppSettingsProvider } from "./hooks/useAppSettings";
 import { ChatProvider } from "./hooks/useChatStore";
 
 export default function App() {
   return (
-    <ChatProvider>
-      <AppRouter />
-    </ChatProvider>
+    <AppSettingsProvider>
+      <ChatProvider>
+        <AppRouter />
+      </ChatProvider>
+    </AppSettingsProvider>
   );
 }
