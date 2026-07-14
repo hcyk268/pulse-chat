@@ -53,6 +53,7 @@ public class CloudflareR2Config {
         requireNotBlank(properties.accessKeyId(), "R2 accessKeyId must not be blank");
         requireNotBlank(properties.secretAccessKey(), "R2 secretAccessKey must not be blank");
         requireNotBlank(properties.bucket(), "R2 bucket must not be blank");
+        requireNotBlank(properties.publicBaseUrl(), "R2 publicBaseUrl must not be blank");
     }
 
     private void requireNotBlank(String value, String message) {

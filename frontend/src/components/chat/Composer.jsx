@@ -1,11 +1,14 @@
-import { Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
+import { File, Image as ImageIcon, Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatFileSize } from "../../utils/formatters";
+
+const EMOJI_OPTIONS = ["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F60E}", "\u{1F44D}", "\u{1F64F}", "\u{1F525}", "\u{1F389}", "\u2764\uFE0F", "\u2728"];
 
 function getPreviewText(message) {
   if (!message) return "";
   if (message.deletedAt) return "Message deleted";
 
-  return message.content ?? "";
+  return message.content ?? message.attachments?.[0]?.fileName ?? "Attachment";
 }
 
 export default function Composer({
@@ -16,8 +19,12 @@ export default function Composer({
   onSend,
   onTypingChange,
   replyToMessage = null,
+  uploadProgress = null,
 }) {
   const [value, setValue] = useState("");
+  const [files, setFiles] = useState([]);
+  const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const fileInputRef = useRef(null);
   const onTypingChangeRef = useRef(onTypingChange);
   const stopTypingTimerRef = useRef(null);
   const typingRef = useRef(false);
@@ -30,6 +37,7 @@ export default function Composer({
   useEffect(() => {
     if (editingMessage) {
       setValue(editingMessage.content ?? "");
+      setFiles([]);
       textareaRef.current?.focus();
     }
   }, [editingMessage]);
@@ -87,12 +95,15 @@ export default function Composer({
 
   async function submit() {
     const text = value.trim();
-    if (!text || disabled) return;
+    if ((!text && files.length === 0) || disabled) return;
 
     stopTyping();
-    const result = await Promise.resolve(onSend(text));
+    const result = await Promise.resolve(onSend(text, { files }));
     if (result) {
       setValue("");
+      setFiles([]);
+      setIsEmojiOpen(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -117,12 +128,24 @@ export default function Composer({
     }
   }
 
-  const canSend = !disabled && value.trim().length > 0;
+  function addEmoji(emoji) {
+    setValue((previous) => `${previous}${emoji}`);
+    textareaRef.current?.focus();
+  }
+
+  function addFiles(nextFiles) {
+    const merged = [...files, ...Array.from(nextFiles ?? [])];
+    const byKey = new Map(merged.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]));
+    setFiles(Array.from(byKey.values()).slice(0, 6));
+  }
+
+  const canSend = !disabled && (value.trim().length > 0 || files.length > 0);
   const contextMessage = editingMessage ?? replyToMessage;
   const contextIcon = editingMessage ? Pencil : Reply;
   const ContextIcon = contextIcon;
   const contextTitle = editingMessage ? "Edit message" : "Reply";
   const contextText = getPreviewText(contextMessage);
+  const isUploading = typeof uploadProgress === "number";
 
   return (
     <div className="relative border-t border-white/[0.04] bg-[#111827]/95 px-3 py-3 backdrop-blur-xl">
@@ -154,13 +177,52 @@ export default function Composer({
           </div>
         ) : null}
 
+        {files.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {files.map((file) => {
+              const isImage = file.type.startsWith("image/");
+              const FileIcon = isImage ? ImageIcon : File;
+
+              return (
+                <span key={`${file.name}-${file.size}-${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-xl border border-white/5 bg-[#1e293b] px-3 py-1.5 text-xs text-slate-300">
+                  <FileIcon size={14} className="shrink-0 text-indigo-300" />
+                  <span className="max-w-48 truncate">{file.name}</span>
+                  <span className="shrink-0 text-slate-500">{formatFileSize(file.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles((previous) => previous.filter((item) => item !== file))}
+                    className="press -mr-1 flex h-5 w-5 items-center justify-center rounded-md text-slate-500 hover:bg-white/5 hover:text-white"
+                    title="Remove file"
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {isUploading ? (
+          <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-[#1e293b]">
+            <div className="h-full rounded-full bg-indigo-400 transition-all duration-200" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        ) : null}
+
         <div className="flex items-end gap-2">
           <div className="field-shell flex min-h-12 flex-1 items-end rounded-2xl border border-white/5 bg-[#1e293b] px-3 py-1.5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => addFiles(event.target.files)}
+            />
             <button
               type="button"
-              tabIndex={-1}
-              className="press mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300"
-              title="Attach"
+              disabled={disabled || Boolean(editingMessage)}
+              onClick={() => fileInputRef.current?.click()}
+              className="press mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300 disabled:cursor-not-allowed disabled:text-slate-700"
+              title="Attach files"
             >
               <Paperclip size={18} />
             </button>
@@ -175,14 +237,32 @@ export default function Composer({
               placeholder={disabled ? "Sending..." : editingMessage ? "Edit message" : "Type a message..."}
               className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:text-slate-600"
             />
-            <button
-              type="button"
-              tabIndex={-1}
-              className="press mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300"
-              title="Emoji"
-            >
-              <Smile size={18} />
-            </button>
+            <div className="relative mb-2">
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setIsEmojiOpen((open) => !open)}
+                className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                title="Emoji"
+              >
+                <Smile size={18} />
+              </button>
+              {isEmojiOpen ? (
+                <div className="absolute bottom-10 right-0 z-30 grid grid-cols-5 gap-1 rounded-2xl border border-white/10 bg-[#1f2937]/98 p-2 shadow-panel backdrop-blur-xl">
+                  {EMOJI_OPTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => addEmoji(emoji)}
+                      className="press flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-white/10"
+                      title="Insert emoji"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"

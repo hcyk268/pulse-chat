@@ -1,6 +1,7 @@
-import { Check, CheckCheck, Clock3, Pencil, Pin, Reply, SmilePlus, Trash2 } from "lucide-react";
+import { Check, CheckCheck, Clock3, Download, Eye, File, Image as ImageIcon, Pencil, Pin, Reply, SmilePlus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { formatChatTime } from "../../utils/formatters";
+import { formatChatTime, formatFileSize } from "../../utils/formatters";
+import Avatar from "../ui/Avatar";
 
 const REACTION_OPTIONS = [
   { emoji: "LIKE", symbol: "\u{1F44D}", label: "Like" },
@@ -42,6 +43,56 @@ function getMessageText(message) {
   return message.content ?? "";
 }
 
+function AttachmentList({ attachments = [], isOwn }) {
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="relative z-[1] mt-2 space-y-2">
+      {attachments.map((attachment) => {
+        const isImage = attachment.contentType?.startsWith("image/");
+        const Icon = isImage ? ImageIcon : File;
+        const href = attachment.url || attachment.thumbnailUrl;
+
+        return (
+          <a
+            key={`${attachment.objectKey}-${attachment.fileName}`}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className={[
+              "block overflow-hidden rounded-xl border transition-colors",
+              isOwn ? "border-white/10 bg-white/10 hover:bg-white/15" : "border-white/5 bg-[#111827]/70 hover:bg-[#111827]",
+            ].join(" ")}
+          >
+            {isImage && href ? (
+              <img
+                src={attachment.thumbnailUrl || attachment.url}
+                alt={attachment.fileName || "Attachment"}
+                className="max-h-72 w-full object-cover"
+                loading="lazy"
+              />
+            ) : null}
+            <span className="flex items-center gap-3 px-3 py-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black/15 text-indigo-200">
+                <Icon size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-white">
+                  {attachment.fileName || "Attachment"}
+                </span>
+                <span className="block text-xs text-slate-400">
+                  {formatFileSize(attachment.sizeBytes)}
+                </span>
+              </span>
+              <Download size={16} className="shrink-0 text-slate-400" />
+            </span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function MessageBubble({
   message,
   isOwn,
@@ -50,6 +101,7 @@ export default function MessageBubble({
   onDelete,
   onEdit,
   onReply,
+  onShowReadReceipts,
   onTogglePin,
   onToggleReaction,
   reactions = [],
@@ -78,6 +130,7 @@ export default function MessageBubble({
 
   const isDeleted = Boolean(message.deletedAt);
   const canActOnMessage = !isDeleted;
+  const text = getMessageText(message);
 
   return (
     <div
@@ -87,6 +140,11 @@ export default function MessageBubble({
         isOwn ? "justify-end animate-enter-bubble-right" : "justify-start animate-enter-bubble-left",
       ].join(" ")}
     >
+      {!isOwn ? (
+        <div className="mr-2 flex w-9 shrink-0 self-end">
+          {endsCluster ? <Avatar user={message.sender} size="sm" /> : null}
+        </div>
+      ) : null}
       <div
         className={[
           "relative flex max-w-[82%] flex-col sm:max-w-[68%] lg:max-w-[58%]",
@@ -117,18 +175,21 @@ export default function MessageBubble({
                 {message.replyTo.sender?.displayName ?? message.replyTo.sender?.username ?? "Message"}
               </p>
               <p className="truncate text-xs text-slate-300">
-                {getMessageText(message.replyTo)}
+                {getMessageText(message.replyTo) || message.replyTo.attachments?.[0]?.fileName || "Attachment"}
               </p>
             </div>
           ) : null}
-          <span
-            className={[
-              "relative z-[1] whitespace-pre-wrap break-words",
-              isDeleted ? "italic text-slate-400" : "",
-            ].join(" ")}
-          >
-            {getMessageText(message)}
-          </span>
+          {text ? (
+            <span
+              className={[
+                "relative z-[1] whitespace-pre-wrap break-words",
+                isDeleted ? "italic text-slate-400" : "",
+              ].join(" ")}
+            >
+              {text}
+            </span>
+          ) : null}
+          {!isDeleted ? <AttachmentList attachments={message.attachments} isOwn={isOwn} /> : null}
           <span
             className={[
               "relative z-[1] ml-2 inline-flex translate-y-[2px] items-center gap-1 whitespace-nowrap text-[11px] leading-none",
@@ -213,6 +274,9 @@ export default function MessageBubble({
               ) : null}
             </div>
           ) : null}
+          {canActOnMessage && onShowReadReceipts ? (
+            <ActionButton icon={Eye} label="Read receipts" onClick={() => onShowReadReceipts(message)} />
+          ) : null}
           {canActOnMessage && onTogglePin ? (
             <ActionButton
               icon={Pin}
@@ -221,7 +285,7 @@ export default function MessageBubble({
               active={Boolean(message.pinned)}
             />
           ) : null}
-          {canActOnMessage && isOwn && onEdit ? (
+          {canActOnMessage && isOwn && onEdit && message.messageType !== "MEDIA" ? (
             <ActionButton icon={Pencil} label="Edit" onClick={onEdit} />
           ) : null}
           {canActOnMessage && isOwn && onDelete ? (

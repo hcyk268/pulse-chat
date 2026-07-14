@@ -1,3 +1,4 @@
+import axios from "axios";
 import {
   clearAuthSession,
   getAccessToken,
@@ -11,6 +12,11 @@ const AUTH_ERROR_MESSAGES = {
   ACCOUNT_INACTIVE: "Your account is inactive. Please contact support.",
   ACCOUNT_LOCKED: "Your account is locked or suspended. Please contact support.",
 };
+
+const httpClient = axios.create({
+  baseURL: API_BASE_URL,
+  validateStatus: () => true,
+});
 
 let authFailureHandler = null;
 let authRefreshHandler = null;
@@ -28,17 +34,6 @@ export class ApiError extends Error {
 export function setAuthEventHandlers({ onAuthFailure = null, onAuthRefresh = null } = {}) {
   authFailureHandler = onAuthFailure;
   authRefreshHandler = onAuthRefresh;
-}
-
-async function parseResponseBody(response) {
-  const text = await response.text();
-  if (!text) return null;
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
 }
 
 function buildErrorMessage(data, path = "") {
@@ -74,22 +69,30 @@ function notifyAuthRefresh(authSession) {
   authRefreshHandler?.(authSession);
 }
 
+function normalizeHeaders(headers = {}) {
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+
+  return { ...headers };
+}
+
 function buildHeaders(options, includeAuth) {
-  const headers = new Headers(options.headers);
+  const headers = normalizeHeaders(options.headers);
 
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
+  if (!headers.Accept && !headers.accept) {
+    headers.Accept = "application/json";
   }
 
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (options.body && !headers["Content-Type"] && !headers["content-type"]) {
+    headers["Content-Type"] = "application/json";
   }
 
-  if (includeAuth && !headers.has("Authorization")) {
+  if (includeAuth && !headers.Authorization && !headers.authorization) {
     const accessToken = getAccessToken();
 
     if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
+      headers.Authorization = `Bearer ${accessToken}`;
     }
   }
 
@@ -102,24 +105,23 @@ async function refreshAuthSession() {
   if (!refreshToken) return false;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    const response = await httpClient.request({
+      url: "/api/v1/auth/refresh",
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ refreshToken }),
+      data: { refreshToken },
     });
 
-    const data = await parseResponseBody(response);
-
-    if (!response.ok) {
-      notifyAuthFailure(buildErrorMessage(data, "/api/v1/auth/refresh"));
+    if (response.status < 200 || response.status >= 300) {
+      notifyAuthFailure(buildErrorMessage(response.data, "/api/v1/auth/refresh"));
       return false;
     }
 
-    saveAuthSession(data, isPersistentSession());
-    notifyAuthRefresh(data);
+    saveAuthSession(response.data, isPersistentSession());
+    notifyAuthRefresh(response.data);
     return true;
   } catch {
     return false;
@@ -127,36 +129,34 @@ async function refreshAuthSession() {
 }
 
 async function sendRequest(path, options, includeAuth) {
-  let response;
-
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
+    return await httpClient.request({
+      url: path,
+      method: options.method || "GET",
       headers: buildHeaders(options, includeAuth),
+      data: options.body,
+      signal: options.signal,
+      params: options.params,
     });
   } catch {
     throw new ApiError(`Cannot connect to backend at ${API_BASE_URL}.`);
   }
-
-  return response;
 }
 
 export async function apiRequest(path, options = {}) {
-  const { auth = true, retryOnUnauthorized = true, ...fetchOptions } = options;
-  let response = await sendRequest(path, fetchOptions, auth);
+  const { auth = true, retryOnUnauthorized = true, ...axiosOptions } = options;
+  let response = await sendRequest(path, axiosOptions, auth);
 
   if (auth && retryOnUnauthorized && response.status === 401) {
     const refreshed = await refreshAuthSession();
 
     if (refreshed) {
-      response = await sendRequest(path, fetchOptions, auth);
+      response = await sendRequest(path, axiosOptions, auth);
     }
   }
 
-  const data = await parseResponseBody(response);
-
-  if (!response.ok) {
-    const message = buildErrorMessage(data, path);
+  if (response.status < 200 || response.status >= 300) {
+    const message = buildErrorMessage(response.data, path);
 
     if (auth && response.status === 401) {
       notifyAuthFailure(message);
@@ -164,10 +164,10 @@ export async function apiRequest(path, options = {}) {
 
     throw new ApiError(message, {
       status: response.status,
-      code: data?.code ?? null,
-      fieldErrors: data?.fieldErrors ?? [],
+      code: response.data?.code ?? null,
+      fieldErrors: response.data?.fieldErrors ?? [],
     });
   }
 
-  return data;
+  return response.data === "" || response.data === undefined ? null : response.data;
 }

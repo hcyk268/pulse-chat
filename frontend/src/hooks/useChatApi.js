@@ -9,15 +9,24 @@ import {
 import { setAuthEventHandlers } from "../services/apiClient";
 import { logout as logoutApi } from "../services/authApi";
 import {
+  acceptGroupInvitation as acceptGroupInvitationApi,
+  addGroupMembers as addGroupMembersApi,
   createDirectConversation,
+  createGroupConversation as createGroupConversationApi,
   getConversation,
+  leaveGroup as leaveGroupApi,
   listConversationPins,
   listConversations,
+  rejectGroupInvitation as rejectGroupInvitationApi,
+  removeGroupMember as removeGroupMemberApi,
+  updateGroupMemberRole as updateGroupMemberRoleApi,
+  updateGroupProfile as updateGroupProfileApi,
 } from "../services/conversationApi";
 import {
   deleteMessage as deleteMessageApi,
   editMessage as editMessageApi,
   getMessageReactions,
+  getMessageReadReceipts,
   listMessages,
   markMessagesRead,
   pinMessage as pinMessageApi,
@@ -27,6 +36,7 @@ import {
   unpinMessage as unpinMessageApi,
 } from "../services/messageApi";
 import { createRealtimeClient } from "../services/realtimeClient";
+import { uploadMessageAttachment } from "../services/uploadApi";
 import { getMe, searchUsers as searchUsersApi, updateMe } from "../services/userApi";
 
 const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
@@ -70,12 +80,16 @@ function toCurrentUser(user) {
 }
 
 function toContact(user) {
+  if (!user) return null;
+
+  const userId = user.id ?? user.userId ?? null;
+
   return {
-    id: user.id,
-    backendId: user.id,
-    username: user.username,
+    id: userId,
+    backendId: userId,
+    username: user.username ?? "",
     email: user.email ?? "",
-    displayName: user.displayName,
+    displayName: user.displayName || user.username || "Unknown user",
     avatarUrl: user.avatarUrl ?? null,
     role: user.role ?? (user.directConversationId ? "Existing direct chat" : "Active user"),
     bio: user.bio ?? "",
@@ -85,10 +99,56 @@ function toContact(user) {
   };
 }
 
+function toMemberContact(member) {
+  const contact = toContact(member);
+  if (!contact) return null;
+
+  return {
+    ...contact,
+    role: member.role ?? contact.role,
+    joinedAt: member.joinedAt ?? null,
+    leftAt: member.leftAt ?? null,
+    status: member.status ?? null,
+  };
+}
+
+function toGroupDisplayContact(conversation) {
+  return {
+    id: `group-${conversation.id}`,
+    backendId: null,
+    username: "group",
+    email: "",
+    displayName: conversation.title || conversation.name || "Group chat",
+    avatarUrl: conversation.avatarUrl ?? null,
+    role: `${conversation.participantCount ?? conversation.participants?.length ?? 0} members`,
+    bio: "",
+    accent: "from-amber-300 to-rose-500",
+    presence: { isOnline: false, lastActiveAt: null },
+    directConversationId: null,
+  };
+}
+
+function getConversationDisplayContact(conversation) {
+  if (conversation.type === "GROUP" || conversation.peer === null) {
+    return toGroupDisplayContact(conversation);
+  }
+
+  return toContact(conversation.otherParticipant ?? conversation.peer) ?? toGroupDisplayContact(conversation);
+}
+
+function getConversationContacts(conversation) {
+  const participants = (conversation.participants ?? [])
+    .map(toMemberContact)
+    .filter(Boolean);
+  const peer = toContact(conversation.otherParticipant ?? conversation.peer);
+
+  return peer ? [peer, ...participants] : participants;
+}
+
 function mergeContacts(previousContacts, nextContacts) {
   const byId = new Map(previousContacts.map((contact) => [String(contact.id), contact]));
 
-  nextContacts.forEach((contact) => {
+  nextContacts.filter(Boolean).forEach((contact) => {
     byId.set(String(contact.id), {
       ...byId.get(String(contact.id)),
       ...contact,
@@ -124,6 +184,7 @@ function normalizeMessage(message) {
     sender: message.sender,
     content: message.content,
     replyTo: message.replyTo ?? null,
+    attachments: message.attachments ?? [],
     messageType: message.messageType,
     status: message.status,
     createdAt: message.createdAt,
@@ -156,8 +217,13 @@ function getMessageIndex(messages, messageId) {
 function getMessagePreview(message) {
   if (!message) return "";
   if (message.deletedAt) return "Message deleted";
+  if (message.content ?? message.contentPreview) return message.content ?? message.contentPreview;
 
-  return message.content ?? message.contentPreview ?? "";
+  const attachmentCount = message.attachments?.length ?? 0;
+  if (attachmentCount === 1) return message.attachments[0]?.fileName || "Attachment";
+  if (attachmentCount > 1) return `${attachmentCount} attachments`;
+
+  return "";
 }
 
 function getPinnedMessageIds(pinResponse) {
@@ -210,6 +276,9 @@ export function useChatApi() {
   const [pinnedMessageIdsByConversation, setPinnedMessageIdsByConversation] = useState({});
   const [pinnedMessagesByConversation, setPinnedMessagesByConversation] = useState({});
   const [reactionsByMessageId, setReactionsByMessageId] = useState({});
+  const [readReceiptsByMessageId, setReadReceiptsByMessageId] = useState({});
+  const [loadingReadReceiptsByMessageId, setLoadingReadReceiptsByMessageId] = useState({});
+  const [uploadProgressByConversation, setUploadProgressByConversation] = useState({});
   const [chatActionError, setChatActionError] = useState("");
   const [typingByConversation, setTypingByConversation] = useState({});
   const [isStartingConversation, setIsStartingConversation] = useState(false);
@@ -245,7 +314,7 @@ export function useChatApi() {
         const otherParticipant = contacts.find(
           (contact) => isSameId(contact.id, conversation.otherParticipantId),
         ) ?? conversation.otherParticipant;
-        const lastMessage = conversation.messages.at(-1) ?? conversation.lastMessage ?? null;
+          const lastMessage = conversation.messages.at(-1) ?? conversation.lastMessage ?? null;
 
         return {
           ...conversation,
@@ -281,25 +350,55 @@ export function useChatApi() {
   }, [contacts, conversations]);
 
   function normalizeConversation(conversation, existingMessages = []) {
-    const otherParticipant = toContact(conversation.otherParticipant);
+  const displayContact = getConversationDisplayContact(conversation);
+    const participantContacts = getConversationContacts(conversation);
+    const lastMessage = normalizeLastMessage(conversation.lastMessage);
+    const isGroup = conversation.type === "GROUP";
 
-    return {
-      id: conversation.id,
-      type: conversation.type,
-      otherParticipantId: otherParticipant.id,
-      otherParticipant,
-      participants: conversation.participants ?? [],
-      unreadCount: conversation.unreadCount ?? 0,
-      pinned: false,
-      muted: false,
-      lastMessage: normalizeLastMessage(conversation.lastMessage),
-      lastMessageAt: conversation.lastMessageAt,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
-      messages: existingMessages,
-    };
+  return {
+    id: conversation.id,
+    type: conversation.type,
+    title: isGroup ? displayContact.displayName : displayContact.displayName,
+    avatarUrl: isGroup ? conversation.avatarUrl ?? null : displayContact.avatarUrl,
+    otherParticipantId: isGroup ? null : displayContact.id,
+    otherParticipant: displayContact,
+    participants: participantContacts,
+    participantCount: conversation.participantCount ?? participantContacts.length,
+    currentUserRole: conversation.currentUserRole ?? null,
+    currentUserStatus: conversation.currentUserStatus ?? conversation.status ?? null,
+    isPendingInvitation: Boolean(conversation.isPendingInvitation),
+    createdBy: conversation.createdBy ?? null,
+    unreadCount: conversation.unreadCount ?? 0,
+    pinned: false,
+    muted: false,
+    lastMessage,
+    lastMessageAt: conversation.lastMessageAt ?? lastMessage?.createdAt ?? conversation.updatedAt ?? conversation.createdAt,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+    messages: existingMessages,
+  };
+}
+
+  function getNormalizedConversationContacts(conversation) {
+    return conversation.participants.length
+      ? conversation.participants
+      : [conversation.otherParticipant];
   }
 
+  function mergeNormalizedConversationContacts(conversation) {
+    setContacts((previous) => mergeContacts(previous, getNormalizedConversationContacts(conversation)));
+  }
+
+  async function runChatAction(fallbackMessage, action, fallbackValue = null) {
+    setChatActionError("");
+
+    try {
+      return await action();
+    } catch (error) {
+      setChatActionError(error.message || fallbackMessage);
+      return fallbackValue;
+    }
+  }
   function mergeConversationList(previous, nextItems) {
     const previousById = new Map(previous.map((conversation) => [String(conversation.id), conversation]));
 
@@ -334,7 +433,7 @@ export function useChatApi() {
 
   function applyMessageResponseToConversation(messageResponse) {
     const message = normalizeMessage(messageResponse);
-    const lastMessage = {
+      const lastMessage = {
       id: message.id,
       senderId: message.senderId,
       contentPreview: getMessagePreview(message),
@@ -508,6 +607,32 @@ export function useChatApi() {
     }
   }
 
+
+  async function loadMessageReadReceipts(messageId, { force = false } = {}) {
+    if (!messageId) return [];
+
+    const key = String(messageId);
+    if (!force && readReceiptsByMessageId[key]) {
+      return readReceiptsByMessageId[key];
+    }
+
+    setLoadingReadReceiptsByMessageId((previous) => ({ ...previous, [key]: true }));
+
+    try {
+      const response = await getMessageReadReceipts(messageId);
+      const receipts = response?.items ?? [];
+      setReadReceiptsByMessageId((previous) => ({
+        ...previous,
+        [key]: receipts,
+      }));
+      return receipts;
+    } catch (error) {
+      setChatActionError(error.message || "Could not load read receipts.");
+      return [];
+    } finally {
+      setLoadingReadReceiptsByMessageId((previous) => ({ ...previous, [key]: false }));
+    }
+  }
   function clearTypingTimeout(conversationId) {
     const key = String(conversationId);
     const timeoutId = typingTimeoutsRef.current.get(key);
@@ -689,7 +814,7 @@ export function useChatApi() {
         const existing = conversations.find((item) => String(item.id) === String(conversation.id));
         return normalizeConversation(conversation, existing?.messages ?? []);
       });
-      const nextContacts = normalized.map((conversation) => conversation.otherParticipant);
+      const nextContacts = normalized.flatMap(getNormalizedConversationContacts);
 
       setContacts((previous) => mergeContacts(previous, nextContacts));
       setConversations((previous) =>
@@ -727,7 +852,7 @@ export function useChatApi() {
       );
       const normalizedConversation = normalizeConversation(conversationResponse, messages);
 
-      setContacts((previous) => mergeContacts(previous, [normalizedConversation.otherParticipant]));
+      mergeNormalizedConversationContacts(normalizedConversation);
       setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
       replaceConversationPins(conversationId, pinsResponse);
       setMessagePagingByConversation((previous) => ({
@@ -785,7 +910,7 @@ export function useChatApi() {
 
   function applyRealtimeMessage(messageResponse) {
     const message = normalizeMessage(messageResponse);
-    const lastMessage = {
+      const lastMessage = {
       id: message.id,
       senderId: message.senderId,
       contentPreview: getMessagePreview(message),
@@ -835,7 +960,7 @@ export function useChatApi() {
   }
 
   function applyRealtimeConversation(conversationResponse) {
-    setContacts((previous) => mergeContacts(previous, [toContact(conversationResponse.otherParticipant)]));
+    setContacts((previous) => mergeContacts(previous, getConversationContacts(conversationResponse)));
     setConversations((previous) => {
       const existing = previous.find(
         (conversation) => String(conversation.id) === String(conversationResponse.id),
@@ -926,7 +1051,7 @@ export function useChatApi() {
                   : message,
               );
 
-        const lastMessage =
+          const lastMessage =
           conversation.lastMessage && isSameId(conversation.lastMessage.id, lastReadMessageId)
             ? { ...conversation.lastMessage, status: "READ", readAt }
             : conversation.lastMessage;
@@ -1026,6 +1151,14 @@ export function useChatApi() {
 
     if (event.eventType === "conversation.updated" && event.data?.conversation) {
       applyRealtimeConversation(event.data.conversation);
+      return;
+    }
+
+    if (["group.created", "group.member.added", "group.member.removed", "group.updated"].includes(event.eventType)) {
+      const conversation = event.data?.conversation ?? event.data?.group;
+      if (conversation) {
+        applyRealtimeConversation(conversation);
+      }
       return;
     }
 
@@ -1147,23 +1280,40 @@ export function useChatApi() {
     }
   }
 
-  async function sendMessage(conversationId, content, { replyToMessageId = null } = {}) {
+  async function sendMessage(conversationId, content, { replyToMessageId = null, files = [] } = {}) {
     const trimmed = content.trim();
-    if (!trimmed) return null;
+    const selectedFiles = Array.from(files ?? []);
+    if (!trimmed && selectedFiles.length === 0) return null;
 
     setSendingByConversation((previous) => ({ ...previous, [conversationId]: true }));
+    setUploadProgressByConversation((previous) => ({ ...previous, [conversationId]: selectedFiles.length ? 0 : null }));
     setChatActionError("");
 
     try {
+      const attachments = [];
+
+      for (const file of selectedFiles) {
+        const uploaded = await uploadMessageAttachment(file, {
+          onProgress: (progress) => {
+            setUploadProgressByConversation((previous) => ({
+              ...previous,
+              [conversationId]: progress,
+            }));
+          },
+        });
+        attachments.push(uploaded);
+      }
+
       const response = await sendMessageApi({
         conversationId: Number(conversationId),
         clientMessageId: createClientId(),
-        content: trimmed,
-        messageType: "TEXT",
+        content: trimmed || null,
+        messageType: attachments.length ? "MEDIA" : "TEXT",
         replyToMessageId,
+        attachments,
       });
       const message = normalizeMessage(response);
-      const lastMessage = {
+        const lastMessage = {
         id: message.id,
         senderId: message.senderId,
         contentPreview: getMessagePreview(message),
@@ -1196,6 +1346,7 @@ export function useChatApi() {
       return null;
     } finally {
       setSendingByConversation((previous) => ({ ...previous, [conversationId]: false }));
+      setUploadProgressByConversation((previous) => ({ ...previous, [conversationId]: null }));
     }
   }
 
@@ -1310,7 +1461,7 @@ export function useChatApi() {
       const response = await createDirectConversation(Number(targetUserId));
       const normalizedConversation = normalizeConversation(response, []);
 
-      setContacts((previous) => mergeContacts(previous, [normalizedConversation.otherParticipant]));
+      mergeNormalizedConversationContacts(normalizedConversation);
       setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
       setMessagePagingByConversation((previous) => ({
         ...previous,
@@ -1326,11 +1477,120 @@ export function useChatApi() {
     }
   }
 
+
+  function applyConversationResponse(conversationResponse, existingMessages = null) {
+    const existing = conversations.find((item) => String(item.id) === String(conversationResponse.id));
+    const normalizedConversation = normalizeConversation(
+      conversationResponse,
+      existingMessages ?? existing?.messages ?? [],
+    );
+
+    mergeNormalizedConversationContacts(normalizedConversation);
+    setConversations((previous) => mergeConversationList(previous, [normalizedConversation]));
+    return normalizedConversation;
+  }
+
+  async function startGroupConversation({ name, avatarUrl = null, memberIds }) {
+    setIsStartingConversation(true);
+    setStartConversationError("");
+
+    try {
+      const response = await createGroupConversationApi({
+        name: name.trim(),
+        avatarUrl: avatarUrl?.trim() || null,
+        memberIds: memberIds.map(Number),
+      });
+      const normalizedConversation = applyConversationResponse(response, []);
+      setMessagePagingByConversation((previous) => ({
+        ...previous,
+        [normalizedConversation.id]: null,
+      }));
+      return normalizedConversation.id;
+    } catch (error) {
+      setStartConversationError(error.message || "Could not create group.");
+      return null;
+    } finally {
+      setIsStartingConversation(false);
+    }
+  }
+
+  async function addMembersToGroup(conversationId, memberIds) {
+    if (!conversationId || memberIds.length === 0) return null;
+
+    return runChatAction("Could not add group members.", async () => {
+      const response = await addGroupMembersApi(conversationId, memberIds.map(Number));
+      return applyConversationResponse(response);
+    });
+  }
+
+  async function acceptGroupInvitation(conversationId) {
+    if (!conversationId) return null;
+
+    return runChatAction("Could not accept invitation.", async () => {
+      const response = await acceptGroupInvitationApi(conversationId);
+      return applyConversationResponse(response);
+    });
+  }
+
+  async function rejectGroupInvitation(conversationId) {
+    if (!conversationId) return false;
+
+    return runChatAction("Could not reject invitation.", async () => {
+      await rejectGroupInvitationApi(conversationId);
+      setConversations((previous) => previous.filter((conversation) => !isSameId(conversation.id, conversationId)));
+      return true;
+    }, false);
+  }
+
+  async function updateGroup(conversationId, profile) {
+    if (!conversationId) return null;
+
+    return runChatAction("Could not update group.", async () => {
+      const response = await updateGroupProfileApi(conversationId, {
+        name: profile.name?.trim() || null,
+        avatarUrl: profile.avatarUrl?.trim() || null,
+      });
+      return applyConversationResponse(response);
+    });
+  }
+
+  async function updateGroupMemberRole(conversationId, memberId, role) {
+    if (!conversationId || !memberId || !role) return null;
+
+    return runChatAction("Could not update member role.", async () => {
+      const response = await updateGroupMemberRoleApi(conversationId, memberId, role);
+      return applyConversationResponse(response);
+    });
+  }
+
+  async function removeMemberFromGroup(conversationId, memberId) {
+    if (!conversationId || !memberId) return null;
+
+    return runChatAction("Could not remove member.", async () => {
+      const response = await removeGroupMemberApi(conversationId, memberId);
+      return applyConversationResponse(response);
+    });
+  }
+
+  async function leaveCurrentGroup(conversationId) {
+    if (!conversationId) return false;
+
+    return runChatAction("Could not leave group.", async () => {
+      await leaveGroupApi(conversationId);
+      setConversations((previous) => previous.filter((conversation) => !isSameId(conversation.id, conversationId)));
+      return true;
+    }, false);
+  }
+
   async function updateProfile(nextProfile) {
+    const displayName = nextProfile.displayName?.trim();
+    const avatarUrl = nextProfile.avatarUrl?.trim();
+    const bio = nextProfile.bio?.trim();
     const user = await updateMe({
-      displayName: nextProfile.displayName?.trim() || null,
-      avatarUrl: nextProfile.avatarUrl?.trim() ?? currentUser.avatarUrl ?? null,
-      bio: nextProfile.bio?.trim() || null,
+      displayName: displayName || null,
+      // The backend normalizes an empty string to null, which lets the user clear these fields.
+      avatarUrl: avatarUrl ?? null,
+      bio: bio ?? null,
     });
 
     setCurrentUser(toCurrentUser(user));
@@ -1417,6 +1677,8 @@ export function useChatApi() {
     authMessage,
     authStatus,
     contacts,
+    acceptGroupInvitation,
+    addMembersToGroup,
     chatActionError,
     clearUserSearch,
     conversations,
@@ -1435,17 +1697,24 @@ export function useChatApi() {
     isLoadingSelectedConversation,
     isSendingMessage,
     isStartingConversation,
+    leaveCurrentGroup,
     loadConversation,
     loadConversations,
     loadMessageReactions,
+    loadMessageReadReceipts,
     loadMoreMessages,
     markConversationRead,
+    readReceiptsByMessageId,
+    loadingReadReceiptsByMessageId,
     realtimeError,
     realtimeStatus,
     sendMessage,
+    rejectGroupInvitation,
+    removeMemberFromGroup,
     searchUsers,
     startConversation,
     startConversationError,
+    startGroupConversation,
     stats,
     isAuthenticated: authStatus === "authenticated" && Boolean(authSession),
     isAuthLoading: authStatus === "checking",
@@ -1457,9 +1726,12 @@ export function useChatApi() {
     toggleMessageReaction,
     toggleMessagePin,
     typingByConversation,
+    updateGroup,
+    updateGroupMemberRole,
     updateProfile,
     getMessageError,
     reactionsByMessageId,
+    uploadProgressByConversation,
     userSearchError,
     userSearchResults,
   };
