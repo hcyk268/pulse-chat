@@ -4,6 +4,7 @@ import ChatPage from "../pages/ChatPage";
 import LoginPage from "../pages/LoginPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import RegisterPage from "../pages/RegisterPage";
+import SettingsPage from "../pages/SettingsPage";
 
 const publicRoutes = [
   { path: "/login", element: <LoginPage /> },
@@ -13,6 +14,7 @@ const publicRoutes = [
 const protectedRoutes = [
   { path: "/chat", element: <ChatPage /> },
   { path: "/chat/:conversationId", element: <ChatPage /> },
+  { path: "/settings", element: <SettingsPage /> },
   { path: "/profile", element: <Navigate to="/chat" replace /> },
 ];
 

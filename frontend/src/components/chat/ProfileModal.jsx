@@ -135,7 +135,7 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
 
   return (
     <div
-      className="sheet-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm"
+      className="sheet-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 backdrop-blur-sm sm:p-5"
       onClick={(event) => {
         if (event.target === event.currentTarget && !isSaving) onClose();
       }}
@@ -144,16 +144,16 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
         aria-labelledby="profile-modal-title"
         aria-modal="true"
         role="dialog"
-        className="profile-modal-panel w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-[#111827] shadow-panel"
+        className="profile-modal-panel flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[34rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#111827] shadow-panel sm:max-h-[calc(100dvh-2.5rem)]"
       >
-        <header className="relative overflow-hidden border-b border-white/5 px-5 pb-5 pt-5 sm:px-6">
+        <header className="relative shrink-0 overflow-hidden border-b border-white/5 px-4 py-4 sm:px-5">
           <div className="absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.28),transparent_68%)]" />
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <Avatar user={previewUser} size="lg" />
+              <Avatar user={previewUser} size="md" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-300">Your account</p>
-                <h2 id="profile-modal-title" className="mt-1 truncate text-xl font-bold text-white">
+                <h2 id="profile-modal-title" className="mt-0.5 truncate text-lg font-bold text-white">
                   {previewUser.displayName}
                 </h2>
                 <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
@@ -166,7 +166,8 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
           </div>
         </header>
 
-        <form onSubmit={handleSubmit} className="space-y-4 p-5 sm:p-6">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="profile-modal-body min-h-0 flex-1 space-y-3.5 overflow-y-auto overscroll-contain p-4 sm:p-5">
           <label className="block">
             <span className="text-sm font-medium text-slate-200">Display name</span>
             <ProfileInput
@@ -180,7 +181,7 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
 
           <div>
             <span className="text-sm font-medium text-slate-200">Avatar</span>
-            <div className="mt-2 flex items-center gap-3 rounded-2xl border border-dashed border-indigo-300/20 bg-indigo-500/[0.035] p-3.5">
+            <div className="mt-2 flex items-center gap-3 rounded-2xl border border-dashed border-indigo-300/20 bg-indigo-500/[0.035] p-3">
               <Avatar user={previewUser} size="md" />
               <div className="min-w-0 flex-1">
                 <input
@@ -225,7 +226,7 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
           <label className="block">
             <span className="text-sm font-medium text-slate-200">Bio</span>
             <textarea
-              className="field-shell mt-2 min-h-28 w-full resize-y rounded-xl border border-white/5 bg-[#1e293b] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500"
+              className="field-shell mt-2 min-h-24 w-full resize-y rounded-xl border border-white/5 bg-[#1e293b] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500"
               maxLength={500}
               onChange={(event) => updateField("bio", event.target.value)}
               placeholder="Add a short status or introduction"
@@ -247,10 +248,11 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
               Profile updated.
             </div>
           ) : null}
+          </div>
 
-          <div className="flex flex-col-reverse gap-3 border-t border-white/5 pt-5 sm:flex-row sm:justify-end">
+          <div className="profile-modal-footer flex shrink-0 flex-col-reverse gap-2 border-t border-white/5 bg-[#111827]/98 px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
             <button
-              className="press rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:text-slate-600"
+              className="press min-h-10 rounded-xl px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:text-slate-600"
               disabled={isSaving}
               onClick={onClose}
               type="button"
@@ -258,7 +260,7 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
               Cancel
             </button>
             <button
-              className="send-button flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-send hover:shadow-send-hover disabled:cursor-not-allowed disabled:bg-slate-800 disabled:bg-none disabled:text-slate-500 disabled:shadow-none"
+              className="send-button flex min-h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-send hover:shadow-send-hover disabled:cursor-not-allowed disabled:bg-slate-800 disabled:bg-none disabled:text-slate-500 disabled:shadow-none"
               disabled={isSaving}
               type="submit"
             >
@@ -274,7 +276,7 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
 
 const ProfileInput = forwardRef(function ProfileInput({ icon: Icon, onChange, ...inputProps }, ref) {
   return (
-    <span className="field-shell mt-2 flex items-center gap-3 rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-3">
+    <span className="field-shell mt-2 flex items-center gap-3 rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-2.5">
       <Icon aria-hidden="true" size={17} className="shrink-0 text-slate-500" />
       <input
         {...inputProps}
@@ -290,7 +292,7 @@ function ReadOnlyField({ icon: Icon, label, value }) {
   return (
     <div>
       <p className="text-sm font-medium text-slate-400">{label}</p>
-      <div className="mt-2 flex min-w-0 items-center gap-3 rounded-xl border border-white/5 bg-slate-900/40 px-3.5 py-3 text-sm text-slate-500">
+      <div className="mt-2 flex min-w-0 items-center gap-3 rounded-xl border border-white/5 bg-slate-900/40 px-3.5 py-2.5 text-sm text-slate-500">
         <Icon aria-hidden="true" size={17} className="shrink-0" />
         <span className="truncate">{value}</span>
       </div>

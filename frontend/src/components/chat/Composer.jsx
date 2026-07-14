@@ -1,5 +1,6 @@
 import { File, Image as ImageIcon, Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { formatFileSize } from "../../utils/formatters";
 
 const EMOJI_OPTIONS = ["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F60E}", "\u{1F44D}", "\u{1F64F}", "\u{1F525}", "\u{1F389}", "\u2764\uFE0F", "\u2728"];
@@ -21,6 +22,7 @@ export default function Composer({
   replyToMessage = null,
   uploadProgress = null,
 }) {
+  const { settings } = useAppSettings();
   const [value, setValue] = useState("");
   const [files, setFiles] = useState([]);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
@@ -122,10 +124,13 @@ export default function Composer({
   }
 
   function handleKeyDown(event) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    }
+    if (event.key !== "Enter" || event.shiftKey) return;
+
+    const shouldSend = settings.enterToSend || event.ctrlKey || event.metaKey;
+    if (!shouldSend) return;
+
+    event.preventDefault();
+    submit();
   }
 
   function addEmoji(emoji) {
@@ -148,7 +153,7 @@ export default function Composer({
   const isUploading = typeof uploadProgress === "number";
 
   return (
-    <div className="relative border-t border-white/[0.04] bg-[#111827]/95 px-3 py-3 backdrop-blur-xl">
+    <div className="chat-composer relative border-t border-white/[0.04] bg-[#111827]/95 px-3 py-3 backdrop-blur-xl">
       <div className="pointer-events-none absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
 
       <div className="mx-auto max-w-4xl">
@@ -227,6 +232,7 @@ export default function Composer({
               <Paperclip size={18} />
             </button>
             <textarea
+              aria-label="Message"
               ref={textareaRef}
               value={value}
               onChange={handleChange}

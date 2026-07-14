@@ -1,5 +1,6 @@
 import { Check, Search, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { formatPresence } from "../../utils/formatters";
 import { PeopleSearchAsset } from "../assets/MicroAssets";
@@ -17,6 +18,7 @@ export default function ContactPanel({
   searchError = "",
   searchResults = [],
 }) {
+  const { settings } = useAppSettings();
   const [mode, setMode] = useState("direct");
   const [query, setQuery] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -172,7 +174,7 @@ export default function ContactPanel({
                         contact?.presence?.isOnline ? "text-indigo-400" : "text-slate-600",
                       ].join(" ")}
                     >
-                      {formatPresence(contact.presence)}
+                      {settings.showOnlineStatus ? formatPresence(contact.presence) : "Pulse member"}
                     </p>
                   </div>
                 </button>
