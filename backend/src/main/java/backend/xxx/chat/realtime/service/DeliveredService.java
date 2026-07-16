@@ -38,7 +38,7 @@ public class DeliveredService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
         List<ConversationParticipant> participants =

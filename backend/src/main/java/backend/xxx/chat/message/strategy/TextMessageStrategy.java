@@ -24,7 +24,7 @@ public class TextMessageStrategy implements MessageTypeStrategy {
             Message replyToMessage
     ) {
         if (request.attachments() != null && !request.attachments().isEmpty()) {
-            throw new ValidationException("Text message does not support attachments");
+            throw new ValidationException("message.text.attachments.unsupported");
         }
 
         return Message.createTextMessage(

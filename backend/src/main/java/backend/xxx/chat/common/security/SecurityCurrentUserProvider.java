@@ -16,7 +16,7 @@ public class SecurityCurrentUserProvider implements CurrentUserProvider {
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || authentication instanceof AnonymousAuthenticationToken) {
-            throw new UnauthorizedException("Unauthorized");
+            throw new UnauthorizedException("auth.unauthorized");
         }
 
         return authentication.getName();

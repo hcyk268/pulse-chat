@@ -74,7 +74,7 @@ public class AuthService {
 
         String username = authentication.getName();
         User user = userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new UnauthorizedException("Invalid username/email or password"));
+                .orElseThrow(() -> new UnauthorizedException("auth.invalid.credentials"));
 
         assertAccountStatus(user);
         return toAuthResponse(user);

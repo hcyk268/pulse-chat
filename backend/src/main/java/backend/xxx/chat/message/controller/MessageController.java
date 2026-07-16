@@ -32,23 +32,23 @@ public class MessageController {
             @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
             @RequestParam(name = "cursor", required = false) String cursor
     ) {
-        return new ResponseData<>(true, "Get message history successfully", messageService.getHistory(currentUserProvider.getCurrentUsername(), conversationId, limit, cursor));
+        return new ResponseData<>(true, "message.history.success", messageService.getHistory(currentUserProvider.getCurrentUsername(), conversationId, limit, cursor));
     }
 
     @PostMapping()
     public ResponseEntity<ResponseData<MessageResponse>> sendMessage(@Valid @RequestBody SendMessageRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ResponseData<>(true, "Send message successfully", messageService.sendMessage(currentUserProvider.getCurrentUsername(), request)));
+                .body(new ResponseData<>(true, "message.send.success", messageService.sendMessage(currentUserProvider.getCurrentUsername(), request)));
     }
 
     @PostMapping("/read")
     public ResponseData<MarkReadResponse> readMessage(@Valid @RequestBody MarkReadRequest request) {
-        return new ResponseData<>(true, "Read message successfully", messageService.readMessage(currentUserProvider.getCurrentUsername(), request));
+        return new ResponseData<>(true, "message.read.success", messageService.readMessage(currentUserProvider.getCurrentUsername(), request));
     }
 
     @GetMapping("/{messageId}/reads")
     public ResponseData<MessageReadReceiptsResponse> getReadReceipts(@Positive @PathVariable Long messageId) {
-        return new ResponseData<>(true, "Get message read receipts successfully", messageService.getReadReceipts(
+        return new ResponseData<>(true, "message.read.receipts.success", messageService.getReadReceipts(
                 currentUserProvider.getCurrentUsername(),
                 messageId
         ));
@@ -60,13 +60,13 @@ public class MessageController {
                 messageService.pinMessage(currentUserProvider.getCurrentUsername(), messageId);
 
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        String message = result.created() ? "Pin message successfully" : "Message already pinned";
+        String message = result.created() ? "message.pin.success" : "message.pin.already";
         return ResponseEntity.status(status).body(new ResponseData<>(true, message, result.response()));
     }
 
     @DeleteMapping("/{messageId}/pin")
     public ResponseData<UnPinMessageResponse> unPinMessage(@Positive @PathVariable Long messageId) {
-        return new ResponseData<>(true, "Unpin message successfully", messageService.unPinMessage(currentUserProvider.getCurrentUsername(), messageId));
+        return new ResponseData<>(true, "message.unpin.success", messageService.unPinMessage(currentUserProvider.getCurrentUsername(), messageId));
     }
 
     @PostMapping("/{messageId}/reactions")
@@ -81,7 +81,7 @@ public class MessageController {
         );
 
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        String message = result.created() ? "React message successfully" : "Update message reaction successfully";
+        String message = result.created() ? "message.reaction.add.success" : "message.reaction.update.success";
         return ResponseEntity.status(status).body(new ResponseData<>(true, message, result.response()));
     }
 
@@ -95,12 +95,12 @@ public class MessageController {
                 messageId,
                 emoji
         );
-        return new ResponseData<>(true, "Remove message reaction successfully");
+        return new ResponseData<>(true, "message.reaction.remove.success");
     }
 
     @GetMapping("/{messageId}/reactions")
     public ResponseData<MessageReactionsResponse> getReactions(@Positive @PathVariable Long messageId) {
-        return new ResponseData<>(true, "Get message reactions successfully", messageReactionService.getReactions(
+        return new ResponseData<>(true, "message.reaction.list.success", messageReactionService.getReactions(
                 currentUserProvider.getCurrentUsername(),
                 messageId
         ));
@@ -111,11 +111,11 @@ public class MessageController {
             @Positive @PathVariable Long messageId,
             @Valid @RequestBody EditMessageRequest request
     ) {
-        return new ResponseData<>(true, "Edit message successfully", messageService.editMessage(currentUserProvider.getCurrentUsername(), messageId, request));
+        return new ResponseData<>(true, "message.edit.success", messageService.editMessage(currentUserProvider.getCurrentUsername(), messageId, request));
     }
 
     @DeleteMapping("/{messageId}")
     public ResponseData<MessageResponse> deleteMessage(@Positive @PathVariable Long messageId) {
-        return new ResponseData<>(true, "Delete message successfully", messageService.deleteMessage(currentUserProvider.getCurrentUsername(), messageId));
+        return new ResponseData<>(true, "message.delete.success", messageService.deleteMessage(currentUserProvider.getCurrentUsername(), messageId));
     }
 }

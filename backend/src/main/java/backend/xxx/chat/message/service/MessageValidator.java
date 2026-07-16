@@ -1,6 +1,7 @@
 package backend.xxx.chat.message.service;
 
 import backend.xxx.chat.common.exception.ConflictException;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.message.dto.EditMessageRequest;
 import backend.xxx.chat.message.dto.MessageCursor;
@@ -17,7 +18,7 @@ public class MessageValidator {
         int pageLimit = limit == null ? defaultLimit : limit;
 
         if (pageLimit < 1 || pageLimit > maxLimit) {
-            throw new ValidationException("limit must be between 1 and " + maxLimit);
+            throw new ValidationException(Translator.toLocale("validation.limit.range", maxLimit));
         }
 
         return pageLimit;
@@ -25,13 +26,13 @@ public class MessageValidator {
 
     public void validateMessageCursor(MessageCursor messageCursor) {
         if (messageCursor != null && (messageCursor.createdAt() == null || messageCursor.messageId() == null)) {
-            throw new ValidationException("Invalid message cursor");
+            throw new ValidationException("message.cursor.invalid");
         }
     }
 
     public void validateMessageId(Long messageId) {
         if (messageId == null) {
-            throw new ValidationException("messageId must not be null");
+            throw new ValidationException("message.id.required");
         }
     }
 
@@ -39,19 +40,19 @@ public class MessageValidator {
         validateMessageId(messageId);
 
         if (request == null || request.newContent() == null || request.newContent().trim().isEmpty()) {
-            throw new ValidationException("newContent must not be blank");
+            throw new ValidationException("message.content.edit.blank");
         }
     }
 
     public void validateCanEditMessage(Message message, EditMessageRequest request) {
-        validateNotDeleted(message, "Deleted message cannot be edited");
+        validateNotDeleted(message, "message.deleted.cannot.edit");
 
         if (request.type() != null && request.type() != message.getMessageType()) {
-            throw new ValidationException("message type cannot be changed");
+            throw new ValidationException("message.type.change.not.allowed");
         }
 
         if (message.getMessageType() != MessageType.TEXT) {
-            throw new ValidationException("Only text message can be edited");
+            throw new ValidationException("message.text.only.editable");
         }
     }
 
@@ -60,26 +61,26 @@ public class MessageValidator {
     }
 
     public void validateCanPinMessage(Message message, long pinnedCount, int maxPinsPerConversation) {
-        validateNotDeleted(message, "Deleted message cannot be pinned");
+        validateNotDeleted(message, "message.deleted.cannot.pin");
 
         if (pinnedCount >= maxPinsPerConversation) {
-            throw new ConflictException("Conversation can only have " + maxPinsPerConversation + " pinned messages");
+            throw new ConflictException(Translator.toLocale("conversation.pinned.limit.exceeded", maxPinsPerConversation));
         }
     }
 
     public void validateReplyToMessage(Message replyToMessage, Long conversationId) {
         if (!replyToMessage.getConversation().getId().equals(conversationId)) {
-            throw new ValidationException("Reply message must belong to the same conversation");
+            throw new ValidationException("message.reply.conversation.mismatch");
         }
 
-        validateNotDeleted(replyToMessage, "Deleted message cannot be replied");
+        validateNotDeleted(replyToMessage, "message.deleted.cannot.reply");
     }
 
     public void validateReactionRequest(Long messageId, MessageReactionRequest request) {
         validateMessageId(messageId);
 
         if (request == null || request.emoji() == null) {
-            throw new ValidationException("emoji must not be null");
+            throw new ValidationException("message.reaction.emoji.required");
         }
     }
 
@@ -87,17 +88,17 @@ public class MessageValidator {
         validateMessageId(messageId);
 
         if (emoji == null) {
-            throw new ValidationException("emoji must not be null");
+            throw new ValidationException("message.reaction.emoji.required");
         }
     }
 
     public void validateCanReact(Message message) {
-        validateNotDeleted(message, "Deleted message cannot be reacted");
+        validateNotDeleted(message, "message.deleted.cannot.react");
     }
 
     public void validateDeliveredRequest(String username, Long messageId) {
         if (username == null) {
-            throw new ValidationException("Username must not be null");
+            throw new ValidationException("message.delivered.username.required");
         }
 
         validateMessageId(messageId);

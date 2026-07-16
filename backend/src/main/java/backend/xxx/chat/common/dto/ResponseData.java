@@ -1,6 +1,7 @@
 package backend.xxx.chat.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import backend.xxx.chat.common.web.Translator;
 import lombok.Getter;
 
 @Getter
@@ -12,12 +13,12 @@ public class ResponseData<T> {
 
     public ResponseData(boolean success, String message, T data) {
         this.success = success;
-        this.message = message;
+        this.message = Translator.toLocale(message);
         this.data = data;
     }
 
     public ResponseData(boolean success, String message) {
         this.success = success;
-        this.message = message;
+        this.message = Translator.toLocale(message);
     }
 }

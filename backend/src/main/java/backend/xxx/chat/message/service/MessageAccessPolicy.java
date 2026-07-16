@@ -24,11 +24,11 @@ public class MessageAccessPolicy {
 
     private boolean isSender(Message message, User user) {
         if (message == null || message.getSender() == null || message.getSender().getId() == null) {
-            throw new ValidationException("message sender must not be null");
+            throw new ValidationException("message.sender.required");
         }
 
         if (user == null || user.getId() == null) {
-            throw new ValidationException("userId must not be null");
+            throw new ValidationException("user.id.required");
         }
 
         return message.getSender().getId().equals(user.getId());

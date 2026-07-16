@@ -22,7 +22,7 @@ public class ConversationAccessPolicy {
     public ConversationParticipant requireOwner(Long conversationId, Long userId) {
         ConversationParticipant participant = requireActiveMember(conversationId, userId);
         if (participant.getRole() != ParticipantRole.OWNER) {
-            throw new ForbiddenException("Only group owner can perform this action");
+            throw new ForbiddenException("conversation.owner.only");
         }
         return participant;
     }
@@ -30,7 +30,7 @@ public class ConversationAccessPolicy {
     public ConversationParticipant requireActiveMember(Long conversationId, Long userId) {
         ConversationParticipant participant = requireParticipant(conversationId, userId);
         if (!participant.isActive()) {
-            throw new ForbiddenException("You are not an active member of this group");
+            throw new ForbiddenException("conversation.active.member.required");
         }
         return participant;
     }
@@ -39,7 +39,7 @@ public class ConversationAccessPolicy {
         Conversation conversation = requireConversation(conversationId);
 
         if (conversation.getType() != ConversationType.GROUP) {
-            throw new ValidationException("Conversation is not a group");
+            throw new ValidationException("conversation.not.group");
         }
 
         return conversation;
@@ -47,7 +47,7 @@ public class ConversationAccessPolicy {
 
     public Conversation requireConversation(Long conversationId) {
         return conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
     }
 
     public List<ConversationParticipant> requireParticipants(Long conversationId) {
@@ -57,7 +57,7 @@ public class ConversationAccessPolicy {
                 conversationParticipantRepository.findByConversationIdWithUser(conversationId);
 
         if (participants.isEmpty() && !conversationRepository.existsById(conversationId)) {
-            throw new NotFoundException("Conversation not found");
+            throw new NotFoundException("conversation.not.found");
         }
 
         return participants;
@@ -66,7 +66,7 @@ public class ConversationAccessPolicy {
     public ConversationParticipant requireParticipant(Long conversationId, Long userId) {
         validateConversationId(conversationId);
         if (userId == null) {
-            throw new ValidationException("userId must not be null");
+            throw new ValidationException("user.id.required");
         }
 
         return conversationParticipantRepository.findById(
@@ -74,7 +74,7 @@ public class ConversationAccessPolicy {
                 )
                 .orElseThrow(() -> {
                     if (!conversationRepository.existsById(conversationId)) {
-                        return new NotFoundException("Conversation not found");
+                        return new NotFoundException("conversation.not.found");
                     }
                     return new ForbiddenException("You are not allowed to access this conversation");
                 });

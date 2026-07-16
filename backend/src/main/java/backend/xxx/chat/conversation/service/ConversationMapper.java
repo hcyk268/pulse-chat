@@ -38,7 +38,7 @@ public class ConversationMapper {
         ConversationParticipant currentParticipant = participants.stream()
                 .filter(participant -> participant.getUser().getId().equals(currentUser.getId()))
                 .findFirst()
-                .orElseThrow(() -> new NotFoundException("Current participant not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.participant.current.not.found"));
 
         List<ConversationParticipantResponse> participantResponses = participants.stream()
                 .sorted(Comparator.comparing(participant -> participant.getUser().getId()))
@@ -71,7 +71,7 @@ public class ConversationMapper {
         ConversationParticipant currentParticipant = participants.stream()
                 .filter(participant -> participant.getUser().getId().equals(currentUser.getId()))
                 .findFirst()
-                .orElseThrow(() -> new NotFoundException("Current participant not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.participant.current.not.found"));
 
         List<ConversationParticipant> activeParticipants = participants.stream()
                 .filter(ConversationParticipant::isActive)

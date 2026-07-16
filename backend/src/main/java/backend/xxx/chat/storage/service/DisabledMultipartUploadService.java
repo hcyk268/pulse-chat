@@ -45,6 +45,6 @@ public class DisabledMultipartUploadService implements MultipartUploadService {
     }
 
     private ServiceUnavailableException unavailable() {
-        return new ServiceUnavailableException("Object storage is not configured");
+        return new ServiceUnavailableException("storage.object.not.configured");
     }
 }

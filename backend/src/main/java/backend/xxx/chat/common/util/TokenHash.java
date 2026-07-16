@@ -21,7 +21,7 @@ public class TokenHash {
 
     public String hashRefreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new IllegalArgumentException("Refresh Token must not be blank");
+            throw new IllegalArgumentException("auth.refresh.token.blank");
         }
 
         try {
@@ -36,7 +36,7 @@ public class TokenHash {
             byte[] hash = mac.doFinal(refreshToken.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to hash refresh token", ex);
+            throw new IllegalStateException("token.refresh.hash.failed", ex);
         }
     }
 }

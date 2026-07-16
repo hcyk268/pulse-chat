@@ -188,7 +188,7 @@ public class CloudflareR2MultipartUploadService implements MultipartUploadServic
 
         List<UploadPart> parts = uploadPartRepository.findByUploadSessionIdOrderByPartNumberAsc(session.getId());
         if (parts.size() != session.getTotalParts()) {
-            throw new ConflictException("Upload is missing one or more parts");
+            throw new ConflictException("storage.upload.parts.missing");
         }
 
         List<CompletedPart> completedParts = parts.stream()
@@ -213,7 +213,7 @@ public class CloudflareR2MultipartUploadService implements MultipartUploadServic
                 .build());
         if (head.contentLength() != null && !head.contentLength().equals(session.getSizeBytes())) {
             session.markFailed();
-            throw new ConflictException("Uploaded object size does not match expected size");
+            throw new ConflictException("storage.upload.size.mismatch");
         }
 
         session.markCompleted(Instant.now());
@@ -235,7 +235,7 @@ public class CloudflareR2MultipartUploadService implements MultipartUploadServic
         UploadSession session = storageValidator.requireOwnedSessionForUpdate(sessionId, currentUser.getId());
 
         if (session.getStatus() == UploadSessionStatus.ATTACHED || session.getStatus() == UploadSessionStatus.VERIFIED) {
-            throw new ConflictException("Completed upload cannot be aborted");
+            throw new ConflictException("storage.upload.abort.not.allowed");
         }
 
         s3Client.abortMultipartUpload(AbortMultipartUploadRequest.builder()
@@ -267,7 +267,7 @@ public class CloudflareR2MultipartUploadService implements MultipartUploadServic
     private int calculateTotalParts(Long fileSizeBytes, long chunkSizeBytes) {
         long totalParts = (fileSizeBytes + chunkSizeBytes - 1) / chunkSizeBytes;
         if (totalParts > MAX_PARTS) {
-            throw new ValidationException("file requires too many upload parts");
+            throw new ValidationException("storage.upload.parts.too.many");
         }
         return (int) totalParts;
     }

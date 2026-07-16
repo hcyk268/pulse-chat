@@ -66,13 +66,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        throw new AccessDeniedException("STOMP command is not allowed");
+        throw new AccessDeniedException("stomp.command.not.allowed");
     }
 
     private Message<?> authenticateConnect(Message<?> message, StompHeaderAccessor accessor) {
         String authorization = accessor.getFirstNativeHeader(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
-            throw new AccessDeniedException("Missing access token");
+            throw new AccessDeniedException("auth.access.token.missing");
         }
 
         String token = authorization.substring(BEARER_PREFIX.length());
@@ -80,7 +80,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
         if (!jwtService.isAccessTokenValid(token, userDetails)) {
-            throw new AccessDeniedException("Invalid access token");
+            throw new AccessDeniedException("auth.access.token.invalid");
         }
 
         UsernamePasswordAuthenticationToken authentication =
@@ -97,19 +97,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private void requireAuthenticated(StompHeaderAccessor accessor) {
         Principal user = accessor.getUser();
         if (!(user instanceof Authentication authentication) || !authentication.isAuthenticated()) {
-            throw new AccessDeniedException("Unauthorized STOMP frame");
+            throw new AccessDeniedException("stomp.frame.unauthorized");
         }
     }
 
     private void assertAllowedSendDestination(String destination) {
         if (destination == null || !destination.startsWith(APPLICATION_DESTINATION_PREFIX)) {
-            throw new AccessDeniedException("SEND destination is not allowed");
+            throw new AccessDeniedException("stomp.destination.send.not.allowed");
         }
     }
 
     private void assertAllowedSubscribeDestination(String destination) {
         if (!ALLOWED_USER_SUBSCRIPTION_DESTINATIONS.contains(destination)) {
-            throw new AccessDeniedException("SUBSCRIBE destination is not allowed");
+            throw new AccessDeniedException("stomp.destination.subscribe.not.allowed");
         }
     }
 }

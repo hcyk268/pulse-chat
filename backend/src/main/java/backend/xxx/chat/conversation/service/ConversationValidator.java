@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 
 import backend.xxx.chat.common.exception.ConflictException;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.conversation.dto.ConversationCursor;
@@ -19,11 +20,11 @@ public class ConversationValidator {
 
     public void validateDirectConversationTarget(User currentUser, User targetUser) {
         if (currentUser.getId().equals(targetUser.getId())) {
-            throw new ValidationException("targetUserId must not be the current user");
+            throw new ValidationException("conversation.target.self.not.allowed");
         }
 
         if (targetUser.getAccountStatus() != AccountStatus.ACTIVE) {
-            throw new ValidationException("Target user is not active");
+            throw new ValidationException("conversation.target.user.inactive");
         }
     }
 
@@ -34,11 +35,11 @@ public class ConversationValidator {
     ) {
         Set<Long> distinctMemberIds = new LinkedHashSet<>(memberIds == null ? List.of() : memberIds);
         if (distinctMemberIds.contains(currentUserId)) {
-            throw new ValidationException("memberIds must not contain the current user");
+            throw new ValidationException("conversation.member.ids.self.not.allowed");
         }
 
         if (distinctMemberIds.size() < minDistinctMembers) {
-            throw new ValidationException("memberIds must contain at least " + minDistinctMembers + " distinct users");
+            throw new ValidationException(Translator.toLocale("conversation.member.ids.min.distinct", minDistinctMembers));
         }
 
         return distinctMemberIds;
@@ -46,37 +47,37 @@ public class ConversationValidator {
 
     public void validateResolvedInvitees(Set<Long> memberIds, List<User> users) {
         if (users.size() != memberIds.size()) {
-            throw new NotFoundException("One or more users not found");
+            throw new NotFoundException("conversation.members.not.found");
         }
 
         users.forEach(user -> {
             if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-                throw new ValidationException("All group members must be active users");
+                throw new ValidationException("conversation.group.members.inactive");
             }
         });
     }
 
     public void validateCanInviteParticipant(ConversationParticipant participant) {
         if (participant != null && (participant.isActive() || participant.isPending())) {
-            throw new ConflictException("User is already a member or has a pending invitation");
+            throw new ConflictException("conversation.group.invitation.exists");
         }
     }
 
     public void validatePendingInvitation(ConversationParticipant participant) {
         if (!participant.isPending()) {
-            throw new ConflictException("No pending group invitation found");
+            throw new ConflictException("conversation.group.invitation.not.found");
         }
     }
 
     public void validateOwnerCannotRemoveSelf(Long currentUserId, Long memberId) {
         if (currentUserId.equals(memberId)) {
-            throw new ValidationException("Owner must use leave group instead of remove member");
+            throw new ValidationException("conversation.group.leave.required");
         }
     }
 
     public void validateMemberNotLeft(ConversationParticipant participant) {
         if (participant.isLeft()) {
-            throw new ConflictException("Member already left this group");
+            throw new ConflictException("conversation.member.left.already");
         }
     }
 
@@ -88,14 +89,14 @@ public class ConversationValidator {
         if (currentRole == ParticipantRole.OWNER
                 && newRole == ParticipantRole.MEMBER
                 && !hasAnotherActiveOwner) {
-            throw new ConflictException("Group must have at least one owner");
+            throw new ConflictException("conversation.owner.required");
         }
     }
 
     public String normalizeRequiredGroupName(String name) {
         String normalized = normalizeOptionalText(name);
         if (normalized == null) {
-            throw new ValidationException("Group name must not be blank");
+            throw new ValidationException("conversation.name.blank");
         }
         return normalized;
     }
@@ -111,7 +112,7 @@ public class ConversationValidator {
     public void validateConversationCursor(ConversationCursor conversationCursor) {
         if (conversationCursor != null
                 && (conversationCursor.cursorAt() == null || conversationCursor.conversationId() == null)) {
-            throw new ValidationException("Invalid conversation cursor");
+            throw new ValidationException("conversation.cursor.invalid");
         }
     }
 
@@ -119,7 +120,7 @@ public class ConversationValidator {
         int pageLimit = limit == null ? defaultLimit : limit;
 
         if (pageLimit < 1 || pageLimit > maxLimit) {
-            throw new ValidationException("limit must be between 1 and " + maxLimit);
+            throw new ValidationException(Translator.toLocale("validation.limit.range", maxLimit));
         }
 
         return pageLimit;

@@ -6,15 +6,15 @@ import jakarta.validation.constraints.Size;
 
 public record UpdateMyProfileRequest(
         @Size(max = 100)
-        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "displayName must not contain HTML tags")
+        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "user.display-name.no-html")
         String displayName,
 
         @Size(max = 500)
-        @Pattern(regexp = InputValidationPatterns.OPTIONAL_HTTP_URL, message = "avatarUrl must start with http:// or https://")
+        @Pattern(regexp = InputValidationPatterns.OPTIONAL_HTTP_URL, message = "user.avatar-url.invalid")
         String avatarUrl,
 
         @Size(max = 500)
-        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "bio must not contain HTML tags")
+        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "user.bio.no-html")
         String bio
 ) {
 }

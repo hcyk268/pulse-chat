@@ -27,24 +27,24 @@ public class AuthController {
     @RateLimit(action = "register", maxRequests = 5, timeWindow = 300)
     public ResponseEntity<ResponseData<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ResponseData<>(true, "Register successfully", authService.register(request)));
+                .body(new ResponseData<>(true, "auth.register.success", authService.register(request)));
     }
 
     @PostMapping("/login")
     @RateLimit(action = "login", maxRequests = 5, timeWindow = 60)
     public ResponseData<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return new ResponseData<>(true, "Login successfully", authService.login(request));
+        return new ResponseData<>(true, "auth.login.success", authService.login(request));
     }
 
     @PostMapping("/refresh")
     @RateLimit(action = "refresh", maxRequests = 10, timeWindow = 60)
     public ResponseData<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return new ResponseData<>(true, "Refresh token successfully", authService.refresh(request));
+        return new ResponseData<>(true, "auth.refresh.success", authService.refresh(request));
     }
 
     @PostMapping("/logout")
     public ResponseData<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request);
-        return new ResponseData<>(true, "Logout successfully");
+        return new ResponseData<>(true, "auth.logout.success");
     }
 }

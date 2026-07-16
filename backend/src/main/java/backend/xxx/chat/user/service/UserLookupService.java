@@ -17,7 +17,7 @@ public class UserLookupService {
 
     public User getCurrentUser(String username) {
         return userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new UnauthorizedException("Current user not found"));
+                .orElseThrow(() -> new UnauthorizedException("user.current.not.found"));
     }
 
     public User getUser(Long userId) {

@@ -53,7 +53,7 @@ public class MessageReaction extends AbstractBaseEntity<Long> {
         MessageReaction reaction = new MessageReaction();
         reaction.message = Objects.requireNonNull(message, "message must not be null");
         reaction.user = Objects.requireNonNull(user, "user must not be null");
-        reaction.emoji = Objects.requireNonNull(emoji, "emoji must not be null");
+        reaction.emoji = Objects.requireNonNull(emoji, "message.reaction.emoji.required");
         return reaction;
     }
 }

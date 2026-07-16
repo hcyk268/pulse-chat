@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import backend.xxx.chat.common.exception.ConflictException;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.common.exception.ForbiddenException;
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
@@ -21,12 +22,12 @@ public class StorageValidator {
 
     public String normalizeContentType(String contentType) {
         if (contentType == null) {
-            throw new ValidationException("contentType must not be blank");
+            throw new ValidationException("storage.content.type.blank");
         }
 
         String normalized = contentType.trim().toLowerCase();
         if (normalized.isEmpty()) {
-            throw new ValidationException("contentType must not be blank");
+            throw new ValidationException("storage.content.type.blank");
         }
 
         return normalized;
@@ -43,17 +44,17 @@ public class StorageValidator {
                 .anyMatch(value -> value.equalsIgnoreCase(contentType));
 
         if (!allowed) {
-            throw new ValidationException("contentType is not allowed: " + contentType);
+            throw new ValidationException(Translator.toLocale("storage.content.type.not.allowed", contentType));
         }
     }
 
     public void validateFileSize(Long sizeBytes, long maxFileSizeBytes) {
         if (sizeBytes == null || sizeBytes <= 0) {
-            throw new ValidationException("sizeBytes must be greater than 0");
+            throw new ValidationException("storage.size.positive");
         }
 
         if (sizeBytes > maxFileSizeBytes) {
-            throw new ValidationException("sizeBytes exceeds max allowed size " + maxFileSizeBytes);
+            throw new ValidationException(Translator.toLocale("storage.size.max.exceeded", maxFileSizeBytes));
         }
     }
 
@@ -68,7 +69,7 @@ public class StorageValidator {
     public String normalizeEtag(String etag) {
         String normalized = normalizeOptional(etag);
         if (normalized == null) {
-            throw new ValidationException("etag must not be blank");
+            throw new ValidationException("storage.etag.blank");
         }
         return normalized;
     }
@@ -76,61 +77,61 @@ public class StorageValidator {
     public long normalizeChunkSize(Long requestedChunkSizeBytes, Long fileSizeBytes, long defaultChunkSize, long minChunkSize) {
         long chunkSize = requestedChunkSizeBytes == null ? defaultChunkSize : requestedChunkSizeBytes;
         if (chunkSize <= 0) {
-            throw new ValidationException("chunkSizeBytes must be greater than 0");
+            throw new ValidationException("storage.chunk.size.positive");
         }
         if (fileSizeBytes > minChunkSize && chunkSize < minChunkSize) {
-            throw new ValidationException("chunkSizeBytes must be at least " + minChunkSize);
+            throw new ValidationException(Translator.toLocale("storage.chunk.size.min", minChunkSize));
         }
         return Math.min(chunkSize, fileSizeBytes);
     }
 
     public UploadSession requireOwnedSession(Long sessionId, Long userId) {
         if (sessionId == null) {
-            throw new ValidationException("sessionId must not be null");
+            throw new ValidationException("storage.session.id.required");
         }
         UploadSession session = uploadSessionRepository.findByIdWithOwner(sessionId)
-                .orElseThrow(() -> new NotFoundException("Upload session not found"));
+                .orElseThrow(() -> new NotFoundException("storage.session.not.found"));
         requireOwner(session, userId);
         return session;
     }
 
     public UploadSession requireOwnedSessionForUpdate(Long sessionId, Long userId) {
         if (sessionId == null) {
-            throw new ValidationException("sessionId must not be null");
+            throw new ValidationException("storage.session.id.required");
         }
         UploadSession session = uploadSessionRepository.findByIdForUpdate(sessionId)
-                .orElseThrow(() -> new NotFoundException("Upload session not found"));
+                .orElseThrow(() -> new NotFoundException("storage.session.not.found"));
         requireOwner(session, userId);
         return session;
     }
 
     public void requireOwner(UploadSession session, Long userId) {
         if (!session.belongsTo(userId)) {
-            throw new ForbiddenException("You are not allowed to access this upload session");
+            throw new ForbiddenException("storage.session.forbidden");
         }
     }
 
     public void validateSessionUsable(UploadSession session) {
         if (session.isExpired(Instant.now())) {
-            throw new ConflictException("Upload session is expired");
+            throw new ConflictException("storage.session.expired");
         }
 
         if (session.getStatus() == UploadSessionStatus.CANCELLED
                 || session.getStatus() == UploadSessionStatus.FAILED
                 || session.getStatus() == UploadSessionStatus.ATTACHED) {
-            throw new ConflictException("Upload session is not usable");
+            throw new ConflictException("storage.session.not.usable");
         }
     }
 
     public void validatePartNumber(UploadSession session, Integer partNumber) {
         if (partNumber == null || partNumber < 1 || partNumber > session.getTotalParts()) {
-            throw new ValidationException("partNumber is invalid");
+            throw new ValidationException("storage.part.number.invalid");
         }
     }
 
     public void validatePartSize(UploadSession session, Integer partNumber, Long sizeBytes) {
         if (sizeBytes == null || sizeBytes <= 0) {
-            throw new ValidationException("sizeBytes must be greater than 0");
+            throw new ValidationException("storage.size.positive");
         }
 
         boolean lastPart = partNumber.equals(session.getTotalParts());
@@ -139,7 +140,7 @@ public class StorageValidator {
                 : session.getChunkSizeBytes();
 
         if (sizeBytes != expectedSize) {
-            throw new ValidationException("part size does not match expected size");
+            throw new ValidationException("storage.part.size.mismatch");
         }
     }
 }
