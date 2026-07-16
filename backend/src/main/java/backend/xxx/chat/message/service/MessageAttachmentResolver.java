@@ -23,7 +23,6 @@ public class MessageAttachmentResolver {
 
     private static final int MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
-    private final MessageAttachmentMapper messageAttachmentMapper;
     private final UploadedAssetRepository uploadedAssetRepository;
 
     public List<MessageAttachment> resolve(User sender, List<AttachmentRequest> requests) {
@@ -43,12 +42,11 @@ public class MessageAttachmentResolver {
         if (request == null) {
             throw new ValidationException("attachment must not be null");
         }
-
-        if (request.assetId() != null) {
-            return resolveUploadedAsset(sender, request.assetId(), sortOrder);
+        if (request.assetId() == null) {
+            throw new ValidationException("attachment assetId must not be null");
         }
 
-        return resolveLegacyAttachment(request, sortOrder);
+        return resolveUploadedAsset(sender, request.assetId(), sortOrder);
     }
 
     private MessageAttachment resolveUploadedAsset(User sender, Long assetId, int sortOrder) {
@@ -67,13 +65,5 @@ public class MessageAttachmentResolver {
 
         asset.markAttached(Instant.now());
         return MessageAttachment.createFromAsset(asset, sortOrder);
-    }
-
-    private MessageAttachment resolveLegacyAttachment(AttachmentRequest request, int sortOrder) {
-        try {
-            return messageAttachmentMapper.toEntity(request, sortOrder);
-        } catch (IllegalArgumentException | NullPointerException exception) {
-            throw new ValidationException(exception.getMessage());
-        }
     }
 }

@@ -1,6 +1,22 @@
 import { apiRequest } from "./apiClient";
 
 const DEFAULT_CHUNK_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_PART_ATTEMPTS = 3;
+
+export const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+export const ALLOWED_UPLOAD_CONTENT_TYPES = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "video/mp4", "video/webm", "audio/mpeg", "audio/ogg",
+  "application/pdf", "text/plain", "application/zip",
+]);
+
+export function validateUploadFile(file, { imagesOnly = false } = {}) {
+  if (!file || file.size <= 0) return "Choose a non-empty file.";
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) return "Each file must be 25 MB or smaller.";
+  if (!ALLOWED_UPLOAD_CONTENT_TYPES.has(file.type)) return "This file type is not supported.";
+  if (imagesOnly && !file.type.startsWith("image/")) return "Choose an image file.";
+  return "";
+}
 
 function getResponseHeader(headers, name) {
   return headers.get(name) || headers.get(name.toLowerCase()) || headers.get(name.toUpperCase());
@@ -79,34 +95,70 @@ export async function uploadFilePart({ uploadUrl, method = "PUT", requiredHeader
 }
 
 async function uploadFile(file, { onProgress, purpose = "MESSAGE_ATTACHMENT" } = {}) {
+  const validationError = validateUploadFile(file, { imagesOnly: purpose === "AVATAR" });
+  if (validationError) throw new Error(validationError);
+
   const session = await createMultipartUpload({
     fileName: file.name || "attachment",
     contentType: file.type || "application/octet-stream",
     sizeBytes: file.size,
-    purpose,  });
+    purpose,
+  });
   const chunkSize = session.chunkSizeBytes || DEFAULT_CHUNK_SIZE_BYTES;
   const totalParts = session.totalParts || Math.ceil(file.size / chunkSize) || 1;
-  let uploadedBytes = 0;
+  const uploadedParts = new Set();
+
+  function getPartSize(partNumber) {
+    const start = (partNumber - 1) * chunkSize;
+    return Math.min(start + chunkSize, file.size) - start;
+  }
+
+  function reportProgress() {
+    const uploadedBytes = Array.from(uploadedParts).reduce(
+      (total, partNumber) => total + getPartSize(partNumber),
+      0,
+    );
+    onProgress?.(Math.round((uploadedBytes / file.size) * 100));
+  }
 
   try {
+    reportProgress();
     for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
       const start = (partNumber - 1) * chunkSize;
       const end = Math.min(start + chunkSize, file.size);
       const blob = file.slice(start, end);
-      const presigned = await presignMultipartUploadPart(session.sessionId, partNumber);
-      const etag = await uploadFilePart({
-        uploadUrl: presigned.uploadUrl,
-        method: presigned.method || "PUT",
-        requiredHeaders: presigned.requiredHeaders || {},
-        blob,
-      });
+      let lastError = null;
 
-      await completeMultipartUploadPart(session.sessionId, partNumber, {
-        etag,
-        sizeBytes: blob.size,
-      });
-      uploadedBytes += blob.size;
-      onProgress?.(Math.round((uploadedBytes / file.size) * 100));
+      for (let attempt = 1; attempt <= MAX_PART_ATTEMPTS; attempt += 1) {
+        try {
+          const presigned = await presignMultipartUploadPart(session.sessionId, partNumber);
+          const etag = await uploadFilePart({
+            uploadUrl: presigned.uploadUrl,
+            method: presigned.method || "PUT",
+            requiredHeaders: presigned.requiredHeaders || {},
+            blob,
+          });
+          await completeMultipartUploadPart(session.sessionId, partNumber, {
+            etag,
+            sizeBytes: blob.size,
+          });
+          uploadedParts.add(partNumber);
+          reportProgress();
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          const resumed = await resumeMultipartUpload(session.sessionId).catch(() => null);
+          (resumed?.uploadedParts ?? []).forEach((uploadedPart) => uploadedParts.add(uploadedPart));
+          reportProgress();
+          if (uploadedParts.has(partNumber)) {
+            lastError = null;
+            break;
+          }
+        }
+      }
+
+      if (lastError) throw lastError;
     }
 
     const asset = await completeMultipartUpload(session.sessionId);

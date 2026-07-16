@@ -6,11 +6,13 @@ import BrandMark from "../components/assets/BrandMark";
 import StatusPill from "../components/ui/StatusPill";
 import { useChatStore } from "../hooks/useChatStore";
 import { register } from "../services/authApi";
+import { useToast } from "../hooks/useToast";
 import { hasNoHtmlAngleBrackets, isValidUsername } from "../utils/validators";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { setAuthenticatedSession } = useChatStore();
+  const toast = useToast();
   const [form, setForm] = useState({
     displayName: "",
     username: "",
@@ -82,15 +84,17 @@ export default function RegisterPage() {
       setAuthenticatedSession(authSession, rememberSession);
       navigate("/chat", { replace: true });
     } catch (registerError) {
-      setError(registerError.message || "Registration failed. Please try again.");
+      const message = registerError.message || "Registration failed. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen bg-[#0a0f1a] text-white lg:grid-cols-[0.95fr_1.05fr]">
-      <section className="order-2 flex items-center justify-center p-6 sm:p-10 lg:order-1">
+    <main className="auth-page grid min-h-screen bg-[#0a0f1a] text-white lg:grid-cols-[0.95fr_1.05fr]">
+      <section className="auth-form-shell order-2 flex items-center justify-center p-6 sm:p-10 lg:order-1">
         <form
           onSubmit={handleSubmit}
           className="glass-card w-full max-w-lg animate-enter-up rounded-3xl p-6 sm:p-8"
@@ -209,7 +213,7 @@ export default function RegisterPage() {
         </form>
       </section>
 
-      <section className="relative order-1 flex min-h-[42vh] flex-col justify-between overflow-hidden border-b border-white/5 bg-[#111827] p-6 sm:p-10 lg:order-2 lg:min-h-screen lg:border-b-0 lg:border-l">
+      <section className="auth-visual relative order-1 flex min-h-[42vh] flex-col justify-between overflow-hidden border-b border-white/5 bg-[#111827] p-6 sm:p-10 lg:order-2 lg:min-h-screen lg:border-b-0 lg:border-l">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-40 -top-40 h-[500px] w-[500px] rounded-full bg-amber-400/8 blur-[100px]"

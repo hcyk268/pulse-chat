@@ -1,10 +1,15 @@
-import { Check, Search, UserPlus, Users, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Check, ImagePlus, LoaderCircle, Search, Trash2, UserPlus, Users, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { useToast } from "../../hooks/useToast";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { uploadAvatar } from "../../services/uploadApi";
 import { formatPresence } from "../../utils/formatters";
 import { PeopleSearchAsset } from "../assets/MicroAssets";
 import Avatar from "../ui/Avatar";
+
+const MAX_GROUP_AVATAR_SIZE_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_GROUP_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export default function ContactPanel({
   contacts,
@@ -18,12 +23,19 @@ export default function ContactPanel({
   searchError = "",
   searchResults = [],
 }) {
+  const toast = useToast();
   const { settings } = useAppSettings();
   const [mode, setMode] = useState("direct");
   const [query, setQuery] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupAvatarUrl, setGroupAvatarUrl] = useState("");
+  const [groupAvatarFile, setGroupAvatarFile] = useState(null);
+  const [groupAvatarPreviewUrl, setGroupAvatarPreviewUrl] = useState(null);
+  const [groupAvatarUploadProgress, setGroupAvatarUploadProgress] = useState(null);
+  const [groupActionError, setGroupActionError] = useState("");
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState([]);
+  const groupAvatarInputRef = useRef(null);
   const normalizedQuery = query.trim();
   const debouncedQuery = useDebouncedValue(normalizedQuery, 300);
   const visibleContacts = normalizedQuery ? searchResults : contacts;
@@ -42,6 +54,17 @@ export default function ContactPanel({
     return undefined;
   }, [debouncedQuery, onClearSearch, onSearchUsers]);
 
+  useEffect(() => {
+    if (!groupAvatarFile) {
+      setGroupAvatarPreviewUrl(null);
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(groupAvatarFile);
+    setGroupAvatarPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [groupAvatarFile]);
+
   function toggleContact(contact) {
     const contactId = String(contact.backendId ?? contact.id);
     setSelectedContacts((previous) => {
@@ -54,24 +77,87 @@ export default function ContactPanel({
   }
 
   async function handleCreateGroup() {
-    const memberIds = selectedContacts.map((contact) => contact.backendId ?? contact.id);
-    const nextConversationId = await onCreateGroup?.({
-      name: groupName,
-      avatarUrl: groupAvatarUrl,
-      memberIds,
-    });
+    if (isCreatingGroup) return;
 
-    if (nextConversationId) {
-      setGroupName("");
-      setGroupAvatarUrl("");
-      setSelectedContacts([]);
+    setIsCreatingGroup(true);
+    setGroupActionError("");
+    setGroupAvatarUploadProgress(groupAvatarFile && !groupAvatarUrl ? 0 : null);
+
+    try {
+      let avatarUrl = groupAvatarUrl;
+
+      if (groupAvatarFile && !avatarUrl) {
+        const uploadedAvatar = await uploadAvatar(groupAvatarFile, {
+          onProgress: setGroupAvatarUploadProgress,
+        });
+
+        if (!uploadedAvatar?.url) {
+          throw new Error("Image uploaded but no public URL was returned.");
+        }
+
+        avatarUrl = uploadedAvatar.url;
+        setGroupAvatarUrl(avatarUrl);
+      }
+
+      const memberIds = selectedContacts.map((contact) => contact.backendId ?? contact.id);
+      const nextConversationId = await onCreateGroup?.({
+        name: groupName,
+        avatarUrl: avatarUrl || null,
+        memberIds,
+      });
+
+      if (nextConversationId) {
+        setGroupName("");
+        setGroupAvatarUrl("");
+        setGroupAvatarFile(null);
+        setSelectedContacts([]);
+      }
+    } catch (error) {
+      const message = error.message || "Could not upload the group photo.";
+      setGroupActionError(message);
+      toast.error(message);
+    } finally {
+      setGroupAvatarUploadProgress(null);
+      setIsCreatingGroup(false);
     }
   }
 
-  const canCreateGroup = groupName.trim().length > 0 && selectedContacts.length >= 2 && !isStartingConversation;
+  function handleGroupAvatarChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!ACCEPTED_GROUP_AVATAR_TYPES.has(file.type)) {
+      setGroupActionError("Choose a JPG, PNG, WebP, or GIF image.");
+      return;
+    }
+
+    if (file.size > MAX_GROUP_AVATAR_SIZE_BYTES) {
+      setGroupActionError("Group photo must be 25 MB or smaller.");
+      return;
+    }
+
+    setGroupActionError("");
+    setGroupAvatarUrl("");
+    setGroupAvatarFile(file);
+  }
+
+  function handleRemoveGroupAvatar() {
+    setGroupActionError("");
+    setGroupAvatarUrl("");
+    setGroupAvatarFile(null);
+    setGroupAvatarUploadProgress(null);
+  }
+
+  const isBusy = isStartingConversation || isCreatingGroup;
+  const canCreateGroup = groupName.trim().length > 0 && selectedContacts.length >= 2 && !isBusy;
+  const groupPreviewUser = {
+    displayName: groupName.trim() || "Group",
+    avatarUrl: (groupAvatarPreviewUrl ?? groupAvatarUrl) || null,
+  };
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col bg-[#111827]">
+    <aside className="contact-panel flex h-full min-h-0 w-full flex-col bg-[#111827]">
       <div className="border-b border-white/[0.04] px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -91,8 +177,8 @@ export default function ContactPanel({
         </div>
 
         <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/5 bg-[#1e293b] p-1">
-          <ModeButton active={mode === "direct"} icon={UserPlus} label="Direct" onClick={() => setMode("direct")} />
-          <ModeButton active={mode === "group"} icon={Users} label="Group" onClick={() => setMode("group")} />
+          <ModeButton active={mode === "direct"} disabled={isBusy} icon={UserPlus} label="Direct" onClick={() => setMode("direct")} />
+          <ModeButton active={mode === "group"} disabled={isBusy} icon={Users} label="Group" onClick={() => setMode("group")} />
         </div>
 
         {mode === "group" ? (
@@ -104,13 +190,56 @@ export default function ContactPanel({
               placeholder="Group name"
               className="field-shell w-full rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
             />
-            <input
-              value={groupAvatarUrl}
-              onChange={(event) => setGroupAvatarUrl(event.target.value)}
-              maxLength={500}
-              placeholder="Avatar URL"
-              className="field-shell w-full rounded-xl border border-white/5 bg-[#1e293b] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-slate-500"
-            />
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-300/20 bg-indigo-500/[0.035] p-3">
+              <Avatar user={groupPreviewUser} size="md" />
+              <div className="min-w-0 flex-1">
+                <input
+                  ref={groupAvatarInputRef}
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={isBusy}
+                  onChange={handleGroupAvatarChange}
+                  type="file"
+                />
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => groupAvatarInputRef.current?.click()}
+                  className="press flex min-h-8 items-center gap-2 text-sm font-semibold text-indigo-200 hover:text-white disabled:cursor-not-allowed disabled:text-slate-600"
+                >
+                  <ImagePlus size={16} />
+                  {groupAvatarFile || groupAvatarUrl ? "Change group photo" : "Upload group photo"}
+                </button>
+                <p className="mt-0.5 truncate text-xs text-slate-500">
+                  {groupAvatarFile?.name ?? "JPG, PNG, WebP or GIF · Max 25 MB"}
+                </p>
+                {typeof groupAvatarUploadProgress === "number" ? (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-400 transition-[width] duration-200"
+                      style={{ width: `${groupAvatarUploadProgress}%` }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              {groupAvatarFile || groupAvatarUrl ? (
+                <button
+                  type="button"
+                  aria-label="Remove group photo"
+                  disabled={isBusy}
+                  onClick={handleRemoveGroupAvatar}
+                  className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-400/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-slate-700"
+                >
+                  <Trash2 size={16} />
+                </button>
+              ) : null}
+            </div>
+            {groupActionError ? (
+              <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-400/15 bg-rose-400/10 px-3 py-2 text-xs leading-5 text-rose-200">
+                <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                {groupActionError}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -143,7 +272,7 @@ export default function ContactPanel({
                 <button
                   key={contact.id}
                   type="button"
-                  disabled={isStartingConversation}
+                  disabled={isBusy}
                   onClick={() => mode === "group" ? toggleContact(contact) : onStartConversation(contact)}
                   style={{ animationDelay: `${Math.min(index, 10) * 28}ms` }}
                   className="conv-row group flex w-full animate-enter-up items-center gap-3 px-3 py-3 text-left hover:bg-white/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
@@ -202,8 +331,12 @@ export default function ContactPanel({
             disabled={!canCreateGroup}
             className="send-button flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 px-4 py-3 font-semibold text-white shadow-send hover:shadow-send-hover disabled:cursor-not-allowed disabled:bg-[#1e293b] disabled:bg-none disabled:text-slate-600 disabled:shadow-none"
           >
-            <Users size={18} />
-            Create group
+            {isCreatingGroup ? <LoaderCircle className="animate-spin" size={18} /> : <Users size={18} />}
+            {isCreatingGroup
+              ? typeof groupAvatarUploadProgress === "number"
+                ? `Uploading photo ${groupAvatarUploadProgress}%`
+                : "Creating group..."
+              : "Create group"}
           </button>
         </div>
       ) : null}
@@ -211,13 +344,14 @@ export default function ContactPanel({
   );
 }
 
-function ModeButton({ active, icon: Icon, label, onClick }) {
+function ModeButton({ active, disabled = false, icon: Icon, label, onClick }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={[
-        "press flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+        "press flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         active ? "bg-indigo-500 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white",
       ].join(" ")}
     >

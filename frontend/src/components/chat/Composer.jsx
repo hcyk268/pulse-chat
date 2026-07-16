@@ -1,6 +1,8 @@
 import { File, Image as ImageIcon, Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { validateUploadFile } from "../../services/uploadApi";
+import { useToast } from "../../hooks/useToast";
 import { formatFileSize } from "../../utils/formatters";
 
 const EMOJI_OPTIONS = ["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F60E}", "\u{1F44D}", "\u{1F64F}", "\u{1F525}", "\u{1F389}", "\u2764\uFE0F", "\u2728"];
@@ -14,6 +16,7 @@ function getPreviewText(message) {
 
 export default function Composer({
   disabled = false,
+  disabledReason = null,
   editingMessage = null,
   onCancelEdit,
   onCancelReply,
@@ -23,8 +26,10 @@ export default function Composer({
   uploadProgress = null,
 }) {
   const { settings } = useAppSettings();
+  const toast = useToast();
   const [value, setValue] = useState("");
   const [files, setFiles] = useState([]);
+  const [fileError, setFileError] = useState("");
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
   const fileInputRef = useRef(null);
   const onTypingChangeRef = useRef(onTypingChange);
@@ -40,6 +45,7 @@ export default function Composer({
     if (editingMessage) {
       setValue(editingMessage.content ?? "");
       setFiles([]);
+      setFileError("");
       textareaRef.current?.focus();
     }
   }, [editingMessage]);
@@ -104,6 +110,7 @@ export default function Composer({
     if (result) {
       setValue("");
       setFiles([]);
+      setFileError("");
       setIsEmojiOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -139,9 +146,26 @@ export default function Composer({
   }
 
   function addFiles(nextFiles) {
-    const merged = [...files, ...Array.from(nextFiles ?? [])];
+    const incoming = Array.from(nextFiles ?? []);
+    const invalid = incoming.map((file) => ({ file, error: validateUploadFile(file) })).find((item) => item.error);
+    if (invalid) {
+      const message = `${invalid.file.name}: ${invalid.error}`;
+      setFileError(message);
+      toast.warning(message);
+      return;
+    }
+
+    const merged = [...files, ...incoming];
     const byKey = new Map(merged.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]));
-    setFiles(Array.from(byKey.values()).slice(0, 6));
+    const uniqueFiles = Array.from(byKey.values());
+    if (uniqueFiles.length > 6) {
+      const message = "You can attach up to 6 files per message.";
+      setFileError(message);
+      toast.warning(message);
+      return;
+    }
+    setFileError("");
+    setFiles(uniqueFiles);
   }
 
   const canSend = !disabled && (value.trim().length > 0 || files.length > 0);
@@ -207,6 +231,12 @@ export default function Composer({
           </div>
         ) : null}
 
+        {fileError ? (
+          <p role="alert" className="mb-2 rounded-xl border border-rose-400/15 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+            {fileError}
+          </p>
+        ) : null}
+
         {isUploading ? (
           <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-[#1e293b]">
             <div className="h-full rounded-full bg-indigo-400 transition-all duration-200" style={{ width: `${uploadProgress}%` }} />
@@ -219,6 +249,7 @@ export default function Composer({
               ref={fileInputRef}
               type="file"
               multiple
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/ogg,application/pdf,text/plain,application/zip"
               className="hidden"
               onChange={(event) => addFiles(event.target.files)}
             />
@@ -240,7 +271,7 @@ export default function Composer({
               disabled={disabled}
               rows={1}
               maxLength={4000}
-              placeholder={disabled ? "Sending..." : editingMessage ? "Edit message" : "Type a message..."}
+              placeholder={disabledReason || (disabled ? "Sending..." : editingMessage ? "Edit message" : "Type a message...")}
               className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:text-slate-600"
             />
             <div className="relative mb-2">

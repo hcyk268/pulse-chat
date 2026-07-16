@@ -2,7 +2,6 @@ package backend.xxx.chat.message.service;
 
 import java.util.List;
 
-import backend.xxx.chat.message.dto.AttachmentRequest;
 import backend.xxx.chat.message.dto.AttachmentResponse;
 import backend.xxx.chat.message.model.MessageAttachment;
 import org.springframework.stereotype.Component;
@@ -21,21 +20,6 @@ public class MessageAttachmentMapper {
                 attachment.getHeight(),
                 attachment.getDurationSeconds(),
                 attachment.getThumbnailUrl()
-        );
-    }
-
-    public MessageAttachment toEntity(AttachmentRequest request, int sortOrder) {
-        return MessageAttachment.create(
-                request.objectKey(),
-                request.url(),
-                request.fileName(),
-                request.contentType(),
-                request.sizeBytes(),
-                request.width(),
-                request.height(),
-                request.durationSeconds(),
-                request.thumbnailUrl(),
-                sortOrder
         );
     }
 

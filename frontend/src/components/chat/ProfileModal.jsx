@@ -1,6 +1,7 @@
 import { AlertCircle, AtSign, Check, LoaderCircle, Mail, Save, Trash2, Upload, UserRound, X } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { uploadAvatar } from "../../services/uploadApi";
+import { useToast } from "../../hooks/useToast";
 import { hasNoHtmlAngleBrackets } from "../../utils/validators";
 import Avatar from "../ui/Avatar";
 import IconButton from "../ui/IconButton";
@@ -17,6 +18,7 @@ function profileFormFromUser(user) {
 }
 
 export default function ProfileModal({ currentUser, onClose, onSave }) {
+  const toast = useToast();
   const [form, setForm] = useState(() => profileFormFromUser(currentUser));
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
@@ -118,8 +120,11 @@ export default function ProfileModal({ currentUser, onClose, onSave }) {
       });
       setAvatarFile(null);
       setSaved(true);
+      toast.success("Profile updated successfully.");
     } catch (profileError) {
-      setError(profileError.message || "Could not update your profile.");
+      const message = profileError.message || "Could not update your profile.";
+      setError(message);
+      toast.error(message);
     } finally {
       setAvatarUploadProgress(null);
       setIsSaving(false);

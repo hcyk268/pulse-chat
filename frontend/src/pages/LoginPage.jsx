@@ -6,11 +6,13 @@ import BrandMark from "../components/assets/BrandMark";
 import StatusPill from "../components/ui/StatusPill";
 import { useChatStore } from "../hooks/useChatStore";
 import { login } from "../services/authApi";
+import { useToast } from "../hooks/useToast";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { setAuthenticatedSession } = useChatStore();
+  const toast = useToast();
   const [form, setForm] = useState({
     usernameOrEmail: "",
     password: "",
@@ -37,7 +39,9 @@ export default function LoginPage() {
     const password = form.password;
 
     if (!usernameOrEmail || !password) {
-      setError("Please enter your username/email and password.");
+      const message = "Please enter your username/email and password.";
+      setError(message);
+      toast.warning(message);
       return;
     }
 
@@ -50,15 +54,17 @@ export default function LoginPage() {
       setAuthenticatedSession(authSession, rememberSession);
       navigate(redirectTo, { replace: true });
     } catch (loginError) {
-      setError(loginError.message || "Login failed. Please try again.");
+      const message = loginError.message || "Login failed. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen bg-[#0a0f1a] text-white lg:grid-cols-[1.08fr_0.92fr]">
-      <section className="relative flex min-h-[46vh] flex-col justify-between overflow-hidden border-b border-white/5 bg-[#111827] p-6 sm:p-10 lg:min-h-screen lg:border-b-0 lg:border-r">
+    <main className="auth-page grid min-h-screen bg-[#0a0f1a] text-white lg:grid-cols-[1.08fr_0.92fr]">
+      <section className="auth-visual relative flex min-h-[46vh] flex-col justify-between overflow-hidden border-b border-white/5 bg-[#111827] p-6 sm:p-10 lg:min-h-screen lg:border-b-0 lg:border-r">
         <div
           aria-hidden
           className="pointer-events-none absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-indigo-500/15 blur-[100px]"
@@ -94,7 +100,7 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section className="flex items-center justify-center p-6 sm:p-10">
+      <section className="auth-form-shell flex items-center justify-center p-6 sm:p-10">
         <form
           onSubmit={handleSubmit}
           className="glass-card w-full max-w-md animate-enter-up rounded-3xl p-6 sm:p-8"
