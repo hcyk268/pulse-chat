@@ -5,6 +5,7 @@ import backend.xxx.chat.auth.dto.LoginRequest;
 import backend.xxx.chat.auth.dto.RefreshTokenRequest;
 import backend.xxx.chat.auth.dto.RegisterRequest;
 import backend.xxx.chat.auth.service.AuthService;
+import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.ratelimit.RateLimit;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,25 +25,26 @@ public class AuthController {
 
     @PostMapping("/register")
     @RateLimit(action = "register", maxRequests = 5, timeWindow = 300)
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    public ResponseEntity<ResponseData<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ResponseData<>(true, "Register successfully", authService.register(request)));
     }
 
     @PostMapping("/login")
     @RateLimit(action = "login", maxRequests = 5, timeWindow = 60)
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseData<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        return new ResponseData<>(true, "Login successfully", authService.login(request));
     }
 
     @PostMapping("/refresh")
     @RateLimit(action = "refresh", maxRequests = 10, timeWindow = 60)
-    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ResponseEntity.ok(authService.refresh(request));
+    public ResponseData<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return new ResponseData<>(true, "Refresh token successfully", authService.refresh(request));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
+    public ResponseData<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request);
-        return ResponseEntity.noContent().build();
+        return new ResponseData<>(true, "Logout successfully");
     }
 }

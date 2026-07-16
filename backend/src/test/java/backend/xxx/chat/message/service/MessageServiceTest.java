@@ -31,6 +31,12 @@ import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.outbox.model.OutboxEvent;
 import backend.xxx.chat.outbox.repository.OutboxEventRepository;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
+import backend.xxx.chat.storage.model.UploadPurpose;
+import backend.xxx.chat.storage.model.UploadSession;
+import backend.xxx.chat.storage.model.UploadedAsset;
+import backend.xxx.chat.storage.model.UploadedAssetStatus;
+import backend.xxx.chat.storage.repository.UploadSessionRepository;
+import backend.xxx.chat.storage.repository.UploadedAssetRepository;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -73,6 +79,12 @@ class MessageServiceTest {
 
     @Autowired
     private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    private UploadSessionRepository uploadSessionRepository;
+
+    @Autowired
+    private UploadedAssetRepository uploadedAssetRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -249,54 +261,55 @@ class MessageServiceTest {
         conversationParticipantRepository.save(ConversationParticipant.create(conversation, alice, true));
         conversationParticipantRepository.save(ConversationParticipant.create(conversation, bob, true));
 
+        UploadedAsset photoAsset = createReadyMessageAsset(
+                alice,
+                "message-attachments/20260708/photo-1.png",
+                "https://cdn.example.com/message-attachments/20260708/photo-1.png",
+                "photo-1.png",
+                "image/png",
+                1200L
+        );
+        UploadedAsset videoAsset = createReadyMessageAsset(
+                alice,
+                "message-attachments/20260708/clip-1.mp4",
+                "https://cdn.example.com/message-attachments/20260708/clip-1.mp4",
+                "clip-1.mp4",
+                "video/mp4",
+                3200L
+        );
+
         MessageResponse response = messageService.sendMessage(
                 alice.getUsername(),
                 new SendMessageRequest(
                         conversation.getId(),
                         UUID.randomUUID(),
-                        "album má»›i",
+                        "album moi",
                         MessageType.MEDIA,
                         null,
                         List.of(
-                                new AttachmentRequest(
-                                        "message-attachments/20260708/photo-1.png",
-                                        "https://cdn.example.com/message-attachments/20260708/photo-1.png",
-                                        "photo-1.png",
-                                        "image/png",
-                                        1200L,
-                                        800,
-                                        600,
-                                        null,
-                                        null
-                                ),
-                                new AttachmentRequest(
-                                        "message-attachments/20260708/clip-1.mp4",
-                                        "https://cdn.example.com/message-attachments/20260708/clip-1.mp4",
-                                        "clip-1.mp4",
-                                        "video/mp4",
-                                        3200L,
-                                        1280,
-                                        720,
-                                        8,
-                                        "https://cdn.example.com/message-attachments/20260708/clip-1-thumb.jpg"
-                                )
+                                new AttachmentRequest(photoAsset.getId()),
+                                new AttachmentRequest(videoAsset.getId())
                         )
                 )
         );
 
         assertThat(response.messageType()).isEqualTo(MessageType.MEDIA);
-        assertThat(response.content()).isEqualTo("album má»›i");
+        assertThat(response.content()).isEqualTo("album moi");
         assertThat(response.attachments()).hasSize(2);
         assertThat(response.attachments().get(0).objectKey())
                 .isEqualTo("message-attachments/20260708/photo-1.png");
-        assertThat(response.attachments().get(1).thumbnailUrl())
-                .isEqualTo("https://cdn.example.com/message-attachments/20260708/clip-1-thumb.jpg");
+        assertThat(response.attachments().get(1).fileName())
+                .isEqualTo("clip-1.mp4");
 
         Message savedMessage = messageRepository.findById(response.id()).orElseThrow();
         assertThat(savedMessage.getAttachments()).hasSize(2);
         assertThat(savedMessage.getAttachments())
                 .extracting("fileName")
                 .containsExactly("photo-1.png", "clip-1.mp4");
+        assertThat(uploadedAssetRepository.findById(photoAsset.getId()).orElseThrow().getStatus())
+                .isEqualTo(UploadedAssetStatus.ATTACHED);
+        assertThat(uploadedAssetRepository.findById(videoAsset.getId()).orElseThrow().getStatus())
+                .isEqualTo(UploadedAssetStatus.ATTACHED);
     }
 
     @Test
@@ -729,6 +742,36 @@ class MessageServiceTest {
                 .executeUpdate();
         message.setCreatedAt(createdAt);
         return message;
+    }
+
+    private UploadedAsset createReadyMessageAsset(
+            User owner,
+            String objectKey,
+            String publicUrl,
+            String fileName,
+            String contentType,
+            Long sizeBytes
+    ) {
+        UploadSession session = uploadSessionRepository.saveAndFlush(UploadSession.create(
+                owner,
+                UploadPurpose.MESSAGE_ATTACHMENT,
+                fileName,
+                contentType,
+                sizeBytes,
+                5L * 1024 * 1024,
+                1,
+                objectKey,
+                "r2-upload-" + UUID.randomUUID(),
+                null,
+                Instant.now().plusSeconds(3600)
+        ));
+        session.markVerified();
+
+        return uploadedAssetRepository.saveAndFlush(UploadedAsset.readyFromSession(
+                session,
+                publicUrl,
+                sizeBytes
+        ));
     }
 
     private OutboxEvent onlyOutboxEvent() {

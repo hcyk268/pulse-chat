@@ -13,6 +13,7 @@ export function useChatPageController() {
   const [showPeople, setShowPeople] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const deferredQuery = useDeferredValue(query);
+  const hasLoadedConversations = chatStore.hasLoadedConversations;
 
   const selectedConversation = conversationId
     ? chatStore.getConversationById(conversationId)
@@ -33,7 +34,7 @@ export function useChatPageController() {
     let cancelled = false;
 
     async function hydrateConversation() {
-      if (!conversationId) {
+      if (!conversationId || !hasLoadedConversations) {
         return;
       }
 
@@ -45,7 +46,9 @@ export function useChatPageController() {
       const lastReadMessageId =
         conversation?.messages?.at(-1)?.id ?? conversation?.lastMessage?.id;
 
-      chatStoreRef.current.markConversationRead(conversationId, lastReadMessageId);
+      if (conversation?.currentUserStatus !== "PENDING" && !conversation?.isPendingInvitation) {
+        chatStoreRef.current.markConversationRead(conversationId, lastReadMessageId);
+      }
     }
 
     hydrateConversation();
@@ -53,7 +56,7 @@ export function useChatPageController() {
     return () => {
       cancelled = true;
     };
-  }, [chatStoreRef, conversationId]);
+  }, [chatStoreRef, conversationId, hasLoadedConversations]);
 
   async function handleStartConversation(contact) {
     if (contact.directConversationId) {

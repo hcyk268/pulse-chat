@@ -1,5 +1,6 @@
 package backend.xxx.chat.user.controller;
 
+import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.user.dto.UpdateMyProfileRequest;
 import backend.xxx.chat.user.dto.UserResponse;
@@ -9,7 +10,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,20 +23,20 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/me")
-    public ResponseEntity<UserResponse> getMyProfile() {
-        return ResponseEntity.ok(userService.getMyProfile(currentUserProvider.getCurrentUsername()));
+    public ResponseData<UserResponse> getMyProfile() {
+        return new ResponseData<>(true, "Get personal information successfully", userService.getMyProfile(currentUserProvider.getCurrentUsername()));
     }
 
     @PatchMapping("/me")
-    public ResponseEntity<UserResponse> updateMyProfile(@Valid @RequestBody UpdateMyProfileRequest request) {
-        return ResponseEntity.ok(userService.updateMyProfile(currentUserProvider.getCurrentUsername(), request));
+    public ResponseData<UserResponse> updateMyProfile(@Valid @RequestBody UpdateMyProfileRequest request) {
+        return new ResponseData<>(true, "Update personal information successfully", userService.updateMyProfile(currentUserProvider.getCurrentUsername(), request));
     }
 
     @GetMapping("/search")
-    public ResponseEntity<UserSearchResponse> search(
+    public ResponseData<UserSearchResponse> search(
             @RequestParam(name = "q") String keyword,
             @Min(1) @Max(100) @RequestParam(name = "limit", required = false, defaultValue = "10") Short limit
     ) {
-        return ResponseEntity.ok(userService.search(currentUserProvider.getCurrentUsername(), keyword, limit));
+        return new ResponseData<>(true, "Search users successfully", userService.search(currentUserProvider.getCurrentUsername(), keyword, limit));
     }
 }

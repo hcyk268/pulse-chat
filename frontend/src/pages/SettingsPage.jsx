@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAppSettings } from "../hooks/useAppSettings";
+import { useToast } from "../hooks/useToast";
 
 const DENSITY_OPTIONS = [
   { label: "Comfortable", value: "comfortable" },
@@ -20,6 +21,7 @@ const DENSITY_OPTIONS = [
 
 export default function SettingsPage() {
   const { resetSettings, settings, updateSetting } = useAppSettings();
+  const toast = useToast();
 
   return (
     <main className="settings-page h-[100dvh] overflow-y-auto bg-[#0a0f1a] text-white">
@@ -178,7 +180,10 @@ export default function SettingsPage() {
               </p>
               <button
                 type="button"
-                onClick={resetSettings}
+                onClick={() => {
+                  resetSettings();
+                  toast.success("Preferences restored to defaults.");
+                }}
                 className="press mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 text-sm font-semibold text-slate-300 hover:bg-white/[0.06] hover:text-white"
               >
                 <RotateCcw size={17} />

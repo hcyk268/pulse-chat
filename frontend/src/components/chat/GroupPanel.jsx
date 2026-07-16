@@ -1,8 +1,14 @@
 ﻿import { Check, Shield, UserMinus, UserPlus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
+import { uploadAvatar } from "../../services/uploadApi";
+import { useToast } from "../../hooks/useToast";
 import { isSameId } from "../../utils/chat";
 import Avatar from "../ui/Avatar";
 import IconButton from "../ui/IconButton";
+
+const MAX_GROUP_AVATAR_SIZE_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_GROUP_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export default function GroupPanel({
   contacts,
@@ -20,13 +26,21 @@ export default function GroupPanel({
   onUpdateRole,
   searchResults,
 }) {
+  const toast = useToast();
   const [avatarUrl, setAvatarUrl] = useState(conversation.avatarUrl ?? "");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
   const [name, setName] = useState(conversation.title ?? "");
   const [selectedIds, setSelectedIds] = useState([]);
+  const avatarInputRef = useRef(null);
   const memberIds = new Set(conversation.participants.map((member) => String(member.id)));
   const isOwner = conversation.currentUserRole === "OWNER";
   const isPendingInvitation = conversation.isPendingInvitation || conversation.currentUserStatus === "PENDING";
+  const canManageGroup = !isPendingInvitation && conversation.currentUserStatus !== "LEFT";
   const candidates = (memberQuery.trim() ? searchResults : contacts)
     .filter((contact) => contact.id && !memberIds.has(String(contact.id)) && !String(contact.id).startsWith("group-"));
 
@@ -41,8 +55,69 @@ export default function GroupPanel({
     return () => window.clearTimeout(timer);
   }, [memberQuery, onClearSearch, onSearchUsers]);
 
+  useEffect(() => {
+    setName(conversation.title ?? "");
+    setAvatarUrl(conversation.avatarUrl ?? "");
+    setAvatarFile(null);
+    setActionError("");
+  }, [conversation.id, conversation.title, conversation.avatarUrl]);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreviewUrl(null);
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
+
   async function saveProfile() {
-    await onUpdateGroup?.(conversation.id, { name, avatarUrl });
+    if (isSaving || !name.trim()) return;
+    setIsSaving(true);
+    setActionError("");
+    setAvatarUploadProgress(avatarFile && !avatarUrl ? 0 : null);
+
+    try {
+      let nextAvatarUrl = avatarUrl;
+      if (avatarFile && !nextAvatarUrl) {
+        const uploaded = await uploadAvatar(avatarFile, { onProgress: setAvatarUploadProgress });
+        if (!uploaded?.url) throw new Error("Image uploaded but no public URL was returned.");
+        nextAvatarUrl = uploaded.url;
+      }
+
+      const updated = await onUpdateGroup?.(conversation.id, { name, avatarUrl: nextAvatarUrl });
+      if (updated) {
+        setAvatarUrl(nextAvatarUrl);
+        setAvatarFile(null);
+        toast.success("Group details updated.");
+      }
+    } catch (error) {
+      const message = error.message || "Could not update the group.";
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setAvatarUploadProgress(null);
+      setIsSaving(false);
+    }
+  }
+
+  function handleAvatarChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!ACCEPTED_GROUP_AVATAR_TYPES.has(file.type)) {
+      setActionError("Choose a JPG, PNG, WebP, or GIF image.");
+      return;
+    }
+    if (file.size > MAX_GROUP_AVATAR_SIZE_BYTES) {
+      setActionError("Group photo must be 25 MB or smaller.");
+      return;
+    }
+    setActionError("");
+    setAvatarUrl("");
+    setAvatarFile(file);
   }
 
   async function addMembers() {
@@ -55,7 +130,7 @@ export default function GroupPanel({
   }
 
   return (
-    <aside className="absolute right-0 top-[65px] z-30 flex max-h-[calc(100%-65px)] w-full max-w-md flex-col overflow-hidden border-l border-white/5 bg-[#111827]/98 shadow-panel backdrop-blur-xl">
+    <aside className="group-panel absolute right-0 top-[65px] z-30 flex max-h-[calc(100%-65px)] w-full max-w-md flex-col overflow-hidden border-l border-white/5 bg-[#111827]/98 shadow-panel backdrop-blur-xl">
       <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar user={conversation.otherParticipant} size="sm" />
@@ -81,29 +156,33 @@ export default function GroupPanel({
           </div>
         ) : null}
 
-        <div className="space-y-3">
+        {canManageGroup ? <div className="space-y-3">
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            disabled={!isOwner}
+            disabled={isSaving}
             maxLength={100}
             className="field-shell w-full rounded-xl border border-white/5 bg-[#1e293b] px-3 py-2.5 text-sm text-white outline-none disabled:text-slate-500"
           />
-          <input
-            value={avatarUrl}
-            onChange={(event) => setAvatarUrl(event.target.value)}
-            disabled={!isOwner}
-            maxLength={500}
-            placeholder="Avatar URL"
-            className="field-shell w-full rounded-xl border border-white/5 bg-[#1e293b] px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 disabled:text-slate-500"
-          />
-          {isOwner ? (
-            <button type="button" onClick={saveProfile} className="send-button flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white">
-              <Check size={16} />
-              Save group
-            </button>
-          ) : null}
-        </div>
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-300/20 bg-indigo-500/[0.035] p-3">
+            <Avatar user={{ displayName: name || "Group", avatarUrl: avatarPreviewUrl ?? avatarUrl }} size="md" />
+            <div className="min-w-0 flex-1">
+              <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only" disabled={isSaving} onChange={handleAvatarChange} />
+              <button type="button" disabled={isSaving} onClick={() => avatarInputRef.current?.click()} className="press flex items-center gap-2 text-sm font-semibold text-indigo-200 hover:text-white disabled:text-slate-600">
+                <ImagePlus size={16} />
+                {avatarFile || avatarUrl ? "Change group photo" : "Upload group photo"}
+              </button>
+              <p className="mt-0.5 truncate text-xs text-slate-500">{avatarFile?.name ?? "JPG, PNG, WebP or GIF · Max 25 MB"}</p>
+              {typeof avatarUploadProgress === "number" ? <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{ width: `${avatarUploadProgress}%` }} /></div> : null}
+            </div>
+            {avatarFile || avatarUrl ? <button type="button" aria-label="Remove group photo" disabled={isSaving} onClick={() => { setAvatarFile(null); setAvatarUrl(""); }} className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-400/10 hover:text-rose-300 disabled:text-slate-700"><Trash2 size={16} /></button> : null}
+          </div>
+          {actionError ? <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-400/15 bg-rose-400/10 px-3 py-2 text-xs leading-5 text-rose-200"><AlertCircle size={15} className="mt-0.5 shrink-0" />{actionError}</p> : null}
+          <button type="button" onClick={saveProfile} disabled={isSaving || !name.trim()} className="send-button flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#1e293b] disabled:text-slate-600">
+            {isSaving ? <LoaderCircle size={16} className="animate-spin" /> : <Check size={16} />}
+            {isSaving ? "Saving..." : "Save group"}
+          </button>
+        </div> : null}
 
         <div className="mt-5 border-t border-white/5 pt-4">
           <div className="mb-2 flex items-center justify-between">
@@ -116,9 +195,9 @@ export default function GroupPanel({
                 <Avatar user={member} size="sm" showStatus />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-white">{member.displayName}</p>
-                  <p className="text-xs text-slate-500">{member.role ?? "MEMBER"}</p>
+                  <p className="text-xs text-slate-500">{member.status === "PENDING" ? "Invited · pending" : member.role ?? "MEMBER"}</p>
                 </div>
-                {isOwner && !isSameId(member.id, currentUser.id) ? (
+                {isOwner && member.status !== "PENDING" && !isSameId(member.id, currentUser.id) ? (
                   <select
                     value={member.role ?? "MEMBER"}
                     onChange={(event) => onUpdateRole?.(conversation.id, member.id, event.target.value)}
@@ -136,7 +215,7 @@ export default function GroupPanel({
           </div>
         </div>
 
-        {isOwner ? (
+        {canManageGroup ? (
           <div className="mt-5 border-t border-white/5 pt-4">
             <p className="mb-2 text-sm font-semibold text-white">Add members</p>
             <input
@@ -172,12 +251,12 @@ export default function GroupPanel({
         ) : null}
       </div>
 
-      <div className="border-t border-white/5 p-4">
+      {!isPendingInvitation ? <div className="border-t border-white/5 p-4">
         <button type="button" onClick={() => onLeaveGroup?.(conversation.id)} className="press flex w-full items-center justify-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-2.5 text-sm font-semibold text-rose-200 hover:bg-rose-400/15">
           <UserMinus size={16} />
           Leave group
         </button>
-      </div>
+      </div> : null}
     </aside>
   );
 }

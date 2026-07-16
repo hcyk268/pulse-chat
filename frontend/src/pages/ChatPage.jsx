@@ -3,8 +3,12 @@ import ContactPanel from "../components/chat/ContactPanel";
 import ConversationList from "../components/chat/ConversationList";
 import ProfileModal from "../components/chat/ProfileModal";
 import { useChatPageController } from "../hooks/useChatPageController";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "../hooks/useToast";
 
 export default function ChatPage() {
+  const navigate = useNavigate();
+  const toast = useToast();
   const {
     chatStore,
     conversationId,
@@ -22,7 +26,6 @@ export default function ChatPage() {
   const {
     acceptGroupInvitation,
     addMembersToGroup,
-    chatActionError,
     contacts,
     conversationError,
     conversationPaging,
@@ -40,6 +43,7 @@ export default function ChatPage() {
     isStartingConversation,
     isSearchingUsers,
     leaveCurrentGroup,
+    loadConversation,
     loadConversations,
     loadMessageReactions,
     loadMessageReadReceipts,
@@ -66,6 +70,33 @@ export default function ChatPage() {
     userSearchResults,
   } = chatStore;
 
+  async function handleAcceptInvitation(targetConversationId) {
+    const accepted = await acceptGroupInvitation(targetConversationId);
+    if (accepted) {
+      toast.success("Group invitation accepted.");
+      navigate(`/chat/${targetConversationId}`);
+    }
+    return accepted;
+  }
+
+  async function handleRejectInvitation(targetConversationId) {
+    const rejected = await rejectGroupInvitation(targetConversationId);
+    if (rejected) {
+      toast.info("Group invitation declined.");
+      if (String(conversationId) === String(targetConversationId)) navigate("/chat");
+    }
+    return rejected;
+  }
+
+  async function handleLeaveGroup(targetConversationId) {
+    const left = await leaveCurrentGroup(targetConversationId);
+    if (left) {
+      toast.info("You left the group.");
+      if (String(conversationId) === String(targetConversationId)) navigate("/chat");
+    }
+    return left;
+  }
+
   return (
     <div className="chat-page-shell text-white">
       <main className="chat-app-layout">
@@ -84,9 +115,12 @@ export default function ChatPage() {
             currentUser={currentUser}
             query={query}
             onLoadMore={() => loadConversations({ append: true })}
+            onAcceptInvitation={handleAcceptInvitation}
+            onRejectInvitation={handleRejectInvitation}
             onOpenPeople={() => setShowPeople(true)}
             onOpenProfile={() => setShowProfile(true)}
             onQueryChange={setQuery}
+            onRetry={() => loadConversations()}
             onSignOut={signOut}
             realtimeStatus={realtimeStatus}
             selectedId={conversationId}
@@ -101,7 +135,7 @@ export default function ChatPage() {
           ].join(" ")}
         >
           <ChatWindow
-            acceptGroupInvitation={acceptGroupInvitation}
+            acceptGroupInvitation={handleAcceptInvitation}
             addMembersToGroup={addMembersToGroup}
             clearUserSearch={clearUserSearch}
             contacts={contacts}
@@ -115,21 +149,21 @@ export default function ChatPage() {
             isTyping={Boolean(conversationId && typingByConversation[conversationId])}
             onDeleteMessage={deleteMessage}
             onEditMessage={editMessage}
-            leaveCurrentGroup={leaveCurrentGroup}
+            leaveCurrentGroup={handleLeaveGroup}
             loadMessageReadReceipts={loadMessageReadReceipts}
             onLoadMessageReactions={loadMessageReactions}
             onLoadMoreMessages={() => loadMoreMessages(conversationId)}
             onOpenPeople={() => setShowPeople(true)}
+            onRetry={() => loadConversation(conversationId, { force: true })}
             onSendMessage={sendMessage}
             onToggleMessageReaction={toggleMessageReaction}
             onToggleMessagePin={(message) => toggleMessagePin(conversationId, message)}
             onTypingChange={(typing) => sendTypingStatus(conversationId, typing)}
             readReceiptsByMessageId={readReceiptsByMessageId}
             reactionsByMessageId={reactionsByMessageId}
-            rejectGroupInvitation={rejectGroupInvitation}
+            rejectGroupInvitation={handleRejectInvitation}
             removeMemberFromGroup={removeMemberFromGroup}
             searchUsers={searchUsers}
-            sendError={chatActionError}
             updateGroup={updateGroup}
             updateGroupMemberRole={updateGroupMemberRole}
             uploadProgress={conversationId ? uploadProgressByConversation[conversationId] : null}

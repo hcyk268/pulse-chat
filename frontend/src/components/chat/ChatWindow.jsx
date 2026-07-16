@@ -56,6 +56,7 @@ export default function ChatWindow({
   onLoadMessageReactions,
   onLoadMoreMessages,
   onOpenPeople,
+  onRetry,
   onSendMessage,
   onToggleMessageReaction,
   onToggleMessagePin,
@@ -65,7 +66,6 @@ export default function ChatWindow({
   rejectGroupInvitation,
   removeMemberFromGroup,
   searchUsers,
-  sendError = "",
   updateGroup,
   updateGroupMemberRole,
   uploadProgress = null,
@@ -85,6 +85,14 @@ export default function ChatWindow({
   const messageReactionKey = conversation?.messages.map((message) => message.id).join("|") ?? "";
   const pinnedMessages = conversation?.pinnedMessages ?? [];
   const isGroup = conversation?.type === "GROUP";
+  const conversationDisplayName =
+    conversation?.title ||
+    conversation?.otherParticipant?.displayName ||
+    conversation?.otherParticipant?.username ||
+    (isGroup ? "Unnamed group" : "Conversation");
+  const isPendingInvitation = Boolean(
+    conversation?.isPendingInvitation || conversation?.currentUserStatus === "PENDING",
+  );
 
   const searchMatches = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -196,7 +204,7 @@ export default function ChatWindow({
   }
 
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0f1a]">
+    <section className="chat-surface relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0f1a]">
       <ChatBackdrop />
 
       <header className="chat-window-header relative z-10 flex animate-fade-in items-center justify-between gap-3 border-b border-white/[0.04] bg-[#111827]/95 px-4 py-3 backdrop-blur-xl">
@@ -211,8 +219,8 @@ export default function ChatWindow({
           <Avatar user={participant} size="md" showStatus={!isGroup} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="truncate text-base font-semibold text-white">
-                {participant?.displayName}
+              <h2 className="truncate text-base font-semibold text-white" title={conversationDisplayName}>
+                {conversationDisplayName}
               </h2>
             </div>
             <p
@@ -265,6 +273,19 @@ export default function ChatWindow({
           <IconButton icon={ChevronUp} label="Previous" disabled={searchMatches.length === 0} onClick={() => setSearchIndex((index) => (index - 1 + searchMatches.length) % searchMatches.length)} />
           <IconButton icon={ChevronDown} label="Next" disabled={searchMatches.length === 0} onClick={() => setSearchIndex((index) => (index + 1) % searchMatches.length)} />
           <IconButton icon={X} label="Close search" onClick={() => setIsSearchOpen(false)} />
+        </div>
+      ) : null}
+
+      {isPendingInvitation ? (
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-amber-300/10 bg-amber-300/[0.06] px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-amber-100">You were invited to this group</p>
+            <p className="mt-0.5 text-xs text-amber-100/55">Accept before viewing or sending messages.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => rejectGroupInvitation?.(conversation.id)} className="press rounded-xl border border-rose-300/15 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-400/15">Reject</button>
+            <button type="button" onClick={() => acceptGroupInvitation?.(conversation.id)} className="send-button rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Accept invitation</button>
+          </div>
         </div>
       ) : null}
 
@@ -359,8 +380,10 @@ export default function ChatWindow({
           ) : null}
 
           {error ? (
-            <div className="mx-auto max-w-sm animate-scale-in rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-center text-sm leading-5 text-rose-200 backdrop-blur">
-              {error}
+            <div className="mx-auto flex max-w-sm animate-scale-in flex-col items-center rounded-2xl border border-rose-400/15 bg-[#111827]/90 p-5 text-center shadow-panel-soft backdrop-blur">
+              <p className="text-sm font-semibold text-white">Messages are unavailable</p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">{error}</p>
+              <button type="button" onClick={onRetry} className="press mt-3 rounded-xl bg-white/[0.055] px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-white/[0.09]">Retry</button>
             </div>
           ) : null}
 
@@ -429,17 +452,13 @@ export default function ChatWindow({
           )}
 
           {isTyping ? <TypingIndicator user={participant} /> : null}
-          {sendError ? (
-            <div className="ml-auto max-w-sm animate-scale-in rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm leading-5 text-rose-200 backdrop-blur">
-              {sendError}
-            </div>
-          ) : null}
           <div ref={bottomRef} />
         </div>
       </div>
 
       <Composer
-        disabled={isSending}
+        disabled={isSending || isPendingInvitation}
+        disabledReason={isPendingInvitation ? "Accept the invitation to send messages" : null}
         editingMessage={editingMessage}
         onCancelEdit={() => setEditingMessage(null)}
         onCancelReply={() => setReplyToMessage(null)}

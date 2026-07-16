@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Clock3, Download, Eye, File, Image as ImageIcon, Pencil, Pin, Reply, SmilePlus, Trash2 } from "lucide-react";
+import { Check, CheckCheck, Clock3, Download, Eye, File, Image as ImageIcon, Music, Pencil, Pin, Reply, SmilePlus, Trash2, Video } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatChatTime, formatFileSize } from "../../utils/formatters";
 import Avatar from "../ui/Avatar";
@@ -50,15 +50,14 @@ function AttachmentList({ attachments = [], isOwn }) {
     <div className="relative z-[1] mt-2 space-y-2">
       {attachments.map((attachment) => {
         const isImage = attachment.contentType?.startsWith("image/");
-        const Icon = isImage ? ImageIcon : File;
+        const isVideo = attachment.contentType?.startsWith("video/");
+        const isAudio = attachment.contentType?.startsWith("audio/");
+        const Icon = isImage ? ImageIcon : isVideo ? Video : isAudio ? Music : File;
         const href = attachment.url || attachment.thumbnailUrl;
 
         return (
-          <a
+          <div
             key={`${attachment.objectKey}-${attachment.fileName}`}
-            href={href}
-            target="_blank"
-            rel="noreferrer"
             className={[
               "block overflow-hidden rounded-xl border transition-colors",
               isOwn ? "border-white/10 bg-white/10 hover:bg-white/15" : "border-white/5 bg-[#111827]/70 hover:bg-[#111827]",
@@ -72,7 +71,9 @@ function AttachmentList({ attachments = [], isOwn }) {
                 loading="lazy"
               />
             ) : null}
-            <span className="flex items-center gap-3 px-3 py-2.5">
+            {isVideo && href ? <video src={href} controls preload="metadata" className="max-h-80 w-full bg-black/30" /> : null}
+            {isAudio && href ? <audio src={href} controls preload="metadata" className="w-full px-3 pt-3" /> : null}
+            <a href={href} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-3 py-2.5" download={!isImage && !isVideo && !isAudio ? attachment.fileName : undefined}>
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black/15 text-indigo-200">
                 <Icon size={17} />
               </span>
@@ -85,8 +86,8 @@ function AttachmentList({ attachments = [], isOwn }) {
                 </span>
               </span>
               <Download size={16} className="shrink-0 text-slate-400" />
-            </span>
-          </a>
+            </a>
+          </div>
         );
       })}
     </div>

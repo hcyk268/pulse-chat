@@ -37,11 +37,14 @@ export function setAuthEventHandlers({ onAuthFailure = null, onAuthRefresh = nul
 }
 
 function buildErrorMessage(data, path = "") {
-  if (AUTH_ERROR_MESSAGES[data?.code]) {
-    return AUTH_ERROR_MESSAGES[data.code];
+  const errorData = getEnvelopeData(data);
+  const code = errorData?.code;
+
+  if (AUTH_ERROR_MESSAGES[code]) {
+    return AUTH_ERROR_MESSAGES[code];
   }
 
-  if (data?.code === "UNAUTHORIZED") {
+  if (code === "UNAUTHORIZED") {
     if (path.includes("/api/v1/auth/login")) {
       return "Invalid username/email or password.";
     }
@@ -49,8 +52,8 @@ function buildErrorMessage(data, path = "") {
     return "Your session has expired. Please sign in again.";
   }
 
-  if (Array.isArray(data?.fieldErrors) && data.fieldErrors.length > 0) {
-    return data.fieldErrors.map((fieldError) => fieldError.message).join(" ");
+  if (Array.isArray(errorData?.fieldErrors) && errorData.fieldErrors.length > 0) {
+    return errorData.fieldErrors.map((fieldError) => fieldError.message).join(" ");
   }
 
   if (typeof data?.message === "string" && data.message.trim()) {
@@ -58,6 +61,22 @@ function buildErrorMessage(data, path = "") {
   }
 
   return "Request failed. Please try again.";
+}
+
+function isApiEnvelope(data) {
+  return data
+    && typeof data === "object"
+    && typeof data.success === "boolean"
+    && typeof data.message === "string";
+}
+
+function getEnvelopeData(data) {
+  return isApiEnvelope(data) ? data.data : data;
+}
+
+function unwrapResponseData(data) {
+  if (data === "" || data === undefined) return null;
+  return isApiEnvelope(data) ? data.data ?? null : data;
 }
 
 function notifyAuthFailure(message) {
@@ -115,13 +134,14 @@ async function refreshAuthSession() {
       data: { refreshToken },
     });
 
-    if (response.status < 200 || response.status >= 300) {
+    if ((isApiEnvelope(response.data) && !response.data.success) || response.status < 200 || response.status >= 300) {
       notifyAuthFailure(buildErrorMessage(response.data, "/api/v1/auth/refresh"));
       return false;
     }
 
-    saveAuthSession(response.data, isPersistentSession());
-    notifyAuthRefresh(response.data);
+    const authSession = unwrapResponseData(response.data);
+    saveAuthSession(authSession, isPersistentSession());
+    notifyAuthRefresh(authSession);
     return true;
   } catch {
     return false;
@@ -155,8 +175,9 @@ export async function apiRequest(path, options = {}) {
     }
   }
 
-  if (response.status < 200 || response.status >= 300) {
+  if ((isApiEnvelope(response.data) && !response.data.success) || response.status < 200 || response.status >= 300) {
     const message = buildErrorMessage(response.data, path);
+    const errorData = getEnvelopeData(response.data);
 
     if (auth && response.status === 401) {
       notifyAuthFailure(message);
@@ -164,10 +185,10 @@ export async function apiRequest(path, options = {}) {
 
     throw new ApiError(message, {
       status: response.status,
-      code: response.data?.code ?? null,
-      fieldErrors: response.data?.fieldErrors ?? [],
+      code: errorData?.code ?? null,
+      fieldErrors: errorData?.fieldErrors ?? [],
     });
   }
 
-  return response.data === "" || response.data === undefined ? null : response.data;
+  return unwrapResponseData(response.data);
 }

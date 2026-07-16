@@ -38,6 +38,7 @@ import {
 import { createRealtimeClient } from "../services/realtimeClient";
 import { uploadMessageAttachment } from "../services/uploadApi";
 import { getMe, searchUsers as searchUsersApi, updateMe } from "../services/userApi";
+import { useToast } from "./useToast";
 
 const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
 const DEFAULT_USER_ACCENT = "from-cyan-300 to-emerald-400";
@@ -252,6 +253,7 @@ function normalizeReactionGroups(response) {
 }
 
 export function useChatApi() {
+  const toast = useToast();
   const [authSession, setAuthSession] = useState(getStoredAuthSession);
   const [currentUser, setCurrentUser] = useState(() => {
     return authSession?.user ? toCurrentUser(authSession.user) : EMPTY_CURRENT_USER;
@@ -267,6 +269,7 @@ export function useChatApi() {
   const [conversations, setConversations] = useState([]);
   const [conversationPaging, setConversationPaging] = useState(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [hasLoadedConversations, setHasLoadedConversations] = useState(false);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
   const [conversationError, setConversationError] = useState("");
   const [messagePagingByConversation, setMessagePagingByConversation] = useState({});
@@ -287,6 +290,9 @@ export function useChatApi() {
   const [realtimeStatus, setRealtimeStatus] = useState("idle");
   const [realtimeError, setRealtimeError] = useState("");
   const activeConversationIdRef = useRef(null);
+  const conversationsRef = useRef(conversations);
+  const conversationRequestInFlightRef = useRef(false);
+  const surfacedErrorKeysRef = useRef(new Set());
   const currentUserRef = useRef(currentUser);
   const deliveredMessageIdsRef = useRef(new Set());
   const pendingMessagesByConversationRef = useRef(new Map());
@@ -295,6 +301,26 @@ export function useChatApi() {
   const realtimeEventHandlerRef = useRef(null);
   const typingTimeoutsRef = useRef(new Map());
   currentUserRef.current = currentUser;
+  conversationsRef.current = conversations;
+
+  useEffect(() => {
+    const entries = [
+      ["auth", authMessage],
+      ["conversations", conversationError],
+      ["action", chatActionError],
+      ["start", startConversationError],
+      ["search", userSearchError],
+      ["realtime", realtimeError],
+      ...Object.entries(messageErrorByConversation).map(([id, message]) => [`message:${id}`, message]),
+    ].filter(([, message]) => Boolean(message));
+    const currentKeys = new Set(entries.map(([scope, message]) => `${scope}:${message}`));
+
+    entries.forEach(([scope, message]) => {
+      const key = `${scope}:${message}`;
+      if (!surfacedErrorKeysRef.current.has(key)) toast.error(message);
+    });
+    surfacedErrorKeysRef.current = currentKeys;
+  }, [authMessage, chatActionError, conversationError, messageErrorByConversation, realtimeError, startConversationError, toast, userSearchError]);
 
   const isLoadingSelectedConversation = (conversationId) =>
     Boolean(conversationId && loadingMessagesByConversation[conversationId]);
@@ -354,6 +380,7 @@ export function useChatApi() {
     const participantContacts = getConversationContacts(conversation);
     const lastMessage = normalizeLastMessage(conversation.lastMessage);
     const isGroup = conversation.type === "GROUP";
+    const currentUserStatus = conversation.currentUserStatus ?? conversation.status ?? null;
 
   return {
     id: conversation.id,
@@ -365,8 +392,9 @@ export function useChatApi() {
     participants: participantContacts,
     participantCount: conversation.participantCount ?? participantContacts.length,
     currentUserRole: conversation.currentUserRole ?? null,
-    currentUserStatus: conversation.currentUserStatus ?? conversation.status ?? null,
-    isPendingInvitation: Boolean(conversation.isPendingInvitation),
+    currentUserStatus,
+    isPendingInvitation:
+      currentUserStatus === "PENDING" || Boolean(conversation.isPendingInvitation),
     createdBy: conversation.createdBy ?? null,
     unreadCount: conversation.unreadCount ?? 0,
     pinned: false,
@@ -719,6 +747,7 @@ export function useChatApi() {
     setCurrentUser(EMPTY_CURRENT_USER);
     setConversations([]);
     setConversationPaging(null);
+    setHasLoadedConversations(false);
     setContacts([]);
     setUserSearchResults([]);
     setMessagePagingByConversation({});
@@ -792,26 +821,30 @@ export function useChatApi() {
     };
   }, [applyAuthenticatedSession, clearAuthenticatedSession]);
 
-  async function loadConversations({ append = false } = {}) {
+  async function loadConversations({ append = false, silent = false } = {}) {
     const paging = append ? conversationPaging : null;
 
     if (append && !paging?.hasMore) return;
+    if (conversationRequestInFlightRef.current) return;
+    conversationRequestInFlightRef.current = true;
 
     if (append) {
       setIsLoadingMoreConversations(true);
-    } else {
+    } else if (!silent) {
       setIsLoadingConversations(true);
     }
-    setConversationError("");
+    if (!silent) setConversationError("");
 
     try {
       const response = await listConversations({
-        limit: 20,
+        limit: silent
+          ? Math.min(Math.max(conversationsRef.current.length, 20), 50)
+          : 20,
         cursor: append ? paging?.nextCursor : null,
         snapshotAt: append ? paging?.snapshotAt : null,
       });
       const normalized = (response.items ?? []).map((conversation) => {
-        const existing = conversations.find((item) => String(item.id) === String(conversation.id));
+        const existing = conversationsRef.current.find((item) => String(item.id) === String(conversation.id));
         return normalizeConversation(conversation, existing?.messages ?? []);
       });
       const nextContacts = normalized.flatMap(getNormalizedConversationContacts);
@@ -822,31 +855,84 @@ export function useChatApi() {
       );
       setConversationPaging(response.paging ?? null);
     } catch (error) {
-      setConversationError(error.message || "Could not load conversations.");
+      if (!silent) setConversationError(error.message || "Could not load conversations.");
     } finally {
-      setIsLoadingConversations(false);
+      conversationRequestInFlightRef.current = false;
+      if (!append) setHasLoadedConversations(true);
+      if (!silent) setIsLoadingConversations(false);
       setIsLoadingMoreConversations(false);
     }
   }
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
-      loadConversations();
-    }
+    if (authStatus !== "authenticated") return undefined;
+
+    loadConversations();
+    const refresh = () => {
+      if (document.visibilityState === "visible") loadConversations({ silent: true });
+    };
+    const handleVisibilityChange = () => refresh();
+    const intervalId = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [authStatus]);
 
-  async function loadConversation(conversationId) {
+  async function loadConversation(conversationId, { force = false } = {}) {
     if (!conversationId) return null;
 
     setLoadingMessagesByConversation((previous) => ({ ...previous, [conversationId]: true }));
     setMessageErrorByConversation((previous) => ({ ...previous, [conversationId]: "" }));
 
     try {
-      const [conversationResponse, messageResponse, pinsResponse] = await Promise.all([
-        getConversation(conversationId),
-        listMessages({ conversationId, limit: 20 }),
-        listConversationPins(conversationId),
-      ]);
+      const conversationSummary = conversationsRef.current.find(
+        (conversation) => String(conversation.id) === String(conversationId),
+      );
+      if (!force && (
+        conversationSummary?.currentUserStatus === "PENDING" ||
+        conversationSummary?.isPendingInvitation
+      )) {
+        replaceConversationPins(conversationId, { items: [] });
+        setMessagePagingByConversation((previous) => ({
+          ...previous,
+          [conversationId]: null,
+        }));
+        return conversationSummary;
+      }
+
+      let conversationResponse = await getConversation(conversationId);
+      let isPendingInvitation =
+        conversationResponse.currentUserStatus === "PENDING" ||
+        conversationResponse.status === "PENDING" ||
+        Boolean(conversationResponse.isPendingInvitation);
+      let messageResponse = { items: [], paging: null };
+      let pinsResponse = { items: [] };
+
+      if (!isPendingInvitation) {
+        try {
+          [messageResponse, pinsResponse] = await Promise.all([
+            listMessages({ conversationId, limit: 20 }),
+            listConversationPins(conversationId).catch(() => ({ items: [] })),
+          ]);
+        } catch (error) {
+          // Compatibility fallback for a backend instance that still serves the
+          // pre-currentUserStatus DTO. A pending participant may read group
+          // metadata, but the message endpoint correctly rejects them with 403.
+          if (conversationResponse.type !== "GROUP" || error.status !== 403) throw error;
+
+          isPendingInvitation = true;
+          conversationResponse = {
+            ...conversationResponse,
+            currentUserStatus: "PENDING",
+            isPendingInvitation: true,
+          };
+        }
+      }
       const messages = (messageResponse.items ?? []).map((message) =>
         normalizeMessage(message),
       );
@@ -1291,17 +1377,24 @@ export function useChatApi() {
 
     try {
       const attachments = [];
+      const totalUploadBytes = selectedFiles.reduce((total, file) => total + file.size, 0);
+      let completedUploadBytes = 0;
 
       for (const file of selectedFiles) {
         const uploaded = await uploadMessageAttachment(file, {
           onProgress: (progress) => {
+            const currentFileBytes = file.size * (progress / 100);
+            const overallProgress = totalUploadBytes
+              ? Math.round(((completedUploadBytes + currentFileBytes) / totalUploadBytes) * 100)
+              : 100;
             setUploadProgressByConversation((previous) => ({
               ...previous,
-              [conversationId]: progress,
+              [conversationId]: overallProgress,
             }));
           },
         });
         attachments.push(uploaded);
+        completedUploadBytes += file.size;
       }
 
       const response = await sendMessageApi({
@@ -1528,7 +1621,9 @@ export function useChatApi() {
 
     return runChatAction("Could not accept invitation.", async () => {
       const response = await acceptGroupInvitationApi(conversationId);
-      return applyConversationResponse(response);
+      const acceptedConversation = applyConversationResponse(response);
+      await loadConversation(conversationId, { force: true });
+      return acceptedConversation;
     });
   }
 
@@ -1689,6 +1784,7 @@ export function useChatApi() {
     deleteMessage,
     editMessage,
     getConversationById,
+    hasLoadedConversations,
     hasMoreMessages,
     isSearchingUsers,
     isLoadingConversations,
