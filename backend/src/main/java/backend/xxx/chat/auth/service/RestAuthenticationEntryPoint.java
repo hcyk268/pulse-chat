@@ -32,7 +32,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
                 response.getWriter(),
                 new ApiErrorResponse(
                         ErrorCode.UNAUTHORIZED.name(),
-                        "Unauthorized",
+                        "auth.unauthorized",
                         Instant.now(),
                         request.getRequestURI(),
                         null

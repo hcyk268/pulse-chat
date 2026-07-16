@@ -9,8 +9,8 @@ public class EmailAlreadyExistsException extends ConflictException {
 
     public EmailAlreadyExistsException() {
         super(
-                "User already exists",
-                List.of(new ApiFieldErrorResponse("email", "Email already exists"))
+                "user.exists",
+                List.of(new ApiFieldErrorResponse("email", "user.email.exists"))
         );
     }
 }

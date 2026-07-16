@@ -49,11 +49,11 @@ public class CloudflareR2Config {
     }
 
     private void validateRequiredProperties(CloudflareR2Properties properties) {
-        requireNotBlank(properties.accountId(), "R2 accountId must not be blank");
-        requireNotBlank(properties.accessKeyId(), "R2 accessKeyId must not be blank");
-        requireNotBlank(properties.secretAccessKey(), "R2 secretAccessKey must not be blank");
-        requireNotBlank(properties.bucket(), "R2 bucket must not be blank");
-        requireNotBlank(properties.publicBaseUrl(), "R2 publicBaseUrl must not be blank");
+        requireNotBlank(properties.accountId(), "storage.r2.account-id.blank");
+        requireNotBlank(properties.accessKeyId(), "storage.r2.access-key-id.blank");
+        requireNotBlank(properties.secretAccessKey(), "storage.r2.secret-access-key.blank");
+        requireNotBlank(properties.bucket(), "storage.r2.bucket.blank");
+        requireNotBlank(properties.publicBaseUrl(), "storage.r2.public-base-url.blank");
     }
 
     private void requireNotBlank(String value, String message) {

@@ -9,8 +9,8 @@ public class UsernameAlreadyExistsException extends ConflictException {
 
     public UsernameAlreadyExistsException() {
         super(
-                "User already exists",
-                List.of(new ApiFieldErrorResponse("username", "Username already exists"))
+                "user.exists",
+                List.of(new ApiFieldErrorResponse("username", "user.username.exists"))
         );
     }
 }

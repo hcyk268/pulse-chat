@@ -48,7 +48,7 @@ public class RealtimeExceptionHandler {
 
         return buildErrorResponse(
                 ErrorCode.VALIDATION_ERROR,
-                "Request validation failed",
+                "error.validation.request.failed",
                 getDestination(message),
                 fieldErrors
         );
@@ -87,7 +87,7 @@ public class RealtimeExceptionHandler {
     public ApiErrorResponse handleUnexpectedException(Exception exception, Message<?> message) {
         return buildErrorResponse(
                 ErrorCode.INTERNAL_SERVER_ERROR,
-                "Unexpected server error",
+                "error.server.unexpected",
                 getDestination(message),
                 null
         );

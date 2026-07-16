@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.*;
+import backend.xxx.chat.common.web.Translator;
 
 @Getter
 @Entity
@@ -127,11 +128,11 @@ public class User extends AbstractBaseEntity<Long> {
         String trimmedValue = value.trim();
 
         if (trimmedValue.isEmpty()) {
-            throw new IllegalArgumentException(fieldName + " must not be blank");
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.blank", fieldName));
         }
 
         if (trimmedValue.length() > maxLength) {
-            throw new IllegalArgumentException(fieldName + " exceeds max length " + maxLength);
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.max.length", fieldName, maxLength));
         }
 
         return trimmedValue;
@@ -148,7 +149,7 @@ public class User extends AbstractBaseEntity<Long> {
         }
 
         if (trimmedValue.length() > maxLength) {
-            throw new IllegalArgumentException(fieldName + " exceeds max length " + maxLength);
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.max.length", fieldName, maxLength));
         }
 
         return trimmedValue;

@@ -89,7 +89,7 @@ public class MessageReactionService {
 
     private Message getMessage(Long messageId) {
         return messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
     }
 
     public record ReactMessageResult(

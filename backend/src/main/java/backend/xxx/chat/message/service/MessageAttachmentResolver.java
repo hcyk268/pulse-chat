@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import backend.xxx.chat.common.exception.ConflictException;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.common.exception.ForbiddenException;
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
@@ -27,10 +28,10 @@ public class MessageAttachmentResolver {
 
     public List<MessageAttachment> resolve(User sender, List<AttachmentRequest> requests) {
         if (requests == null || requests.isEmpty()) {
-            throw new ValidationException("Media message must contain at least one attachment");
+            throw new ValidationException("message.media.attachments.required");
         }
         if (requests.size() > MAX_ATTACHMENTS_PER_MESSAGE) {
-            throw new ValidationException("Media message cannot contain more than " + MAX_ATTACHMENTS_PER_MESSAGE + " attachments");
+            throw new ValidationException(Translator.toLocale("message.media.attachments.limit.exceeded", MAX_ATTACHMENTS_PER_MESSAGE));
         }
 
         return IntStream.range(0, requests.size())
@@ -40,10 +41,10 @@ public class MessageAttachmentResolver {
 
     private MessageAttachment resolveOne(User sender, AttachmentRequest request, int sortOrder) {
         if (request == null) {
-            throw new ValidationException("attachment must not be null");
+            throw new ValidationException("message.attachment.required");
         }
         if (request.assetId() == null) {
-            throw new ValidationException("attachment assetId must not be null");
+            throw new ValidationException("message.attachment.asset.id.required");
         }
 
         return resolveUploadedAsset(sender, request.assetId(), sortOrder);
@@ -51,16 +52,16 @@ public class MessageAttachmentResolver {
 
     private MessageAttachment resolveUploadedAsset(User sender, Long assetId, int sortOrder) {
         UploadedAsset asset = uploadedAssetRepository.findByIdForUpdate(assetId)
-                .orElseThrow(() -> new NotFoundException("Uploaded asset not found"));
+                .orElseThrow(() -> new NotFoundException("upload.asset.not.found"));
 
         if (!asset.belongsTo(sender.getId())) {
-            throw new ForbiddenException("You are not allowed to use this uploaded asset");
+            throw new ForbiddenException("upload.asset.forbidden");
         }
         if (asset.getPurpose() != UploadPurpose.MESSAGE_ATTACHMENT) {
-            throw new ValidationException("Uploaded asset purpose is not MESSAGE_ATTACHMENT");
+            throw new ValidationException("upload.asset.purpose.invalid");
         }
         if (!asset.isReady()) {
-            throw new ConflictException("Uploaded asset is not ready to attach");
+            throw new ConflictException("upload.asset.not.ready");
         }
 
         asset.markAttached(Instant.now());

@@ -221,12 +221,12 @@ public class ConversationService {
             User targetUser
     ) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
         ConversationParticipant currentParticipant = conversationParticipantRepository.findById(
                         new ConversationParticipantId(conversation.getId(), currentUser.getId())
                 )
-                .orElseThrow(() -> new NotFoundException("Conversation participant not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.participant.not.found"));
         currentParticipant.markVisibleInList();
 
         return new CreateOrOpenDirectConversationResult(
@@ -307,7 +307,7 @@ public class ConversationService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
         List<ConversationParticipant> participants =
                 conversationAccessPolicy.requireParticipants(conversationId);
@@ -366,12 +366,12 @@ public class ConversationService {
     }
 
     private String buildConversationNextCursor(ConversationCursor conversationCursor) {
-        return cursorCodec.encode(conversationCursor, "Failed to build conversation cursor");
+        return cursorCodec.encode(conversationCursor, "conversation.cursor.build.failed");
     }
 
     private ConversationCursor decodeCursor(String cursor) {
         ConversationCursor conversationCursor =
-                cursorCodec.decode(cursor, ConversationCursor.class, "Invalid conversation cursor");
+                cursorCodec.decode(cursor, ConversationCursor.class, "conversation.cursor.invalid");
 
         conversationValidator.validateConversationCursor(conversationCursor);
 

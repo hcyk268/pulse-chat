@@ -1,6 +1,7 @@
 package backend.xxx.chat.outbox.service;
 
 import backend.xxx.chat.outbox.model.OutboxEvent;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.outbox.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,18 +51,18 @@ public class OutBoxService {
 
     private Long requireAggregateId(Long aggregateId) {
         if (aggregateId == null) {
-            throw new IllegalArgumentException("aggregateId must not be null");
+            throw new IllegalArgumentException(Translator.toLocale("outbox.aggregate.id.required"));
         }
 
         if (aggregateId <= 0) {
-            throw new IllegalArgumentException("aggregateId must be positive");
+            throw new IllegalArgumentException(Translator.toLocale("outbox.aggregate.id.positive"));
         }
 
         return aggregateId;
     }
 
     private String normalizePayload(Object payload) {
-        Objects.requireNonNull(payload, "payload must not be null");
+        Objects.requireNonNull(payload, "outbox.payload.required");
         String normalizedPayload = payload instanceof String rawPayload
                 ? requireText(rawPayload, "payload")
                 : serializeObjectToStringJson(payload);
@@ -70,18 +71,18 @@ public class OutBoxService {
             objectMapper.readTree(normalizedPayload);
             return normalizedPayload;
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("payload must be valid JSON", ex);
+            throw new IllegalArgumentException(Translator.toLocale("outbox.payload.invalid.json"), ex);
         }
     }
 
     private String requireText(String value, String fieldName) {
         if (value == null) {
-            throw new IllegalArgumentException(fieldName + " must not be null");
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.required", fieldName));
         }
 
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException(fieldName + " must not be blank");
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.blank", fieldName));
         }
 
         return trimmed;
@@ -99,7 +100,7 @@ public class OutBoxService {
         try {
             return objectMapper.writeValueAsString(object);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to serialize outbox payload", e);
+            throw new IllegalArgumentException(Translator.toLocale("outbox.payload.serialize.failed"), e);
         }
     }
 }

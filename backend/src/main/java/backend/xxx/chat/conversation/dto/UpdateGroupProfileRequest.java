@@ -6,11 +6,11 @@ import jakarta.validation.constraints.Size;
 
 public record UpdateGroupProfileRequest(
         @Size(max = 100)
-        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "name must not contain HTML tags")
+        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "conversation.group.name.no-html")
         String name,
 
         @Size(max = 500)
-        @Pattern(regexp = InputValidationPatterns.OPTIONAL_HTTP_URL, message = "avatarUrl must start with http:// or https://")
+        @Pattern(regexp = InputValidationPatterns.OPTIONAL_HTTP_URL, message = "user.avatar-url.invalid")
         String avatarUrl
 ) {
 }

@@ -24,6 +24,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import backend.xxx.chat.common.web.Translator;
 
 @Getter
 @Entity
@@ -135,7 +136,7 @@ public class Message extends AbstractBaseEntity<Long> {
 
     public void addAttachment(MessageAttachment attachment) {
         ensureNotDeleted();
-        MessageAttachment requiredAttachment = Objects.requireNonNull(attachment, "attachment must not be null");
+        MessageAttachment requiredAttachment = Objects.requireNonNull(attachment, "message.attachment.required");
         requiredAttachment.attachTo(this);
         attachments.add(requiredAttachment);
     }
@@ -172,15 +173,15 @@ public class Message extends AbstractBaseEntity<Long> {
     }
 
     private static String requireContent(String content) {
-        Objects.requireNonNull(content, "content must not be null");
+        Objects.requireNonNull(content, "message.content.required");
         String trimmedContent = content.trim();
 
         if (trimmedContent.isEmpty()) {
-            throw new IllegalArgumentException("content must not be blank");
+            throw new IllegalArgumentException("message.content.blank");
         }
 
         if (trimmedContent.length() > CONTENT_MAX_LENGTH) {
-            throw new IllegalArgumentException("content exceeds max length " + CONTENT_MAX_LENGTH);
+            throw new IllegalArgumentException(Translator.toLocale("message.content.max.length", CONTENT_MAX_LENGTH));
         }
 
         return trimmedContent;
@@ -197,7 +198,7 @@ public class Message extends AbstractBaseEntity<Long> {
         }
 
         if (trimmedContent.length() > CONTENT_MAX_LENGTH) {
-            throw new IllegalArgumentException("content exceeds max length " + CONTENT_MAX_LENGTH);
+            throw new IllegalArgumentException(Translator.toLocale("message.content.max.length", CONTENT_MAX_LENGTH));
         }
 
         return trimmedContent;
@@ -205,7 +206,7 @@ public class Message extends AbstractBaseEntity<Long> {
 
     private void ensureNotDeleted() {
         if (isDeleted()) {
-            throw new IllegalStateException("Deleted message cannot be changed");
+            throw new IllegalStateException("message.deleted.cannot.change");
         }
     }
 }

@@ -17,15 +17,15 @@ public class AuthValidator {
 
     public void validateRedisValue(String keyName, Object value, Duration timeToLive) {
         if (keyName == null || keyName.isBlank()) {
-            throw new IllegalArgumentException("Redis key must not be blank");
+            throw new IllegalArgumentException("redis.key.blank");
         }
 
         if (value == null) {
-            throw new IllegalArgumentException("Redis value must not be null");
+            throw new IllegalArgumentException("redis.value.null");
         }
 
         if (timeToLive == null || timeToLive.isZero() || timeToLive.isNegative()) {
-            throw new IllegalArgumentException("Redis TTL must be positive");
+            throw new IllegalArgumentException("redis.ttl.positive");
         }
     }
 

@@ -33,14 +33,14 @@ public class ConversationController {
                 conversationService.createOrOpenDirectConversation(currentUserProvider.getCurrentUsername(), request);
 
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        String message = result.created() ? "Create direct conversation successfully" : "Open direct conversation successfully";
+        String message = result.created() ? "conversation.direct.create.success" : "conversation.direct.open.success";
         return ResponseEntity.status(status).body(new ResponseData<>(true, message, result.response()));
     }
 
     @PostMapping("/group")
     public ResponseEntity<ResponseData<ConversationDetailResponse>> createGroupConversation(@Valid @RequestBody CreateGroupConversationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                new ResponseData<>(true, "Create group conversation successfully", conversationService.createGroupConversation(currentUserProvider.getCurrentUsername(), request))
+                new ResponseData<>(true, "conversation.group.create.success", conversationService.createGroupConversation(currentUserProvider.getCurrentUsername(), request))
         );
     }
 
@@ -49,7 +49,7 @@ public class ConversationController {
             @Positive @PathVariable Long conversationId,
             @Valid @RequestBody AddGroupMembersRequest request
     ) {
-        return new ResponseData<>(true, "Invite group members successfully", conversationService.inviteGroupMembers(
+        return new ResponseData<>(true, "conversation.group.invite.success", conversationService.inviteGroupMembers(
                 currentUserProvider.getCurrentUsername(),
                 conversationId,
                 request
@@ -58,7 +58,7 @@ public class ConversationController {
 
     @PostMapping("/{conversationId}/invitations/accept")
     public ResponseData<ConversationDetailResponse> acceptGroupInvitation(@Positive @PathVariable Long conversationId) {
-        return new ResponseData<>(true, "Accept group invitation successfully", conversationService.acceptGroupInvitation(
+        return new ResponseData<>(true, "conversation.group.invitation.accept.success", conversationService.acceptGroupInvitation(
                 currentUserProvider.getCurrentUsername(),
                 conversationId
         ));
@@ -67,7 +67,7 @@ public class ConversationController {
     @PostMapping("/{conversationId}/invitations/reject")
     public ResponseData<Void> rejectGroupInvitation(@Positive @PathVariable Long conversationId) {
         conversationService.rejectGroupInvitation(currentUserProvider.getCurrentUsername(), conversationId);
-        return new ResponseData<>(true, "Reject group invitation successfully");
+        return new ResponseData<>(true, "conversation.group.invitation.reject.success");
     }
 
     @DeleteMapping("/{conversationId}/members/{memberId}")
@@ -75,7 +75,7 @@ public class ConversationController {
             @Positive @PathVariable Long conversationId,
             @Positive @PathVariable Long memberId
     ) {
-        return new ResponseData<>(true, "Remove group member successfully", conversationService.removeGroupMember(
+        return new ResponseData<>(true, "conversation.group.member.remove.success", conversationService.removeGroupMember(
                 currentUserProvider.getCurrentUsername(),
                 conversationId,
                 memberId
@@ -85,7 +85,7 @@ public class ConversationController {
     @PostMapping("/{conversationId}/leave")
     public ResponseData<Void> leaveGroup(@Positive @PathVariable Long conversationId) {
         conversationService.leaveGroup(currentUserProvider.getCurrentUsername(), conversationId);
-        return new ResponseData<>(true, "Leave group successfully");
+        return new ResponseData<>(true, "conversation.group.leave.success");
     }
 
     @PatchMapping("/{conversationId}/group-profile")
@@ -93,7 +93,7 @@ public class ConversationController {
             @Positive @PathVariable Long conversationId,
             @Valid @RequestBody UpdateGroupProfileRequest request
     ) {
-        return new ResponseData<>(true, "Update group profile successfully", conversationService.updateGroupProfile(
+        return new ResponseData<>(true, "conversation.group.profile.update.success", conversationService.updateGroupProfile(
                 currentUserProvider.getCurrentUsername(),
                 conversationId,
                 request
@@ -106,7 +106,7 @@ public class ConversationController {
             @Positive @PathVariable Long memberId,
             @Valid @RequestBody UpdateGroupMemberRoleRequest request
     ) {
-        return new ResponseData<>(true, "Update group member role successfully", conversationService.updateGroupMemberRole(
+        return new ResponseData<>(true, "conversation.group.member.role.update.success", conversationService.updateGroupMemberRole(
                 currentUserProvider.getCurrentUsername(),
                 conversationId,
                 memberId,
@@ -120,7 +120,7 @@ public class ConversationController {
             @RequestParam(name = "cursor", required = false) String cursor,
             @RequestParam(name = "snapshotAt", required = false) Instant snapshotAt
     ) {
-        return new ResponseData<>(true, "Get conversations successfully", conversationService.getConversations(
+        return new ResponseData<>(true, "conversation.list.success", conversationService.getConversations(
                 limit,
                 cursor,
                 snapshotAt,
@@ -130,12 +130,12 @@ public class ConversationController {
 
     @GetMapping("/{conversationId}")
     public ResponseData<ConversationDetailResponse> getDetailConversation(@Positive @PathVariable Long conversationId) {
-        return new ResponseData<>(true, "Get conversation detail successfully", conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
+        return new ResponseData<>(true, "conversation.detail.success", conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
     }
 
     @GetMapping("/{conversationId}/pins")
     public ResponseData<ConversationPinnedMessagesResponse> getPinnedMessages(@Positive @PathVariable Long conversationId) {
-        return new ResponseData<>(true, "Get pinned messages successfully", messageService.getPinnedMessages(
+        return new ResponseData<>(true, "conversation.pinned.list.success", messageService.getPinnedMessages(
                 currentUserProvider.getCurrentUsername(),
                 conversationId
         ));

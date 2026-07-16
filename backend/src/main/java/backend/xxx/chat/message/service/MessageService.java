@@ -66,7 +66,7 @@ public class MessageService {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(
-                        () -> new NotFoundException("Conversation not found")
+                        () -> new NotFoundException("conversation.not.found")
                 );
 
         conversationAccessPolicy.requireActiveParticipant(conversation.getId(), currentUser.getId());
@@ -118,7 +118,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(request.conversationId())
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
         List<ConversationParticipant> participants =
                 conversationAccessPolicy.requireParticipants(conversation.getId());
@@ -171,7 +171,7 @@ public class MessageService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         conversationAccessPolicy.requireActiveParticipant(message.getConversation().getId(), currentUser.getId());
 
@@ -185,13 +185,13 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
         Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
         MessagePin existingPin = messagePinRepository.findByMessageIdWithDetails(message.getId())
                 .orElse(null);
@@ -234,7 +234,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(request.conversationId())
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
         ConversationParticipant currentParticipant =
                 conversationAccessPolicy.requireActiveParticipant(conversation.getId(), currentUser.getId());
@@ -243,7 +243,7 @@ public class MessageService {
                         request.lastReadMessageId(),
                         conversation.getId()
                 )
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Instant readAt = Instant.now();
 
@@ -287,7 +287,7 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
 
         MessagePin unPinMessage = messagePinRepository.findByMessageIdWithDetails(messageId)
-                .orElseThrow(() -> new NotFoundException("Message is not pinned before"));
+                .orElseThrow(() -> new NotFoundException("message.pin.not.found"));
 
         Long conversationId = unPinMessage.getConversation().getId();
         conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
@@ -312,7 +312,7 @@ public class MessageService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
@@ -338,7 +338,7 @@ public class MessageService {
 
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
-                .orElseThrow(() -> new NotFoundException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
         conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
@@ -383,7 +383,7 @@ public class MessageService {
         }
 
         Message replyToMessage = messageRepository.findByIdWithConversationAndSender(replyToMessageId)
-                .orElseThrow(() -> new NotFoundException("Reply message not found"));
+                .orElseThrow(() -> new NotFoundException("message.reply.not.found"));
 
         messageValidator.validateReplyToMessage(replyToMessage, conversationId);
 
@@ -391,7 +391,7 @@ public class MessageService {
     }
 
     private MessageCursor decodeCursor(String cursor) {
-        MessageCursor messageCursor = cursorCodec.decode(cursor, MessageCursor.class, "Invalid message cursor");
+        MessageCursor messageCursor = cursorCodec.decode(cursor, MessageCursor.class, "message.cursor.invalid");
 
         messageValidator.validateMessageCursor(messageCursor);
 
@@ -399,7 +399,7 @@ public class MessageService {
     }
 
     private String encodeCursor(MessageCursor messageCursor) {
-        return cursorCodec.encode(messageCursor, "Failed to build message cursor");
+        return cursorCodec.encode(messageCursor, "message.cursor.build.failed");
     }
 
     public record PinMessageResult(

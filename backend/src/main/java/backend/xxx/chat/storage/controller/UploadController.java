@@ -33,7 +33,7 @@ public class UploadController {
     public ResponseData<MultipartUploadSessionResponse> createMultipartUpload(
             @Valid @RequestBody CreateMultipartUploadRequest request
     ) {
-        return new ResponseData<>(true, "Create multipart upload successfully", multipartUploadService.createSession(
+        return new ResponseData<>(true, "upload.multipart.create.success", multipartUploadService.createSession(
                 currentUserProvider.getCurrentUsername(),
                 request
         ));
@@ -44,7 +44,7 @@ public class UploadController {
             @PathVariable @Positive Long sessionId,
             @PathVariable @Positive Integer partNumber
     ) {
-        return new ResponseData<>(true, "Create presigned upload part successfully", multipartUploadService.presignPart(
+        return new ResponseData<>(true, "upload.multipart.part.presign.success", multipartUploadService.presignPart(
                 currentUserProvider.getCurrentUsername(),
                 sessionId,
                 partNumber
@@ -57,7 +57,7 @@ public class UploadController {
             @PathVariable @Positive Integer partNumber,
             @Valid @RequestBody CompleteUploadPartRequest request
     ) {
-        return new ResponseData<>(true, "Complete multipart upload part successfully", multipartUploadService.completePart(
+        return new ResponseData<>(true, "upload.multipart.part.complete.success", multipartUploadService.completePart(
                 currentUserProvider.getCurrentUsername(),
                 sessionId,
                 partNumber,
@@ -69,7 +69,7 @@ public class UploadController {
     public ResponseData<MultipartUploadResumeResponse> resumeMultipartUpload(
             @PathVariable @Positive Long sessionId
     ) {
-        return new ResponseData<>(true, "Resume multipart upload successfully", multipartUploadService.resume(
+        return new ResponseData<>(true, "upload.multipart.resume.success", multipartUploadService.resume(
                 currentUserProvider.getCurrentUsername(),
                 sessionId
         ));
@@ -79,7 +79,7 @@ public class UploadController {
     public ResponseData<UploadedAssetResponse> completeMultipartUpload(
             @PathVariable @Positive Long sessionId
     ) {
-        return new ResponseData<>(true, "Complete multipart upload successfully", multipartUploadService.complete(
+        return new ResponseData<>(true, "upload.multipart.complete.success", multipartUploadService.complete(
                 currentUserProvider.getCurrentUsername(),
                 sessionId
         ));
@@ -90,6 +90,6 @@ public class UploadController {
             @PathVariable @Positive Long sessionId
     ) {
         multipartUploadService.abort(currentUserProvider.getCurrentUsername(), sessionId);
-        return new ResponseData<>(true, "Abort multipart upload successfully");
+        return new ResponseData<>(true, "upload.multipart.abort.success");
     }
 }

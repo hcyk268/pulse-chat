@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 public record CreateGroupConversationRequest(
         @NotBlank @Size(max = 100) String name,
         @Size(max = 500) String avatarUrl,
-        @NotNull @Size(min = 2, max = 100, message = "memberIds must contain at least 2 users")
+        @NotNull @Size(min = 2, max = 100, message = "conversation.group.members.min")
         List<Long> memberIds
 ) {
 }

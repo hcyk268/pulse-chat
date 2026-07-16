@@ -24,12 +24,12 @@ public class UserController {
 
     @GetMapping("/me")
     public ResponseData<UserResponse> getMyProfile() {
-        return new ResponseData<>(true, "Get personal information successfully", userService.getMyProfile(currentUserProvider.getCurrentUsername()));
+        return new ResponseData<>(true, "user.profile.get.success", userService.getMyProfile(currentUserProvider.getCurrentUsername()));
     }
 
     @PatchMapping("/me")
     public ResponseData<UserResponse> updateMyProfile(@Valid @RequestBody UpdateMyProfileRequest request) {
-        return new ResponseData<>(true, "Update personal information successfully", userService.updateMyProfile(currentUserProvider.getCurrentUsername(), request));
+        return new ResponseData<>(true, "user.profile.update.success", userService.updateMyProfile(currentUserProvider.getCurrentUsername(), request));
     }
 
     @GetMapping("/search")
@@ -37,6 +37,6 @@ public class UserController {
             @RequestParam(name = "q") String keyword,
             @Min(1) @Max(100) @RequestParam(name = "limit", required = false, defaultValue = "10") Short limit
     ) {
-        return new ResponseData<>(true, "Search users successfully", userService.search(currentUserProvider.getCurrentUsername(), keyword, limit));
+        return new ResponseData<>(true, "user.search.success", userService.search(currentUserProvider.getCurrentUsername(), keyword, limit));
     }
 }

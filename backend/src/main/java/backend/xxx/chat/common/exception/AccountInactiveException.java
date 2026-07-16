@@ -5,6 +5,6 @@ import org.springframework.http.HttpStatus;
 public class AccountInactiveException extends ApiException {
 
     public AccountInactiveException() {
-        super(HttpStatus.FORBIDDEN, ErrorCode.ACCOUNT_INACTIVE, "Account is inactive");
+        super(HttpStatus.FORBIDDEN, ErrorCode.ACCOUNT_INACTIVE, "account.inactive");
     }
 }

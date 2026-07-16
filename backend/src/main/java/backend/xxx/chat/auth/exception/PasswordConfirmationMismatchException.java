@@ -9,8 +9,8 @@ public class PasswordConfirmationMismatchException extends ValidationException {
 
     public PasswordConfirmationMismatchException() {
         super(
-                "Request validation failed",
-                List.of(new ApiFieldErrorResponse("confirmPassword", "Confirm password does not match"))
+                "error.validation.request.failed",
+                List.of(new ApiFieldErrorResponse("confirmPassword", "auth.password.confirmation.mismatch.field"))
         );
     }
 }

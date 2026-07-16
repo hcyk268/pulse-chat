@@ -30,7 +30,7 @@ public class RealtimeController {
             @Valid @Payload TypingStatusRequest request
     ) {
         if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
+            throw new UnauthorizedException("auth.unauthorized");
         }
 
         typingService.updateTyping(principal.getName(), conversationId, request);
@@ -42,7 +42,7 @@ public class RealtimeController {
             @Positive @DestinationVariable Long messageId
     ) {
         if (principal == null) {
-            throw new UnauthorizedException("Unauthorized");
+            throw new UnauthorizedException("auth.unauthorized");
         }
 
         deliveredService.messageDelivered(principal.getName(), messageId);

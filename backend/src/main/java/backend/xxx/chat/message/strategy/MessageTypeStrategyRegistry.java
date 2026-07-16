@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import backend.xxx.chat.common.exception.ValidationException;
+import backend.xxx.chat.common.web.Translator;
 import backend.xxx.chat.message.model.MessageType;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ public class MessageTypeStrategyRegistry {
     public MessageTypeStrategy get(MessageType messageType) {
         MessageTypeStrategy strategy = strategies.get(messageType);
         if (strategy == null) {
-            throw new ValidationException("Unsupported message type: " + messageType);
+            throw new ValidationException(Translator.toLocale("message.type.unsupported", messageType));
         }
         return strategy;
     }

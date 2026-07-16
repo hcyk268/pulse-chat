@@ -47,7 +47,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(buildErrorResponse(
                         ErrorCode.VALIDATION_ERROR,
-                        "Request validation failed",
+                        "error.validation.request.failed",
                         request.getRequestURI(),
                         fieldErrors
                 ));
@@ -69,7 +69,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(buildErrorResponse(
                         ErrorCode.VALIDATION_ERROR,
-                        "Request validation failed",
+                        "error.validation.request.failed",
                         request.getRequestURI(),
                         fieldErrors
                 ));
@@ -97,7 +97,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(buildErrorResponse(
                         ErrorCode.UNAUTHORIZED,
-                        "Invalid username/email or password",
+                        "auth.invalid.credentials",
                         request.getRequestURI(),
                         null
                 ));
@@ -111,7 +111,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(buildErrorResponse(
                         ErrorCode.ACCOUNT_INACTIVE,
-                        "Account is inactive",
+                        "account.inactive",
                         request.getRequestURI(),
                         null
                 ));
@@ -125,7 +125,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(buildErrorResponse(
                         ErrorCode.ACCOUNT_LOCKED,
-                        "Account is locked",
+                        "account.locked",
                         request.getRequestURI(),
                         null
                 ));
@@ -136,7 +136,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(buildErrorResponse(
                         ErrorCode.INTERNAL_SERVER_ERROR,
-                        "Unexpected server error",
+                        "error.server.unexpected",
                         request.getRequestURI(),
                         null
                 ));

@@ -11,6 +11,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import backend.xxx.chat.common.web.Translator;
 
 @Getter
 @Entity
@@ -77,7 +78,7 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
     ) {
         OutboxEvent event = new OutboxEvent();
         event.aggregateType = requireText(aggregateType, "aggregateType", AGGREGATE_TYPE_MAX_LENGTH);
-        event.aggregateId = Objects.requireNonNull(aggregateId, "aggregateId must not be null");
+        event.aggregateId = Objects.requireNonNull(aggregateId, "outbox.aggregate.id.required");
         event.eventType = requireText(eventType, "eventType", EVENT_TYPE_MAX_LENGTH);
         event.payload = requirePayload(payload);
         event.status = OutboxStatus.PENDING;
@@ -129,9 +130,9 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
     }
 
     private static String requirePayload(String payload) {
-        Objects.requireNonNull(payload, "payload must not be null");
+        Objects.requireNonNull(payload, "outbox.payload.required");
         if (payload.isBlank()) {
-            throw new IllegalArgumentException("payload must not be blank");
+            throw new IllegalArgumentException(Translator.toLocale("outbox.payload.blank"));
         }
         return payload;
     }
@@ -140,10 +141,10 @@ public class OutboxEvent extends AbstractBaseEntity<Long> {
         Objects.requireNonNull(value, fieldName + " must not be null");
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException(fieldName + " must not be blank");
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.blank", fieldName));
         }
         if (trimmed.length() > maxLength) {
-            throw new IllegalArgumentException(fieldName + " exceeds max length " + maxLength);
+            throw new IllegalArgumentException(Translator.toLocale("validation.field.max.length", fieldName, maxLength));
         }
         return trimmed;
     }

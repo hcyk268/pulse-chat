@@ -9,13 +9,13 @@ import jakarta.validation.constraints.Size;
 public record RegisterRequest(
         @NotBlank
         @Size(max = 50)
-        @Pattern(regexp = InputValidationPatterns.USERNAME, message = "username may only contain letters, numbers, dot, underscore, or hyphen")
+        @Pattern(regexp = InputValidationPatterns.USERNAME, message = "user.username.pattern.invalid")
         String username,
 
         @NotBlank @Email @Size(max = 255) String email,
         @NotBlank
         @Size(max = 100)
-        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "displayName must not contain HTML tags")
+        @Pattern(regexp = InputValidationPatterns.NO_HTML_ANGLE_BRACKETS, message = "user.display-name.no-html")
         String displayName,
 
         @NotBlank @Size(min = 8, max = 100) String password,
