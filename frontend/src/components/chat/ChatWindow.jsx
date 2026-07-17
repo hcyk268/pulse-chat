@@ -111,7 +111,7 @@ export default function ChatWindow({
     conversation.messages.forEach((message) => {
       onLoadMessageReactions(message.id);
     });
-  }, [conversation?.id, messageReactionKey, onLoadMessageReactions]);
+  }, [conversation, messageReactionKey, onLoadMessageReactions]);
 
   useEffect(() => {
     setEditingMessage(null);

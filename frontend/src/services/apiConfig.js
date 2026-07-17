@@ -1,19 +1,18 @@
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(
-  /\/$/,
-  "",
-);
+import { buildRuntimeConfig } from "../config/runtimeConfig";
 
 const APP_ORIGIN =
   typeof window !== "undefined" && window.location?.origin
     ? window.location.origin
     : "http://localhost:5173";
 
-export const ABSOLUTE_API_BASE_URL = new URL(API_BASE_URL, APP_ORIGIN)
-  .toString()
-  .replace(/\/$/, "");
+const runtimeConfig = buildRuntimeConfig({
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+  websocketUrl: import.meta.env.VITE_WS_URL,
+  appOrigin: APP_ORIGIN,
+  isProduction: import.meta.env.PROD,
+});
 
-export const REALTIME_URL =
-  import.meta.env.VITE_WS_URL ||
-  `${ABSOLUTE_API_BASE_URL.replace(/^http/i, "ws")}/ws`;
-
-export const REALTIME_HOST = new URL(ABSOLUTE_API_BASE_URL).host;
+export const API_BASE_URL = runtimeConfig.apiBaseUrl;
+export const ABSOLUTE_API_BASE_URL = runtimeConfig.absoluteApiBaseUrl;
+export const REALTIME_URL = runtimeConfig.realtimeUrl;
+export const REALTIME_HOST = runtimeConfig.realtimeHost;

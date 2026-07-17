@@ -1,47 +1,99 @@
+import {
+  createStoredAuthSession,
+  isAuthSessionUsable,
+} from "../domain/auth/session.js";
+
 const AUTH_SESSION_KEY = "chatapp.auth.session";
 
+function getBrowserStorage(name) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    return window[name];
+  } catch {
+    return null;
+  }
+}
+
+function safeGetItem(storage) {
+  try {
+    return storage?.getItem(AUTH_SESSION_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(storage, value) {
+  if (!storage) return false;
+
+  try {
+    storage.setItem(AUTH_SESSION_KEY, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveItem(storage) {
+  try {
+    storage?.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    // Storage cleanup is best-effort when browser privacy settings block access.
+  }
+}
+
 function hasAuthSession(storage) {
-  return Boolean(storage.getItem(AUTH_SESSION_KEY));
+  return Boolean(safeGetItem(storage));
 }
 
 function readFromStorage(storage) {
-  const raw = storage.getItem(AUTH_SESSION_KEY);
+  const raw = safeGetItem(storage);
   if (!raw) return null;
 
   try {
     return JSON.parse(raw);
   } catch {
-    storage.removeItem(AUTH_SESSION_KEY);
+    safeRemoveItem(storage);
     return null;
   }
 }
 
-export function isPersistentSession() {
-  if (typeof window === "undefined") return true;
+function readUsableSession(storage) {
+  const session = readFromStorage(storage);
+  if (!session || isAuthSessionUsable(session)) return session;
 
-  return hasAuthSession(window.localStorage);
+  safeRemoveItem(storage);
+  return null;
+}
+
+export function isPersistentSession() {
+  return hasAuthSession(getBrowserStorage("localStorage"));
 }
 
 export function saveAuthSession(authResponse, rememberSession = true) {
-  if (typeof window === "undefined") return;
+  const localStorage = getBrowserStorage("localStorage");
+  const sessionStorage = getBrowserStorage("sessionStorage");
+  const targetStorage = rememberSession ? localStorage : sessionStorage;
+  const staleStorage = rememberSession ? sessionStorage : localStorage;
+  const serializedSession = JSON.stringify(createStoredAuthSession(authResponse));
+  let saved = safeSetItem(targetStorage, serializedSession);
 
-  const targetStorage = rememberSession ? window.localStorage : window.sessionStorage;
-  const staleStorage = rememberSession ? window.sessionStorage : window.localStorage;
+  if (!saved && rememberSession) {
+    saved = safeSetItem(sessionStorage, serializedSession);
+  }
 
-  targetStorage.setItem(
-    AUTH_SESSION_KEY,
-    JSON.stringify({
-      ...authResponse,
-      savedAt: new Date().toISOString(),
-    }),
-  );
-  staleStorage.removeItem(AUTH_SESSION_KEY);
+  if (saved) {
+    safeRemoveItem(staleStorage);
+  }
+
+  return saved;
 }
 
 export function getAuthSession() {
-  if (typeof window === "undefined") return null;
+  const persistentSession = readUsableSession(getBrowserStorage("localStorage"));
+  if (persistentSession) return persistentSession;
 
-  return readFromStorage(window.localStorage) ?? readFromStorage(window.sessionStorage);
+  return readUsableSession(getBrowserStorage("sessionStorage"));
 }
 
 export function getAccessToken() {
@@ -53,14 +105,10 @@ export function getRefreshToken() {
 }
 
 export function hasValidAuthSession() {
-  const session = getAuthSession();
-
-  return Boolean(session?.accessToken && session?.refreshToken && session?.user);
+  return Boolean(getAuthSession());
 }
 
 export function clearAuthSession() {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.removeItem(AUTH_SESSION_KEY);
-  window.sessionStorage.removeItem(AUTH_SESSION_KEY);
+  safeRemoveItem(getBrowserStorage("localStorage"));
+  safeRemoveItem(getBrowserStorage("sessionStorage"));
 }
