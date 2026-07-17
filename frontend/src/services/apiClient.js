@@ -8,6 +8,7 @@ import {
 } from "../utils/authStorage";
 import { API_BASE_URL } from "./apiConfig";
 
+const API_REQUEST_TIMEOUT_MS = 15_000;
 const AUTH_ERROR_MESSAGES = {
   ACCOUNT_INACTIVE: "Your account is inactive. Please contact support.",
   ACCOUNT_LOCKED: "Your account is locked or suspended. Please contact support.",
@@ -15,11 +16,13 @@ const AUTH_ERROR_MESSAGES = {
 
 const httpClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: API_REQUEST_TIMEOUT_MS,
   validateStatus: () => true,
 });
 
 let authFailureHandler = null;
 let authRefreshHandler = null;
+let authRefreshPromise = null;
 
 export class ApiError extends Error {
   constructor(message, { status = 0, code = null, fieldErrors = [] } = {}) {
@@ -118,7 +121,7 @@ function buildHeaders(options, includeAuth) {
   return headers;
 }
 
-async function refreshAuthSession() {
+async function performAuthRefresh() {
   const refreshToken = getRefreshToken();
 
   if (!refreshToken) return false;
@@ -148,6 +151,16 @@ async function refreshAuthSession() {
   }
 }
 
+function refreshAuthSession() {
+  if (!authRefreshPromise) {
+    authRefreshPromise = performAuthRefresh().finally(() => {
+      authRefreshPromise = null;
+    });
+  }
+
+  return authRefreshPromise;
+}
+
 async function sendRequest(path, options, includeAuth) {
   try {
     return await httpClient.request({
@@ -158,8 +171,16 @@ async function sendRequest(path, options, includeAuth) {
       signal: options.signal,
       params: options.params,
     });
-  } catch {
-    throw new ApiError(`Cannot connect to backend at ${API_BASE_URL}.`);
+  } catch (error) {
+    if (axios.isCancel(error)) {
+      throw new ApiError("Request was cancelled.", { code: "REQUEST_CANCELLED" });
+    }
+
+    if (error?.code === "ECONNABORTED") {
+      throw new ApiError("The request timed out. Please try again.", { code: "REQUEST_TIMEOUT" });
+    }
+
+    throw new ApiError(`Cannot connect to backend at ${API_BASE_URL}.`, { code: "NETWORK_ERROR" });
   }
 }
 

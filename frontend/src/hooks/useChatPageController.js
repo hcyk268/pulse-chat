@@ -25,9 +25,10 @@ export function useChatPageController() {
   );
 
   useEffect(() => {
-    chatStoreRef.current.setActiveConversationId(conversationId ?? null);
+    const store = chatStoreRef.current;
+    store.setActiveConversationId(conversationId ?? null);
 
-    return () => chatStoreRef.current.setActiveConversationId(null);
+    return () => store.setActiveConversationId(null);
   }, [chatStoreRef, conversationId]);
 
   useEffect(() => {

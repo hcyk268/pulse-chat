@@ -87,8 +87,16 @@ export default function Composer({
   }
 
   useEffect(() => {
-    if (disabled) {
-      stopTyping();
+    if (!disabled) return;
+
+    if (stopTypingTimerRef.current) {
+      window.clearTimeout(stopTypingTimerRef.current);
+      stopTypingTimerRef.current = null;
+    }
+
+    if (typingRef.current) {
+      typingRef.current = false;
+      onTypingChangeRef.current?.(false);
     }
   }, [disabled]);
 

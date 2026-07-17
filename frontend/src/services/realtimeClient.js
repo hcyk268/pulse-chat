@@ -11,7 +11,7 @@ function parseMessageBody(message) {
   try {
     return JSON.parse(message.body);
   } catch (error) {
-    throw new Error(error.message || "Could not parse realtime event.");
+    throw new Error(error.message || "Could not parse realtime event.", { cause: error });
   }
 }
 
