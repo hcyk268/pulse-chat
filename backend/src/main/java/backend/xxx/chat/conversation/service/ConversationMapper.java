@@ -123,6 +123,7 @@ public class ConversationMapper {
                 peer,
                 createdBy,
                 group ? currentParticipant.getRole() : null,
+                group ? currentParticipant.getStatus() : null,
                 memberResponses,
                 activeParticipants.size(),
                 toConversationLastMessageResponse(lastMessage),
@@ -169,6 +170,7 @@ public class ConversationMapper {
                 avatarUrl,
                 peer,
                 group ? currentParticipant.getRole() : null,
+                group ? currentParticipant.getStatus() : null,
                 participantCount,
                 toConversationLastMessageResponse(lastMessage),
                 currentParticipant.getUnreadCount()

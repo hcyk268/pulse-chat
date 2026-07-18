@@ -4,6 +4,7 @@ import java.util.List;
 
 import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.model.ParticipantRole;
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 
 public record ConversationDetailResponse(
         Long id,
@@ -13,6 +14,7 @@ public record ConversationDetailResponse(
         ConversationUserResponse peer,
         ConversationUserResponse createdBy,
         ParticipantRole currentUserRole,
+        ParticipantStatus joinStatus,
         List<ConversationMemberResponse> participants,
         int participantCount,
         ConversationLastMessageResponse lastMessage,

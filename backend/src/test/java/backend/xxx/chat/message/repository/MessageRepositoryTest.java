@@ -1,5 +1,7 @@
 package backend.xxx.chat.message.repository;
 
+import backend.xxx.chat.support.H2TestProperties;
+
 import java.util.UUID;
 
 import backend.xxx.chat.config.JpaAuditingConfig;
@@ -10,12 +12,15 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
+
+@H2TestProperties
 @Import(JpaAuditingConfig.class)
 class MessageRepositoryTest {
 
