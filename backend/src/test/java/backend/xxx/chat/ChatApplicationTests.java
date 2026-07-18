@@ -1,11 +1,12 @@
 package backend.xxx.chat;
 
+import backend.xxx.chat.support.H2TestProperties;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@ActiveProfiles("test")
+@H2TestProperties
 class ChatApplicationTests {
 
 	@Test

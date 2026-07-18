@@ -1,5 +1,7 @@
 package backend.xxx.chat.user.repository;
 
+import backend.xxx.chat.support.H2TestProperties;
+
 import java.time.Instant;
 
 import backend.xxx.chat.config.JpaAuditingConfig;
@@ -9,11 +11,14 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+
 import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+
+@H2TestProperties
 @Import(JpaAuditingConfig.class)
 class PresenceRepositoryTest {
 

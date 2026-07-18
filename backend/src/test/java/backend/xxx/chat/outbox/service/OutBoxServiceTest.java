@@ -1,19 +1,20 @@
 package backend.xxx.chat.outbox.service;
 
+import backend.xxx.chat.support.H2TestProperties;
+
 import backend.xxx.chat.outbox.model.OutboxEvent;
 import backend.xxx.chat.outbox.model.OutboxStatus;
 import backend.xxx.chat.outbox.repository.OutboxEventRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@ActiveProfiles("test")
+@H2TestProperties
 @Transactional
 class OutBoxServiceTest {
 

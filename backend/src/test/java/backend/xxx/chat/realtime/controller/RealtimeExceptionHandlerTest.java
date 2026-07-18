@@ -50,7 +50,7 @@ class RealtimeExceptionHandlerTest {
         );
 
         assertThat(response.code()).isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR.name());
-        assertThat(response.message()).isEqualTo("Unexpected server error");
+        assertThat(response.message()).isEqualTo("An unexpected server error occurred");
         assertThat(response.path()).isEqualTo("/app/conversations/10/typing");
     }
 

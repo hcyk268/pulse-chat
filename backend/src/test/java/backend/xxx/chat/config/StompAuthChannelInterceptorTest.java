@@ -79,7 +79,7 @@ class StompAuthChannelInterceptorTest {
     void connectWithoutAccessTokenIsDenied() {
         assertThatThrownBy(() -> interceptor.preSend(connectMessage(null), channel))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("Missing access token");
+                .hasMessage("auth.access.token.missing");
     }
 
     @Test
@@ -103,7 +103,7 @@ class StompAuthChannelInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preSend(message, channel))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("SEND destination is not allowed");
+                .hasMessage("stomp.destination.send.not.allowed");
     }
 
     @Test
@@ -127,7 +127,7 @@ class StompAuthChannelInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preSend(message, channel))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("SUBSCRIBE destination is not allowed");
+                .hasMessage("stomp.destination.subscribe.not.allowed");
     }
 
     @Test
@@ -140,7 +140,7 @@ class StompAuthChannelInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preSend(message, channel))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("Unauthorized STOMP frame");
+                .hasMessage("stomp.frame.unauthorized");
     }
 
     private Message<byte[]> connectMessage(String authorization) {

@@ -1,5 +1,7 @@
 package backend.xxx.chat.message.service;
 
+import backend.xxx.chat.support.H2TestProperties;
+
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -45,14 +47,13 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
-@ActiveProfiles("test")
+@H2TestProperties
 @Transactional
 class MessageServiceTest {
 
@@ -221,7 +222,7 @@ class MessageServiceTest {
                 )
         ))
                 .isInstanceOf(ValidationException.class)
-                .hasMessage("Deleted message cannot be replied");
+                .hasMessage("message.deleted.cannot.reply");
     }
 
     @Test
@@ -250,7 +251,7 @@ class MessageServiceTest {
                 )
         ))
                 .isInstanceOf(ValidationException.class)
-                .hasMessage("Reply message must belong to the same conversation");
+                .hasMessage("message.reply.conversation.mismatch");
     }
 
     @Test
@@ -332,7 +333,7 @@ class MessageServiceTest {
                 )
         ))
                 .isInstanceOf(ValidationException.class)
-                .hasMessage("Media message must contain at least one attachment");
+                .hasMessage("message.media.attachments.required");
     }
 
     @Test
@@ -386,7 +387,7 @@ class MessageServiceTest {
 
         assertThatThrownBy(() -> messageService.pinMessage(alice.getUsername(), overflowMessage.getId()))
                 .isInstanceOf(ConflictException.class)
-                .hasMessage("Conversation can only have 20 pinned messages");
+                .hasMessage("A conversation can have at most 20 pinned messages");
     }
 
     @Test
@@ -524,7 +525,7 @@ class MessageServiceTest {
                 new EditMessageRequest("edited deleted content", MessageType.TEXT)
         ))
                 .isInstanceOf(ValidationException.class)
-                .hasMessage("Deleted message cannot be edited");
+                .hasMessage("message.deleted.cannot.edit");
     }
 
     @Test
