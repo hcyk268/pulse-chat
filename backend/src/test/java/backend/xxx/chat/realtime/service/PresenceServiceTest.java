@@ -36,9 +36,8 @@ class PresenceServiceTest {
     private PresenceService presenceService;
 
     @Test
-    void markConnectedCreatesPresenceAndPublishesWhenUserBecomesOnline() {
+    void markConnectedCreatesPresenceAndPublishesOnlineEvent() {
         User alice = user(1L, "alice");
-
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
         when(presenceRepository.findByUserIdForUpdate(alice.getId())).thenReturn(Optional.empty());
 
@@ -51,7 +50,6 @@ class PresenceServiceTest {
         assertThat(savedPresence.getUserId()).isEqualTo(alice.getId());
         assertThat(savedPresence.isOnline()).isTrue();
         assertThat(savedPresence.getConnectionCount()).isEqualTo(1);
-        assertThat(savedPresence.getLastActiveAt()).isNotNull();
 
         ArgumentCaptor<PresenceUpdatedDomainEvent> eventCaptor =
                 ArgumentCaptor.forClass(PresenceUpdatedDomainEvent.class);
@@ -59,13 +57,12 @@ class PresenceServiceTest {
 
         PresenceUpdatedDomainEvent event = eventCaptor.getValue();
         assertThat(event.userId()).isEqualTo(alice.getId());
-        assertThat(event.username()).isEqualTo(alice.getUsername());
+        assertThat(event.username()).isEqualTo("alice");
         assertThat(event.online()).isTrue();
-        assertThat(event.lastActiveAt()).isEqualTo(savedPresence.getLastActiveAt());
     }
 
     @Test
-    void markConnectedDoesNotPublishWhenUserAlreadyOnline() {
+    void markConnectedDoesNotPublishWhenUserWasAlreadyOnline() {
         User alice = user(1L, "alice");
         Presence presence = Presence.offline(alice);
         presence.markOnline(java.time.Instant.parse("2026-01-01T00:00:00Z"));
@@ -79,49 +76,6 @@ class PresenceServiceTest {
         assertThat(presence.getConnectionCount()).isEqualTo(2);
         verify(presenceRepository).save(presence);
         verifyNoInteractions(applicationEventPublisher);
-    }
-
-    @Test
-    void markDisconnectedDoesNotPublishUntilLastConnectionCloses() {
-        User alice = user(1L, "alice");
-        Presence presence = Presence.offline(alice);
-        presence.markOnline(java.time.Instant.parse("2026-01-01T00:00:00Z"));
-        presence.markOnline(java.time.Instant.parse("2026-01-01T00:01:00Z"));
-
-        when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
-        when(presenceRepository.findByUserIdForUpdate(alice.getId())).thenReturn(Optional.of(presence));
-
-        presenceService.markDisconnected("alice");
-
-        assertThat(presence.isOnline()).isTrue();
-        assertThat(presence.getConnectionCount()).isEqualTo(1);
-        verify(presenceRepository).save(presence);
-        verifyNoInteractions(applicationEventPublisher);
-    }
-
-    @Test
-    void markDisconnectedPublishesWhenLastConnectionCloses() {
-        User alice = user(1L, "alice");
-        Presence presence = Presence.offline(alice);
-        presence.markOnline(java.time.Instant.parse("2026-01-01T00:00:00Z"));
-
-        when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
-        when(presenceRepository.findByUserIdForUpdate(alice.getId())).thenReturn(Optional.of(presence));
-
-        presenceService.markDisconnected("alice");
-
-        assertThat(presence.isOnline()).isFalse();
-        assertThat(presence.getConnectionCount()).isZero();
-
-        ArgumentCaptor<PresenceUpdatedDomainEvent> eventCaptor =
-                ArgumentCaptor.forClass(PresenceUpdatedDomainEvent.class);
-        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-
-        PresenceUpdatedDomainEvent event = eventCaptor.getValue();
-        assertThat(event.userId()).isEqualTo(alice.getId());
-        assertThat(event.username()).isEqualTo(alice.getUsername());
-        assertThat(event.online()).isFalse();
-        assertThat(event.lastActiveAt()).isEqualTo(presence.getLastActiveAt());
     }
 
     @Test

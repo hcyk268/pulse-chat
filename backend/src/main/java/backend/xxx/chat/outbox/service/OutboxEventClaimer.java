@@ -1,6 +1,6 @@
 package backend.xxx.chat.outbox.service;
 
-import backend.xxx.chat.config.OutboxWorkerProperties;
+import backend.xxx.chat.config.properties.OutboxWorkerProperties;
 import backend.xxx.chat.outbox.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

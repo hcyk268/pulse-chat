@@ -28,7 +28,7 @@ public class OutBoxWorker {
     public void process() {
         int processedCount = outboxProcessingService.processBatch();
         if (processedCount > 0) {
-            log.debug("Processed {} outbox event(s)", processedCount);
+            log.debug("Processed {} outbox event", processedCount);
         }
     }
 }
