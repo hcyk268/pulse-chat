@@ -1,6 +1,7 @@
 package backend.xxx.chat.config;
 
 import backend.xxx.chat.common.exception.ValidationException;
+import backend.xxx.chat.config.properties.CloudflareR2Properties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

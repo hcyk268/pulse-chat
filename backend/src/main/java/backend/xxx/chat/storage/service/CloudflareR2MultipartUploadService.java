@@ -11,10 +11,8 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import backend.xxx.chat.common.exception.ConflictException;
-import backend.xxx.chat.common.exception.ForbiddenException;
-import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
-import backend.xxx.chat.config.CloudflareR2Properties;
+import backend.xxx.chat.config.properties.CloudflareR2Properties;
 import backend.xxx.chat.storage.dto.CompleteUploadPartRequest;
 import backend.xxx.chat.storage.dto.CreateMultipartUploadRequest;
 import backend.xxx.chat.storage.dto.MultipartUploadResumeResponse;

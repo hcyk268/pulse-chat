@@ -1,6 +1,6 @@
 package backend.xxx.chat.outbox.service;
 
-import backend.xxx.chat.config.OutboxWorkerProperties;
+import backend.xxx.chat.config.properties.OutboxWorkerProperties;
 import backend.xxx.chat.outbox.dispatcher.OutboxDispatcher;
 import backend.xxx.chat.outbox.model.OutboxEvent;
 import backend.xxx.chat.outbox.model.OutboxStatus;
