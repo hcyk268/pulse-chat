@@ -64,10 +64,34 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
-    void connectWithoutAccessTokenIsDenied() {
-        assertThatThrownBy(() -> interceptor.preSend(connectMessage(null), channel))
+    void connectWithoutAccessTokenIsAllowedAsGuest() {
+        Message<?> message = connectMessage(null);
+
+        Message<?> result = interceptor.preSend(message, channel);
+
+        StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
+                result,
+                StompHeaderAccessor.class
+        );
+        assertThat(result).isSameAs(message);
+        assertThat(accessor).isNotNull();
+        assertThat(accessor.getUser()).isNull();
+    }
+
+    @Test
+    void subscribeToPublicMarketTopicIsAllowedWithoutAuthentication() {
+        Message<?> message = stompMessage(StompCommand.SUBSCRIBE, "/topic/market/tickers/BTCUSDT", null);
+
+        assertThat(interceptor.preSend(message, channel)).isSameAs(message);
+    }
+
+    @Test
+    void subscribeToPrivateUserQueueRequiresAuthentication() {
+        Message<?> message = stompMessage(StompCommand.SUBSCRIBE, "/user/queue/events", null);
+
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("auth.access.token.missing");
+                .hasMessage("stomp.frame.unauthorized");
     }
 
     @Test
