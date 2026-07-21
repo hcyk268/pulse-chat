@@ -46,6 +46,16 @@ app:
       trending-delay-ms: ${MARKET_SYNC_TRENDING_DELAY_MS:3600000}
       scheduler-pool-size: ${MARKET_SYNC_SCHEDULER_POOL_SIZE:1}
 
+    stream:
+      enabled: ${MARKET_STREAM_ENABLED:true}
+      base-url: ${MARKET_STREAM_BASE_URL:wss://stream.binance.com:9443/stream}
+      initial-delay-ms: ${MARKET_STREAM_INITIAL_DELAY_MS:15000}
+      reconnect-delay-ms: ${MARKET_STREAM_RECONNECT_DELAY_MS:60000}
+      max-pairs: ${MARKET_STREAM_MAX_PAIRS:200}
+      candle-intervals: ${MARKET_STREAM_CANDLE_INTERVALS:4h,1d,1w}
+      ticker-cache-ttl: ${MARKET_STREAM_TICKER_CACHE_TTL:10m}
+      candle-cache-ttl: ${MARKET_STREAM_CANDLE_CACHE_TTL:8d}
+
   storage:
     r2:
       enabled: ${R2_ENABLED:false}

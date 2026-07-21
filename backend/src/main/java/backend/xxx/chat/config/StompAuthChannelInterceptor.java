@@ -30,6 +30,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             "/user/queue/events",
             "/user/queue/errors"
     );
+    private static final String PUBLIC_MARKET_TOPIC_PREFIX = "/topic/market/";
 
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
@@ -47,7 +48,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         StompCommand command = accessor.getCommand();
         if (StompCommand.CONNECT.equals(command)) {
-            return authenticateConnect(message, accessor);
+            authenticateConnectIfPresent(accessor);
+            return message;
         }
 
         if (StompCommand.DISCONNECT.equals(command) || StompCommand.UNSUBSCRIBE.equals(command)) {
@@ -61,6 +63,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         if (StompCommand.SUBSCRIBE.equals(command)) {
+            if (isPublicDestination(accessor.getDestination())) {
+                return message;
+            }
+
             requireAuthenticated(accessor);
             assertAllowedSubscribeDestination(accessor.getDestination());
             return message;
@@ -69,10 +75,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         throw new AccessDeniedException("stomp.command.not.allowed");
     }
 
-    private Message<?> authenticateConnect(Message<?> message, StompHeaderAccessor accessor) {
+    private boolean isPublicDestination(String destination) {
+        return destination != null && destination.startsWith(PUBLIC_MARKET_TOPIC_PREFIX);
+    }
+
+    private void authenticateConnectIfPresent(StompHeaderAccessor accessor) {
         String authorization = accessor.getFirstNativeHeader(HttpHeaders.AUTHORIZATION);
-        if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
-            throw new AccessDeniedException("auth.access.token.missing");
+
+        if (authorization == null || authorization.isBlank()) {
+            return;
+        }
+
+        if (!authorization.startsWith(BEARER_PREFIX)) {
+            throw new AccessDeniedException("auth.access.token.invalid");
         }
 
         String token = authorization.substring(BEARER_PREFIX.length());
@@ -90,8 +105,6 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                         userDetails.getAuthorities()
                 );
         accessor.setUser(authentication);
-
-        return message;
     }
 
     private void requireAuthenticated(StompHeaderAccessor accessor) {
