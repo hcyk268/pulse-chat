@@ -1,7 +1,10 @@
 package backend.xxx.chat.market.controller;
 
+import java.util.List;
+
 import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.market.dto.CoinDetailResponse;
+import backend.xxx.chat.market.dto.MarketTickerResponse;
 import backend.xxx.chat.market.dto.OverviewMarketResponse;
 import backend.xxx.chat.market.service.MarketService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,16 @@ public class MarketController {
     @GetMapping
     public ResponseData<OverviewMarketResponse> getMarket() {
         return new ResponseData<>(true, "", marketService.getMarket());
+    }
+
+    @GetMapping("/tickers")
+    public ResponseData<List<MarketTickerResponse>> getTickers() {
+        return new ResponseData<>(true, "", marketService.getTickers());
+    }
+
+    @GetMapping("/tickers/{symbol}")
+    public ResponseData<MarketTickerResponse> getTicker(@PathVariable String symbol) {
+        return new ResponseData<>(true, "", marketService.getTicker(symbol));
     }
 
     @GetMapping("/{symbol}")

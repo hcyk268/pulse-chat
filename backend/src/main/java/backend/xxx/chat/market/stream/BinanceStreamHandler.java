@@ -3,15 +3,22 @@ package backend.xxx.chat.market.stream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import backend.xxx.chat.market.model.MarketPair;
 import backend.xxx.chat.market.redis.model.MarketLiveCandleHash;
 import backend.xxx.chat.market.redis.model.MarketTickerLatestHash;
+import backend.xxx.chat.market.service.MarketCandlePersistenceService;
+import backend.xxx.chat.realtime.event.CandleUpdatedDomainEvent;
+import backend.xxx.chat.realtime.event.TickerUpdatedDomainEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -23,12 +30,51 @@ import static backend.xxx.chat.market.stream.BinanceMarketStreamService.BINANCE_
 @RequiredArgsConstructor
 public class BinanceStreamHandler extends TextWebSocketHandler {
 
+    private static final int SUBSCRIPTION_BATCH_SIZE = 100;
+    private static final long SUBSCRIPTION_BATCH_DELAY_MS = 250;
+
     private final ObjectMapper objectMapper;
     private final BinanceMarketDataCache marketDataCache;
+    private final MarketCandlePersistenceService marketCandlePersistenceService;
     private final BinanceStreamSessionManager sessionManager;
     private final Map<String, MarketPair> pairsBySymbol;
+    private final List<String> streams;
     private final Runnable reconnectCallback;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) {
+        sendSubscriptionBatch(session, 0);
+    }
+
+    private void sendSubscriptionBatch(WebSocketSession session, int startIndex) {
+        if (!session.isOpen() || startIndex >= streams.size()) {
+            return;
+        }
+
+        int endIndex = Math.min(startIndex + SUBSCRIPTION_BATCH_SIZE, streams.size());
+        List<String> batch = streams.subList(startIndex, endIndex);
+        int requestId = (startIndex / SUBSCRIPTION_BATCH_SIZE) + 1;
+
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "method", "SUBSCRIBE",
+                    "params", batch,
+                    "id", requestId
+            ));
+            session.sendMessage(new TextMessage(payload));
+            log.info("Subscribed Binance market stream batch {}/{}", endIndex, streams.size());
+        } catch (IOException exception) {
+            log.error("Failed to subscribe Binance market stream batch", exception);
+            reconnectCallback.run();
+            return;
+        }
+
+        if (endIndex < streams.size()) {
+            CompletableFuture.delayedExecutor(SUBSCRIPTION_BATCH_DELAY_MS, TimeUnit.MILLISECONDS)
+                    .execute(() -> sendSubscriptionBatch(session, endIndex));
+        }
+    }
     @Override
     public void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         JsonNode root = objectMapper.readTree(message.getPayload());
@@ -82,6 +128,7 @@ public class BinanceStreamHandler extends TextWebSocketHandler {
 
         marketDataCache.cacheTicker(ticker);
         marketDataCache.markTickerEvent();
+        applicationEventPublisher.publishEvent(new TickerUpdatedDomainEvent(ticker));
     }
 
     private void handleKline(JsonNode data) {
@@ -110,6 +157,12 @@ public class BinanceStreamHandler extends TextWebSocketHandler {
 
         marketDataCache.cacheCandle(candle);
         marketDataCache.markKlineEvent();
+
+        if (candle.isClosed()) {
+            marketCandlePersistenceService.saveClosedCandle(candle);
+        }
+
+        applicationEventPublisher.publishEvent(new CandleUpdatedDomainEvent(candle));
     }
 
     private BigDecimal decimal(JsonNode node, String fieldName) {

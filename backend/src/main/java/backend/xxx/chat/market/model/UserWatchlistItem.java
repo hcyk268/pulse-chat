@@ -16,7 +16,10 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "user_watchlist_items")
+@Table(
+        name = "user_watchlist_items",
+        uniqueConstraints = @UniqueConstraint(name = "uk_user_watchlist_items_user_asset", columnNames = {"user_id", "asset_id"})
+)
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserWatchlistItem extends AbstractBaseEntity<Long> {

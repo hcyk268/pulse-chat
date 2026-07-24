@@ -1,7 +1,6 @@
 package backend.xxx.chat.realtime.service;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.UUID;
 
 import backend.xxx.chat.realtime.dto.RealtimeEventEnvelope;
@@ -15,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class StompRealtimeEventPublisher implements RealtimeEventPublisher {
 
     private static final String USER_EVENTS_DESTINATION = "/queue/events";
+    private static final String BROADCAST_EVENTS_DESTINATION = "/topic/events";
 
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -26,10 +26,9 @@ public class StompRealtimeEventPublisher implements RealtimeEventPublisher {
             Long conversationId,
             T data
     ) {
-        RealtimeEventEnvelope<T> envelope = new RealtimeEventEnvelope<>(
-                resolveEventId(eventId),
+        RealtimeEventEnvelope<T> envelope = createEnvelope(
+                eventId,
                 eventType,
-                Instant.now(),
                 conversationId,
                 data
         );
@@ -38,6 +37,43 @@ public class StompRealtimeEventPublisher implements RealtimeEventPublisher {
                 username,
                 USER_EVENTS_DESTINATION,
                 envelope
+        );
+    }
+
+    @Override
+    public <T> void broadCast(String eventId, RealtimeEventType type, T data) {
+        sendToTopic(BROADCAST_EVENTS_DESTINATION, eventId, type, data);
+    }
+
+    @Override
+    public <T> void sendToTopic(
+            String destination,
+            String eventId,
+            RealtimeEventType eventType,
+            T data
+    ) {
+        RealtimeEventEnvelope<T> envelope = createEnvelope(
+                eventId,
+                eventType,
+                null,
+                data
+        );
+
+        messagingTemplate.convertAndSend(destination, envelope);
+    }
+
+    private <T> RealtimeEventEnvelope<T> createEnvelope(
+            String eventId,
+            RealtimeEventType eventType,
+            Long conversationId,
+            T data
+    ) {
+        return new RealtimeEventEnvelope<>(
+                resolveEventId(eventId),
+                eventType,
+                Instant.now(),
+                conversationId,
+                data
         );
     }
 
