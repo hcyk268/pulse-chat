@@ -15,13 +15,14 @@ import java.util.stream.Stream;
 import backend.xxx.chat.config.properties.BinanceStreamProperties;
 import backend.xxx.chat.market.model.MarketPair;
 import backend.xxx.chat.market.repository.MarketPairRepository;
+import backend.xxx.chat.market.service.MarketCandlePersistenceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -46,8 +47,10 @@ public class BinanceMarketStreamService {
     private final BinanceStreamProperties properties;
     private final MarketPairRepository marketPairRepository;
     private final BinanceMarketDataCache marketDataCache;
+    private final MarketCandlePersistenceService marketCandlePersistenceService;
     private final BinanceStreamSessionManager sessionManager;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final TaskScheduler marketStreamTaskScheduler;
     private final AtomicBoolean connecting = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
@@ -56,15 +59,19 @@ public class BinanceMarketStreamService {
             BinanceStreamProperties properties,
             MarketPairRepository marketPairRepository,
             BinanceMarketDataCache marketDataCache,
+            MarketCandlePersistenceService marketCandlePersistenceService,
             BinanceStreamSessionManager sessionManager,
             ObjectMapper objectMapper,
+            ApplicationEventPublisher applicationEventPublisher,
             @Qualifier("marketStreamTaskScheduler") TaskScheduler marketStreamTaskScheduler
     ) {
         this.properties = properties;
         this.marketPairRepository = marketPairRepository;
         this.marketDataCache = marketDataCache;
+        this.marketCandlePersistenceService = marketCandlePersistenceService;
         this.sessionManager = sessionManager;
         this.objectMapper = objectMapper;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.marketStreamTaskScheduler = marketStreamTaskScheduler;
     }
 
@@ -103,14 +110,18 @@ public class BinanceMarketStreamService {
 
             Map<String, MarketPair> pairsBySymbol = pairs.stream()
                     .collect(Collectors.toMap(MarketPair::getSymbol, Function.identity()));
-            URI streamUri = buildStreamUri(pairs);
+            List<String> streams = buildStreamNames(pairs);
+            URI streamUri = buildStreamUri();
             WebSocketClient client = new StandardWebSocketClient();
             BinanceStreamHandler handler = new BinanceStreamHandler(
                     objectMapper,
                     marketDataCache,
+                    marketCandlePersistenceService,
                     sessionManager,
                     pairsBySymbol,
-                    this::scheduleReconnectNow
+                    streams,
+                    this::scheduleReconnectNow,
+                    applicationEventPublisher
             );
             CompletableFuture<WebSocketSession> future = client.execute(handler, streamUri.toString());
             future.whenComplete((connectedSession, throwable) -> {
@@ -124,7 +135,7 @@ public class BinanceMarketStreamService {
 
                 sessionManager.setSession(connectedSession);
                 marketDataCache.markConnected(pairs.size());
-                log.info("Connected Binance market {} coin", pairs.size());
+                log.info("Connected Binance market {} coin with {} stream", pairs.size(), streams.size());
             });
         } catch (RuntimeException exception) {
             connecting.set(false);
@@ -156,15 +167,23 @@ public class BinanceMarketStreamService {
                 .toList();
     }
 
-    private URI buildStreamUri(List<MarketPair> pairs) {
-        String streams = pairs.stream()
+    private List<String> buildStreamNames(List<MarketPair> pairs) {
+        return pairs.stream()
                 .flatMap(pair -> {
-                    Stream<String> ticker = Stream.of(pair.getSymbol().toLowerCase(Locale.ROOT) + "@" + TICKER_STREAM);
+                    String symbol = pair.getSymbol().toLowerCase(Locale.ROOT);
+                    Stream<String> ticker = Stream.of(symbol + "@" + TICKER_STREAM);
                     Stream<String> candles = properties.getCandleIntervals().stream()
-                            .map(interval -> pair.getSymbol().toLowerCase(Locale.ROOT) + "@kline_" + interval);
+                            .map(interval -> symbol + "@kline_" + interval);
                     return Stream.concat(ticker, candles);
                 })
-                .collect(Collectors.joining("/"));
-        return URI.create(properties.getBaseUrl() + "?streams=" + streams);
+                .toList();
+    }
+
+    private URI buildStreamUri() {
+        String baseUrl = properties.getBaseUrl();
+        if (baseUrl.endsWith("/stream")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - "/stream".length()) + "/ws";
+        }
+        return URI.create(baseUrl);
     }
 }

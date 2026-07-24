@@ -48,12 +48,13 @@ app:
 
     stream:
       enabled: ${MARKET_STREAM_ENABLED:true}
-      base-url: ${MARKET_STREAM_BASE_URL:wss://stream.binance.com:9443/stream}
+      base-url: ${MARKET_STREAM_BASE_URL:wss://stream.binance.com:9443/ws}
       initial-delay-ms: ${MARKET_STREAM_INITIAL_DELAY_MS:15000}
       reconnect-delay-ms: ${MARKET_STREAM_RECONNECT_DELAY_MS:60000}
       max-pairs: ${MARKET_STREAM_MAX_PAIRS:200}
       candle-intervals: ${MARKET_STREAM_CANDLE_INTERVALS:4h,1d,1w}
       ticker-cache-ttl: ${MARKET_STREAM_TICKER_CACHE_TTL:10m}
+      ticker-symbols-cache-ttl: ${MARKET_STREAM_TICKER_SYMBOLS_CACHE_TTL:5m}
       candle-cache-ttl: ${MARKET_STREAM_CANDLE_CACHE_TTL:8d}
 
   storage:

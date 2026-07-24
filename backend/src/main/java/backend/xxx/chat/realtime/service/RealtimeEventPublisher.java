@@ -36,4 +36,25 @@ public interface RealtimeEventPublisher {
                 data
         ));
     }
+
+    <T> void broadCast(
+            String eventId,
+            RealtimeEventType type,
+            T data
+    );
+
+    default <T> void sendToTopic(
+            String destination,
+            RealtimeEventType eventType,
+            T data
+    ) {
+        sendToTopic(destination, null, eventType, data);
+    }
+
+    <T> void sendToTopic(
+            String destination,
+            String eventId,
+            RealtimeEventType eventType,
+            T data
+    );
 }

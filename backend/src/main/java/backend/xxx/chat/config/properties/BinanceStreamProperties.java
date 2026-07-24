@@ -17,7 +17,7 @@ public class BinanceStreamProperties {
 
     private boolean enabled = true;
 
-    private String baseUrl = "wss://stream.binance.com:9443/stream";
+    private String baseUrl = "wss://stream.binance.com:9443/ws";
 
     private long initialDelayMs = 15_000;
 
@@ -28,6 +28,8 @@ public class BinanceStreamProperties {
     private List<String> candleIntervals = new ArrayList<>(List.of("4h", "1d", "1w"));
 
     private Duration tickerCacheTtl = Duration.ofMinutes(10);
+
+    private Duration tickerSymbolsCacheTtl = Duration.ofMinutes(5);
 
     private Duration candleCacheTtl = Duration.ofDays(8);
 
@@ -50,5 +52,11 @@ public class BinanceStreamProperties {
             throw new IllegalArgumentException("app.market.stream.max-pairs must be positive");
         }
         this.maxPairs = maxPairs;
+    }
+    public void setTickerSymbolsCacheTtl(Duration tickerSymbolsCacheTtl) {
+        if (tickerSymbolsCacheTtl == null || tickerSymbolsCacheTtl.isZero() || tickerSymbolsCacheTtl.isNegative()) {
+            throw new IllegalArgumentException("app.market.stream.ticker-symbols-cache-ttl must be positive");
+        }
+        this.tickerSymbolsCacheTtl = tickerSymbolsCacheTtl;
     }
 }
