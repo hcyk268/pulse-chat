@@ -1,128 +1,143 @@
 import { Client } from "@stomp/stompjs";
-import { getAccessToken } from "../utils/authStorage";
-import { REALTIME_HOST, REALTIME_URL } from "./apiConfig";
+import { runtimeConfig } from "../config/runtimeConfig.js";
+import { getAccessToken } from "../utils/authStorage.js";
 
-const USER_EVENTS_DESTINATION = "/user/queue/events";
-const USER_ERRORS_DESTINATION = "/user/queue/errors";
+const IDLE_DEACTIVATE_DELAY = 250;
 
-function parseMessageBody(message) {
-  if (!message?.body) return null;
+const channels = new Map();
+const statusListeners = new Set();
+let client;
+let status = "idle";
+let deactivateTimer;
 
+function emitStatus(nextStatus) {
+  status = nextStatus;
+  statusListeners.forEach((listener) => listener(nextStatus));
+}
+
+function parseEnvelope(message) {
   try {
     return JSON.parse(message.body);
-  } catch (error) {
-    throw new Error(error.message || "Could not parse realtime event.", { cause: error });
+  } catch {
+    return null;
   }
 }
 
-export function createRealtimeClient({ onEvent, onStatus, onError }) {
-  let client = null;
-  let shouldReconnect = true;
-  let hasConnected = false;
+function attachChannel(destination, channel) {
+  if (!client?.connected || channel.subscription) return;
 
-  function setStatus(status) {
-    onStatus?.(status);
+  channel.subscription = client.subscribe(destination, (message) => {
+    const envelope = parseEnvelope(message);
+    if (!envelope) return;
+    channel.listeners.forEach((listener) => listener(envelope));
+  });
+}
+
+function detachChannels() {
+  channels.forEach((channel) => {
+    channel.subscription = null;
+  });
+}
+
+function ensureClient() {
+  if (client) return client;
+
+  client = new Client({
+    brokerURL: runtimeConfig.realtimeUrl,
+    reconnectDelay: 3000,
+    heartbeatIncoming: 10000,
+    heartbeatOutgoing: 10000,
+    connectionTimeout: 10000,
+    beforeConnect: async () => {
+      const accessToken = getAccessToken();
+      client.connectHeaders = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      emitStatus("connecting");
+    },
+    onConnect: () => {
+      emitStatus("connected");
+      channels.forEach((channel, destination) => attachChannel(destination, channel));
+    },
+    onDisconnect: () => emitStatus("disconnected"),
+    onWebSocketClose: () => {
+      detachChannels();
+      emitStatus("disconnected");
+    },
+    onStompError: () => emitStatus("error"),
+    onWebSocketError: () => emitStatus("error"),
+  });
+
+  return client;
+}
+
+export function subscribeRealtimeTopic(destination, listener) {
+  if (!destination || typeof listener !== "function") return () => {};
+
+  if (deactivateTimer) {
+    clearTimeout(deactivateTimer);
+    deactivateTimer = undefined;
   }
 
-  function buildClient() {
-    const accessToken = getAccessToken();
+  let channel = channels.get(destination);
+  if (!channel) {
+    channel = { listeners: new Set(), subscription: null };
+    channels.set(destination, channel);
+  }
 
-    return new Client({
-      brokerURL: REALTIME_URL,
-      connectHeaders: {
-        Authorization: `Bearer ${accessToken}`,
-        host: REALTIME_HOST,
-      },
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-      reconnectDelay: 1000,
-      maxWebSocketChunkSize: 8 * 1024,
-      onConnect() {
-        hasConnected = true;
-        setStatus("connected");
+  channel.listeners.add(listener);
+  const stompClient = ensureClient();
+  attachChannel(destination, channel);
+  if (!stompClient.active) stompClient.activate();
 
-        client?.subscribe(USER_EVENTS_DESTINATION, (message) => {
-          try {
-            onEvent?.(parseMessageBody(message));
-          } catch (error) {
-            onError?.(error.message || "Could not parse realtime event.");
-          }
-        });
+  return () => {
+    const currentChannel = channels.get(destination);
+    if (!currentChannel) return;
 
-        client?.subscribe(USER_ERRORS_DESTINATION, (message) => {
-          try {
-            const body = parseMessageBody(message);
-            onError?.(body?.message || "Realtime request failed.");
-          } catch (error) {
-            onError?.(error.message || "Realtime request failed.");
-          }
-        });
-      },
-      onStompError(frame) {
-        onError?.(frame.body || frame.headers?.message || "Realtime connection error.");
-      },
-      onWebSocketError() {
-        onError?.("Realtime connection error.");
-      },
-      onWebSocketClose() {
-        if (!shouldReconnect) {
-          setStatus("idle");
-          return;
+    currentChannel.listeners.delete(listener);
+    if (currentChannel.listeners.size > 0) return;
+
+    currentChannel.subscription?.unsubscribe();
+    channels.delete(destination);
+
+    if (channels.size === 0 && client?.active) {
+      deactivateTimer = setTimeout(() => {
+        if (channels.size === 0 && client?.active) {
+          void client.deactivate().finally(() => emitStatus("idle"));
         }
+      }, IDLE_DEACTIVATE_DELAY);
+    }
+  };
+}
 
-        setStatus(hasConnected ? "reconnecting" : "connecting");
-      },
-    });
-  }
+export function publishRealtime(destination, body) {
+  if (!destination || !client?.connected) return false;
 
-  function connect() {
-    const accessToken = getAccessToken();
-    if (!accessToken) {
-      setStatus("idle");
+  client.publish({ destination, body: JSON.stringify(body ?? {}) });
+  return true;
+}
+
+export function observeRealtimeStatus(listener) {
+  statusListeners.add(listener);
+  listener(status);
+  return () => statusListeners.delete(listener);
+}
+
+/**
+ * The access token travels in the STOMP CONNECT frame, so an existing socket keeps
+ * the identity it was opened with. Sign-in and sign-out must therefore reconnect.
+ */
+export function resetRealtimeConnection() {
+  if (!client) return;
+
+  detachChannels();
+
+  if (!client.active) return;
+
+  void client.deactivate().then(() => {
+    if (channels.size > 0) {
+      client.activate();
       return;
     }
 
-    shouldReconnect = true;
-    hasConnected = false;
-    setStatus("connecting");
-    client?.deactivate();
-    client = buildClient();
-    client.activate();
-  }
-
-  function disconnect() {
-    shouldReconnect = false;
-    const currentClient = client;
-    client = null;
-    currentClient?.deactivate();
-    setStatus("idle");
-  }
-
-  function publishJson(destination, payload) {
-    if (!client?.connected) return false;
-
-    client.publish({
-      destination,
-      body: JSON.stringify(payload),
-      headers: {
-        "content-type": "application/json",
-      },
-    });
-    return true;
-  }
-
-  return {
-    connect,
-    disconnect,
-    sendTypingStatus(conversationId, typing) {
-      if (!conversationId) return false;
-
-      return publishJson(`/app/conversations/${conversationId}/typing`, { typing });
-    },
-    sendMessageDelivered(messageId) {
-      if (!messageId) return false;
-
-      return publishJson(`/app/messages/${messageId}/delivered`, {});
-    },
-  };
+    emitStatus("idle");
+  });
 }

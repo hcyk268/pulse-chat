@@ -1,6 +1,7 @@
 export const USERNAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 export const NO_HTML_ANGLE_BRACKETS_PATTERN = /^[^<>]*$/;
 export const OPTIONAL_HTTP_URL_PATTERN = /^(?:$|https?:\/\/\S+)$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function hasNoHtmlAngleBrackets(value = "") {
   return NO_HTML_ANGLE_BRACKETS_PATTERN.test(value);
@@ -12,4 +13,7 @@ export function isOptionalHttpUrl(value = "") {
 
 export function isValidUsername(value = "") {
   return USERNAME_PATTERN.test(value);
+}
+export function isValidEmail(value = "") {
+  return EMAIL_PATTERN.test(value.trim());
 }

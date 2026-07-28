@@ -4,3 +4,4 @@ vite-dev*.log
 .agents/
 .env
 !.env.example
+.ssr/

@@ -1,4 +1,4 @@
-import { isSameId } from "../../utils/chat.js";
+﻿import { isSameId } from "../../utils/chat.js";
 
 export const DEFAULT_USER_ACCENT = "from-cyan-300 to-emerald-400";
 
@@ -103,7 +103,8 @@ export function getConversationContacts(conversation) {
     .filter(Boolean);
   const peer = toContact(conversation.otherParticipant ?? conversation.peer);
 
-  return peer ? [peer, ...participants] : participants;
+  // Direct conversations carry the peer twice (as `peer` and inside `participants`).
+  return peer ? mergeContacts([peer], participants) : participants;
 }
 
 export function mergeContacts(previousContacts, nextContacts) {
@@ -204,7 +205,11 @@ export function normalizeConversation(conversation, existingMessages = []) {
   const participantContacts = getConversationContacts(conversation);
   const lastMessage = normalizeLastMessage(conversation.lastMessage);
   const isGroup = conversation.type === "GROUP";
-  const currentUserStatus = conversation.currentUserStatus ?? conversation.status ?? null;
+  const currentUserStatus =
+    conversation.currentUserStatus ??
+    conversation.joinStatus ??
+    conversation.status ??
+    null;
 
   return {
     id: conversation.id,
@@ -240,3 +245,5 @@ export function getNormalizedConversationContacts(conversation) {
     ? conversation.participants
     : [conversation.otherParticipant];
 }
+
+

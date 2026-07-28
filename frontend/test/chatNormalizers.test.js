@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import {
   dedupeById,
@@ -32,12 +32,30 @@ test("normalizes a direct conversation without losing existing messages", () => 
   assert.equal(conversation.messages, messages);
 });
 
+test("lists the peer of a direct conversation only once", () => {
+  const conversation = normalizeConversation({
+    id: 4,
+    type: "DIRECT",
+    otherParticipant: { id: 2, username: "alex", displayName: "Alex" },
+    participants: [
+      { id: 1, username: "me", displayName: "Me" },
+      { id: 2, username: "alex", displayName: "Alex", presence: { isOnline: true } },
+    ],
+  });
+
+  assert.deepEqual(
+    conversation.participants.map((contact) => contact.id),
+    [2, 1],
+  );
+  assert.equal(conversation.participants[0].presence.isOnline, true);
+});
+
 test("normalizes group invitation state", () => {
   const conversation = normalizeConversation({
     id: 7,
     type: "GROUP",
-    name: "Core team",
-    currentUserStatus: "PENDING",
+    title: "Core team",
+    joinStatus: "PENDING",
     participants: [],
   });
 
@@ -66,3 +84,5 @@ test("deduplicates entities and merges newer contact fields", () => {
     [{ id: "1", displayName: "New", username: "alex" }],
   );
 });
+
+

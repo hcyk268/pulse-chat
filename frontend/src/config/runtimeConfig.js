@@ -1,4 +1,4 @@
-const DEFAULT_DEVELOPMENT_API_URL = "http://localhost:8080";
+﻿const DEFAULT_DEVELOPMENT_API_URL = "http://localhost:8080";
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 function resolveUrl(value, baseUrl, label) {
@@ -60,3 +60,14 @@ export function buildRuntimeConfig({
     realtimeHost: absoluteRealtimeUrl.host,
   });
 }
+
+const viteEnv = import.meta.env ?? {};
+
+export const runtimeConfig = buildRuntimeConfig({
+  apiBaseUrl: viteEnv.VITE_API_BASE_URL,
+  websocketUrl: viteEnv.VITE_WS_URL,
+  appOrigin:
+    viteEnv.VITE_APP_ORIGIN ??
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"),
+  isProduction: Boolean(viteEnv.PROD),
+});
