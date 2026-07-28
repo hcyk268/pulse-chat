@@ -1,207 +1,163 @@
-import ChatWindow from "../components/chat/ChatWindow";
-import ContactPanel from "../components/chat/ContactPanel";
-import ConversationList from "../components/chat/ConversationList";
-import ProfileModal from "../components/chat/ProfileModal";
-import { useChatPageController } from "../hooks/useChatPageController";
-import { useNavigate } from "react-router-dom";
-import { useToast } from "../hooks/useToast";
+import { Activity, PanelLeft } from "lucide-react";
+import { useState } from "react";
+import TraderLayout from "../components/layout/TraderLayout";
+import Alert from "../components/shared/Alert";
+import Avatar from "../components/shared/Avatar";
+import { classNames } from "../components/shared/utils";
+import ConversationSidebar from "../features/workspace/ConversationSidebar";
+import MemberPanel from "../features/workspace/MemberPanel";
+import MessageStream from "../features/workspace/MessageStream";
+import NewConversationDialog from "../features/workspace/NewConversationDialog";
+import WorkspaceShell from "../features/workspace/WorkspaceShell";
+import { useChatWorkspace } from "../features/workspace/useChatWorkspace";
+import { useWorkspaceDrawer } from "../features/workspace/useWorkspaceDrawer";
+import { getNormalizedConversationContacts } from "../domain/chat/normalizers.js";
+import { realtimeStatusKey } from "../features/market/realtimeStatus.js";
+import { useTranslation } from "../i18n/useTranslation.js";
+import { formatPresence } from "../utils/formatters";
+
+function describeConversation(conversation, t) {
+  if (!conversation) return t("chat.noneSelected.body");
+  if (conversation.type === "GROUP") {
+    return t("chat.groupMembers", { count: conversation.participantCount });
+  }
+
+  return formatPresence(conversation.otherParticipant?.presence, t);
+}
 
 export default function ChatPage() {
-  const navigate = useNavigate();
-  const toast = useToast();
   const {
-    chatStore,
-    conversationId,
-    filteredConversations,
-    handleCreateGroup,
-    handleStartConversation,
-    query,
-    selectedConversation,
-    setQuery,
-    setShowPeople,
-    setShowProfile,
-    showPeople,
-    showProfile,
-  } = useChatPageController();
-  const {
-    acceptGroupInvitation,
-    addMembersToGroup,
-    contacts,
-    conversationError,
-    conversationPaging,
+    activeConversation,
+    activeTypingUsers,
+    conversations,
     currentUser,
-    clearUserSearch,
-    deleteMessage,
-    editMessage,
-    getMessageError,
-    hasMoreMessages,
-    isLoadingConversations,
-    isLoadingMoreConversations,
-    isLoadingOlderMessages,
-    isLoadingSelectedConversation,
-    isSendingMessage,
-    isStartingConversation,
-    isSearchingUsers,
-    leaveCurrentGroup,
-    loadConversation,
-    loadConversations,
-    loadMessageReactions,
-    loadMessageReadReceipts,
-    loadMoreMessages,
-    readReceiptsByMessageId,
-    reactionsByMessageId,
+    dismissError,
+    error,
+    hasOlderMessages,
+    loadOlderMessages,
+    loadingConversations,
+    loadingMessages,
+    loadingOlder,
+    notifyTyping,
     realtimeStatus,
-    rejectGroupInvitation,
-    removeMemberFromGroup,
-    searchUsers,
-    sendMessage,
-    sendTypingStatus,
-    signOut,
-    startConversationError,
-    stats,
-    toggleMessageReaction,
-    toggleMessagePin,
-    typingByConversation,
-    updateGroup,
-    updateGroupMemberRole,
-    updateProfile,
-    uploadProgressByConversation,
-    userSearchError,
-    userSearchResults,
-  } = chatStore;
+    selectConversation,
+    sendDraft,
+    sending,
+    startDirectConversation,
+  } = useChatWorkspace();
+  const { t } = useTranslation();
+  const { open: drawerOpen, openDrawer, closeDrawer } = useWorkspaceDrawer();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  async function handleAcceptInvitation(targetConversationId) {
-    const accepted = await acceptGroupInvitation(targetConversationId);
-    if (accepted) {
-      toast.success("Group invitation accepted.");
-      navigate(`/chat/${targetConversationId}`);
+  const members = activeConversation
+    ? getNormalizedConversationContacts(activeConversation).filter(Boolean)
+    : [];
+  const headerTitle = activeConversation?.title ?? t("chat.title");
+
+  async function handleSelectUser(user) {
+    if (user.directConversationId) {
+      selectConversation(user.directConversationId);
+      return;
     }
-    return accepted;
+
+    await startDirectConversation(user.id);
   }
 
-  async function handleRejectInvitation(targetConversationId) {
-    const rejected = await rejectGroupInvitation(targetConversationId);
-    if (rejected) {
-      toast.info("Group invitation declined.");
-      if (String(conversationId) === String(targetConversationId)) navigate("/chat");
-    }
-    return rejected;
-  }
-
-  async function handleLeaveGroup(targetConversationId) {
-    const left = await leaveCurrentGroup(targetConversationId);
-    if (left) {
-      toast.info("You left the group.");
-      if (String(conversationId) === String(targetConversationId)) navigate("/chat");
-    }
-    return left;
+  function handleSelectConversation(conversationId) {
+    selectConversation(conversationId);
+    closeDrawer();
   }
 
   return (
-    <div className="chat-page-shell text-white">
-      <main className="chat-app-layout">
-        <div
-          className={[
-            "conversation-pane",
-            conversationId ? "conversation-pane--mobile-hidden" : "",
-          ].join(" ")}
-        >
-          <ConversationList
-            conversations={filteredConversations}
-            error={conversationError}
-            hasMore={Boolean(conversationPaging?.hasMore)}
-            isLoading={isLoadingConversations}
-            isLoadingMore={isLoadingMoreConversations}
-            currentUser={currentUser}
-            query={query}
-            onLoadMore={() => loadConversations({ append: true })}
-            onAcceptInvitation={handleAcceptInvitation}
-            onRejectInvitation={handleRejectInvitation}
-            onOpenPeople={() => setShowPeople(true)}
-            onOpenProfile={() => setShowProfile(true)}
-            onQueryChange={setQuery}
-            onRetry={() => loadConversations()}
-            onSignOut={signOut}
-            realtimeStatus={realtimeStatus}
-            selectedId={conversationId}
-            stats={stats}
-          />
-        </div>
-
-        <div
-          className={[
-            "chat-pane",
-            conversationId ? "" : "chat-pane--mobile-hidden",
-          ].join(" ")}
-        >
-          <ChatWindow
-            acceptGroupInvitation={handleAcceptInvitation}
-            addMembersToGroup={addMembersToGroup}
-            clearUserSearch={clearUserSearch}
-            contacts={contacts}
-            conversation={selectedConversation}
-            currentUser={currentUser}
-            error={conversationId ? getMessageError(conversationId) : ""}
-            hasMoreMessages={hasMoreMessages(conversationId)}
-            isLoading={isLoadingSelectedConversation(conversationId)}
-            isLoadingMoreMessages={isLoadingOlderMessages(conversationId)}
-            isSending={isSendingMessage(conversationId)}
-            isTyping={Boolean(conversationId && typingByConversation[conversationId])}
-            onDeleteMessage={deleteMessage}
-            onEditMessage={editMessage}
-            leaveCurrentGroup={handleLeaveGroup}
-            loadMessageReadReceipts={loadMessageReadReceipts}
-            onLoadMessageReactions={loadMessageReactions}
-            onLoadMoreMessages={() => loadMoreMessages(conversationId)}
-            onOpenPeople={() => setShowPeople(true)}
-            onRetry={() => loadConversation(conversationId, { force: true })}
-            onSendMessage={sendMessage}
-            onToggleMessageReaction={toggleMessageReaction}
-            onToggleMessagePin={(message) => toggleMessagePin(conversationId, message)}
-            onTypingChange={(typing) => sendTypingStatus(conversationId, typing)}
-            readReceiptsByMessageId={readReceiptsByMessageId}
-            reactionsByMessageId={reactionsByMessageId}
-            rejectGroupInvitation={handleRejectInvitation}
-            removeMemberFromGroup={removeMemberFromGroup}
-            searchUsers={searchUsers}
-            updateGroup={updateGroup}
-            updateGroupMemberRole={updateGroupMemberRole}
-            uploadProgress={conversationId ? uploadProgressByConversation[conversationId] : null}
-            userSearchResults={userSearchResults}
-          />
-        </div>
-      </main>
-
-      {showPeople ? (
-        <div
-          className="sheet-overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setShowPeople(false);
+    <TraderLayout active="chat" appFrame>
+      <WorkspaceShell className="chat-workspace">
+        <ConversationSidebar
+          activeConversationId={activeConversation?.id ?? null}
+          conversations={conversations}
+          drawerOpen={drawerOpen}
+          loading={loadingConversations}
+          onCloseDrawer={closeDrawer}
+          onNewConversation={() => {
+            closeDrawer();
+            setDialogOpen(true);
           }}
-        >
-          <div className="sheet-panel contact-sheet-panel ml-auto h-full border-l border-white/5 bg-[#111827] shadow-panel">
-            <ContactPanel
-              contacts={contacts}
-              isSearching={isSearchingUsers}
-              isStartingConversation={isStartingConversation}
-              onClearSearch={clearUserSearch}
-              onClose={() => setShowPeople(false)}
-              onCreateGroup={handleCreateGroup}
-              onSearchUsers={searchUsers}
-              onStartConversation={handleStartConversation}
-              searchError={userSearchError || startConversationError}
-              searchResults={userSearchResults}
+          onSelect={handleSelectConversation}
+        />
+
+        {drawerOpen ? (
+          <button
+            className="workspace-drawer-backdrop"
+            type="button"
+            aria-label={t("chat.closeConversations")}
+            onClick={closeDrawer}
+          />
+        ) : null}
+
+        <section className="workspace-main">
+          <header className="workspace-header">
+            <button
+              className="icon-button show-sm"
+              type="button"
+              aria-label={t("chat.openConversations")}
+              aria-expanded={drawerOpen}
+              onClick={openDrawer}
+            >
+              <PanelLeft size={19} />
+            </button>
+            <Avatar
+              name={headerTitle}
+              seed={activeConversation?.id ?? headerTitle}
+              src={activeConversation?.avatarUrl}
             />
-          </div>
-        </div>
-      ) : null}
-      {showProfile ? (
-        <ProfileModal
-          currentUser={currentUser}
-          onClose={() => setShowProfile(false)}
-          onSave={updateProfile}
+            <div>
+              <h1>{headerTitle}</h1>
+              <p>
+                {loadingConversations
+                  ? t("common.loading")
+                  : describeConversation(activeConversation, t)}
+              </p>
+            </div>
+            <div>
+              <span
+                className={classNames("realtime-status", `realtime-status--${realtimeStatus}`)}
+              >
+                <Activity size={15} />
+                {t(realtimeStatusKey(realtimeStatus))}
+              </span>
+            </div>
+          </header>
+
+          {error ? (
+            <Alert variant="workspace" onDismiss={dismissError}>
+              {error}
+            </Alert>
+          ) : null}
+
+          <MessageStream
+            key={activeConversation?.id ?? "empty"}
+            currentUserId={currentUser?.id ?? null}
+            emptyLabel={activeConversation ? undefined : t("chat.noneSelected.title")}
+            hasOlderMessages={hasOlderMessages}
+            loading={loadingConversations || loadingMessages}
+            loadingOlder={loadingOlder}
+            messages={activeConversation?.messages ?? []}
+            onLoadOlder={loadOlderMessages}
+            onSend={activeConversation ? sendDraft : null}
+            onTyping={activeConversation ? notifyTyping : null}
+            sending={sending}
+            typingUsers={activeTypingUsers}
+          />
+        </section>
+
+        <MemberPanel excludeId={currentUser?.id ?? null} members={members} />
+      </WorkspaceShell>
+
+      {dialogOpen ? (
+        <NewConversationDialog
+          onClose={() => setDialogOpen(false)}
+          onSelectUser={handleSelectUser}
         />
       ) : null}
-    </div>
+    </TraderLayout>
   );
 }

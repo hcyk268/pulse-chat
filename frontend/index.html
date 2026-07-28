@@ -3,8 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#07080d" />
-    <title>Pulse Chat</title>
+    <meta name="theme-color" content="#f8fafc" />
+    <meta
+      name="description"
+      content="Trader Hub - live crypto market data, watchlists, trader communities, and direct messaging."
+    />
+    <title>Trader Hub</title>
+    <script>
+      // Stamp the theme before first paint so there is no light flash on reload.
+      (function () {
+        try {
+          var stored = localStorage.getItem("chatapp.theme");
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme = stored === "light" || stored === "dark" ? stored : prefersDark ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", theme === "dark" ? "#0a0f1a" : "#f8fafc");
+
+          var storedLocale = localStorage.getItem("chatapp.locale");
+          var browserLocale = (navigator.language || "en").toLowerCase().split("-")[0];
+          document.documentElement.lang =
+            storedLocale === "vi" || storedLocale === "en"
+              ? storedLocale
+              : browserLocale === "vi"
+                ? "vi"
+                : "en";
+        } catch (error) {
+          /* Storage blocked: the stylesheet media query still applies. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

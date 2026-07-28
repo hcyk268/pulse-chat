@@ -1,4 +1,4 @@
-import { dedupeById, getMessageIndex, getMessagePreview } from "./normalizers.js";
+import { getMessageIndex, getMessagePreview } from "./normalizers.js";
 import { isSameId } from "../../utils/chat.js";
 
 function toLastMessage(message) {
@@ -55,6 +55,78 @@ export function updateConversationMessagesInList(
   );
 }
 
+/**
+ * Inserts a server message, replacing either the same message id or the optimistic
+ * entry that carries the same clientMessageId. Keeps sent messages from doubling up
+ * when the REST response and the realtime event both arrive.
+ */
+export function mergeMessageIntoList(messages, message) {
+  const index = messages.findIndex(
+    (item) =>
+      isSameId(item.id, message.id) ||
+      (message.clientMessageId != null &&
+        isSameId(item.clientMessageId, message.clientMessageId)),
+  );
+
+  if (index === -1) {
+    return [...messages, message];
+  }
+
+  return messages.map((item, itemIndex) => (itemIndex === index ? message : item));
+}
+
+export function applyOutgoingMessageToList(conversations, message) {
+  return conversations.map((conversation) => {
+    if (!isSameId(conversation.id, message.conversationId)) {
+      return conversation;
+    }
+
+    return {
+      ...conversation,
+      messages: mergeMessageIntoList(conversation.messages ?? [], message),
+      lastMessage: toLastMessage(message),
+      lastMessageAt: message.createdAt,
+      updatedAt: message.createdAt,
+    };
+  });
+}
+
+/** Prepends an older history page, skipping messages already in the thread. */
+export function prependMessageHistory(messages, olderMessages) {
+  const knownIds = new Set(
+    messages.map((message) => message.id).filter((id) => id != null).map(String),
+  );
+
+  return [...olderMessages.filter((message) => !knownIds.has(String(message.id))), ...messages];
+}
+
+export function resetConversationUnread(conversations, conversationId) {
+  return conversations.map((conversation) =>
+    isSameId(conversation.id, conversationId) && conversation.unreadCount
+      ? { ...conversation, unreadCount: 0 }
+      : conversation,
+  );
+}
+
+export function applyPresenceToList(conversations, presence) {
+  const userId = presence?.userId;
+  if (userId == null) return conversations;
+
+  const nextPresence = {
+    isOnline: Boolean(presence.isOnline),
+    lastActiveAt: presence.lastActiveAt ?? null,
+  };
+
+  const withPresence = (contact) =>
+    contact && isSameId(contact.id, userId) ? { ...contact, presence: nextPresence } : contact;
+
+  return conversations.map((conversation) => ({
+    ...conversation,
+    otherParticipant: withPresence(conversation.otherParticipant),
+    participants: (conversation.participants ?? []).map(withPresence),
+  }));
+}
+
 export function applyMessageResponseToList(conversations, message) {
   const lastMessage = toLastMessage(message);
 
@@ -88,9 +160,7 @@ export function applyMessageResponseToList(conversations, message) {
 
     return {
       ...conversation,
-      messages: hasMessage
-        ? nextMessages
-        : dedupeById([...nextMessages, message]),
+      messages: hasMessage ? nextMessages : mergeMessageIntoList(nextMessages, message),
       lastMessage: isLastMessage ? lastMessage : conversation.lastMessage,
       lastMessageAt: isLastMessage
         ? message.createdAt
@@ -115,7 +185,7 @@ export function applyIncomingMessageToList(
 
     return {
       ...conversation,
-      messages: dedupeById([...(conversation.messages ?? []), message]),
+      messages: mergeMessageIntoList(conversation.messages ?? [], message),
       lastMessage,
       lastMessageAt: message.createdAt,
       updatedAt: message.createdAt,

@@ -9,14 +9,18 @@
     "preview": "vite preview --host 0.0.0.0",
     "lint": "eslint . --max-warnings=0",
     "test": "node --test",
-    "check": "npm run lint && npm run test && npm run build"
+    "check": "npm run lint && npm run test && npm run test:render && npm run build",
+    "test:render": "vite build --ssr test/ssr/renderPages.jsx --outDir .ssr --mode development --logLevel error && node .ssr/renderPages.js"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.12.0",
     "@stomp/stompjs": "^7.3.0",
     "axios": "^1.18.1",
+    "lightweight-charts": "^5.2.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-redux": "^9.3.0",
     "react-router-dom": "^6.30.1"
   },
   "devDependencies": {
@@ -28,7 +32,6 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "postcss": "^8.5.19",
-    "tailwindcss": "^3.4.19",
     "vite": "^5.4.21"
   }
 }
