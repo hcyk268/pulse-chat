@@ -57,7 +57,8 @@ public class MessageAttachmentResolver {
         if (!asset.belongsTo(sender.getId())) {
             throw new ForbiddenException("upload.asset.forbidden");
         }
-        if (asset.getPurpose() != UploadPurpose.MESSAGE_ATTACHMENT) {
+        if (asset.getPurpose() != UploadPurpose.MESSAGE_ATTACHMENT
+                && asset.getPurpose() != UploadPurpose.COMMUNITY_ATTACHMENT) {
             throw new ValidationException("upload.asset.purpose.invalid");
         }
         if (!asset.isReady()) {
@@ -68,3 +69,4 @@ public class MessageAttachmentResolver {
         return MessageAttachment.createFromAsset(asset, sortOrder);
     }
 }
+
