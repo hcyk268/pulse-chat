@@ -16,6 +16,10 @@ public interface MarketCandleRepository extends JpaRepository<MarketCandle, Long
             Instant openTime
     );
 
+    long countByPairIdAndIntervalName(Long pairId, String intervalName);
+
+    Optional<MarketCandle> findFirstByPairIdAndIntervalNameOrderByOpenTimeDesc(Long pairId, String intervalName);
+
     List<MarketCandle> findByPairIdAndIntervalNameOrderByOpenTimeDesc(
             Long pairId,
             String intervalName,

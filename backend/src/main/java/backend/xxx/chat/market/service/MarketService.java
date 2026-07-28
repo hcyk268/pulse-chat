@@ -40,6 +40,7 @@ public class MarketService {
     private final MarketCandleRepository marketCandleRepository;
     private final BinanceMarketDataCache binanceMarketDataCache;
     private final BinanceStreamProperties binanceStreamProperties;
+    private final MarketCandleHistoryBackfillService marketCandleHistoryBackfillService;
 
 
     @Transactional(readOnly = true)
@@ -108,12 +109,17 @@ public class MarketService {
                 });
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public MarketTickerResponse getTicker(String symbol) {
         String pairSymbol = resolveBinancePairSymbol(symbol);
         MarketTickerLatestHash ticker = binanceMarketDataCache.getTicker(pairSymbol)
                 .orElseThrow(() -> new NotFoundException("market.ticker.not.found"));
-        Long pairId = resolvePairId(pairSymbol, ticker);
+        MarketPair pair = marketPairRepository.findByExchangeAndSymbol(BINANCE_EXCHANGE, pairSymbol)
+                .orElse(null);
+        Long pairId = pair == null ? ticker.getPairId() : pair.getId();
+        if (pair != null) {
+            marketCandleHistoryBackfillService.backfillIfNeeded(pair, binanceStreamProperties.getCandleIntervals());
+        }
         Map<String, List<MarketTickerResponse.CandleResponse>> candlesByInterval = getRecentCandlesByInterval(pairId);
         List<MarketTickerResponse.CandleResponse> candles = candlesByInterval.values()
                 .stream()
@@ -139,11 +145,6 @@ public class MarketService {
                 .orElseThrow(() -> new NotFoundException("market.pair.not.found"));
     }
 
-    private Long resolvePairId(String pairSymbol, MarketTickerLatestHash ticker) {
-        return marketPairRepository.findByExchangeAndSymbol(BINANCE_EXCHANGE, pairSymbol)
-                .map(MarketPair::getId)
-                .orElse(ticker.getPairId());
-    }
 
     private Map<String, List<MarketTickerResponse.CandleResponse>> getRecentCandlesByInterval(Long pairId) {
         if (pairId == null) {

@@ -135,9 +135,20 @@ public interface ConversationParticipantRepository
             @Param("status") ParticipantStatus status
     );
 
+
+    @Query("""
+        from ConversationParticipant participant
+        where participant.conversation.id in :conversationIds
+            and participant.user.id = :userId
+        """)
+    List<ConversationParticipant> findByConversationIdInAndUserId(
+            @Param("conversationIds") Collection<Long> conversationIds,
+            @Param("userId") Long userId
+    );
     interface DirectConversationLookup {
         Long getUserId();
 
         Long getConversationId();
     }
 }
+
