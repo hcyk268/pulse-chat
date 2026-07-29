@@ -1,0 +1,3 @@
+ALTER TABLE users
+    ADD COLUMN email_verified_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN credentials_version BIGINT NOT NULL DEFAULT 0;

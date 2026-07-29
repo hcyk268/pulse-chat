@@ -1,5 +1,6 @@
 package backend.xxx.chat.user.model;
 
+import java.time.Instant;
 import java.util.Objects;
 
 import backend.xxx.chat.common.model.AbstractBaseEntity;
@@ -50,6 +51,12 @@ public class User extends AbstractBaseEntity<Long> {
     @Column(name = "bio", length = BIO_MAX_LENGTH)
     private String bio;
 
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
+    @Column(name = "credentials_version", nullable = false)
+    private Long credentialsVersion;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "account_status", nullable = false, length = 20)
     private AccountStatus accountStatus = AccountStatus.ACTIVE;
@@ -61,6 +68,7 @@ public class User extends AbstractBaseEntity<Long> {
         user.passwordHash = requireText(passwordHash, "passwordHash", PASSWORD_HASH_MAX_LENGTH);
         user.displayName = requireText(displayName, "displayName", DISPLAY_NAME_MAX_LENGTH);
         user.accountStatus = AccountStatus.ACTIVE;
+        user.credentialsVersion = 0L;
         return user;
     }
 
@@ -80,11 +88,21 @@ public class User extends AbstractBaseEntity<Long> {
 
     public void changePassword(String passwordHash) {
         this.passwordHash = requireText(passwordHash, "passwordHash", PASSWORD_HASH_MAX_LENGTH);
+        this.credentialsVersion++;
     }
 
     public void changeEmail(String email) {
         ensureNotBanned();
         this.email = requireText(email, "email", EMAIL_MAX_LENGTH);
+        this.emailVerifiedAt = null;
+    }
+
+    public void markEmailVerified(Instant verifiedAt) {
+        this.emailVerifiedAt = Objects.requireNonNull(verifiedAt, "verifiedAt must not be null");
+    }
+
+    public boolean isEmailVerified() {
+        return this.emailVerifiedAt != null;
     }
 
     public void activate() {
@@ -110,7 +128,7 @@ public class User extends AbstractBaseEntity<Long> {
     }
 
     public boolean canAuthenticate() {
-        return this.accountStatus == AccountStatus.ACTIVE;
+        return this.accountStatus == AccountStatus.ACTIVE && isEmailVerified();
     }
 
     public boolean isLocked() {
