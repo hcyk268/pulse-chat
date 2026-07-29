@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
+import java.util.UUID;
+import backend.xxx.chat.auth.model.AuthenticatedUser;
 import backend.xxx.chat.auth.model.JwtTokenType;
 import javax.crypto.SecretKey;
 
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Service;
 public class JwtService {
 
     private static final String TOKEN_TYPE_CLAIM = "tokenType";
+    private static final String CREDENTIALS_VERSION_CLAIM = "credentialsVersion";
 
     @Value("${jwt.access-token-secret}")
     private String accessTokenSecret;
@@ -36,6 +39,12 @@ public class JwtService {
 
     @Value("${jwt.refresh-token-expiration-ms}")
     private long refreshTokenExpirationMs;
+
+    @Value("${jwt.issuer:chat-backend}")
+    private String jwtIssuer = "chat-backend";
+
+    @Value("${jwt.audience:chat-web}")
+    private String jwtAudience = "chat-web";
 
     public String generateAccessToken(UserDetails userDetails) {
         return generateAccessToken(Map.of(), userDetails);
@@ -75,7 +84,11 @@ public class JwtService {
         return Jwts.builder()
                 .claims(extraClaims)
                 .claim(TOKEN_TYPE_CLAIM, tokenType.name())
+                .claim(CREDENTIALS_VERSION_CLAIM, credentialsVersion(userDetails))
+                .id(UUID.randomUUID().toString())
                 .subject(userDetails.getUsername())
+                .issuer(jwtIssuer)
+                .audience().add(jwtAudience).and()
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(getSigningKey(tokenType))
@@ -94,7 +107,9 @@ public class JwtService {
             return userDetails != null
                     && username.equals(userDetails.getUsername())
                     && tokenType == expectedTokenType
+                    && credentialsVersionMatches(claims, userDetails)
                     && !isTokenExpired(claims)
+                    && issuerAndAudienceMatch(claims)
                     && canAuthenticate(userDetails);
         } catch (JwtException | IllegalArgumentException ex) {
             return false;
@@ -102,14 +117,37 @@ public class JwtService {
     }
 
     private boolean canAuthenticate(UserDetails userDetails) {
+        if (userDetails instanceof AuthenticatedUser authenticatedUser && !authenticatedUser.canUseTokens()) {
+            return false;
+        }
         return userDetails.isEnabled()
                 && userDetails.isAccountNonLocked()
                 && userDetails.isAccountNonExpired()
                 && userDetails.isCredentialsNonExpired();
     }
 
+
+    private long credentialsVersion(UserDetails userDetails) {
+        return userDetails instanceof AuthenticatedUser authenticatedUser
+                ? authenticatedUser.getCredentialsVersion()
+                : 0L;
+    }
+
+    private boolean credentialsVersionMatches(Claims claims, UserDetails userDetails) {
+        Object claim = claims.get(CREDENTIALS_VERSION_CLAIM);
+        if (!(claim instanceof Number tokenVersion)) {
+            return false;
+        }
+        return tokenVersion.longValue() == credentialsVersion(userDetails);
+    }
     private boolean isTokenExpired(Claims claims) {
         return claims.getExpiration().before(new Date());
+    }
+
+    private boolean issuerAndAudienceMatch(Claims claims) {
+        return jwtIssuer.equals(claims.getIssuer())
+                && claims.getAudience() != null
+                && claims.getAudience().contains(jwtAudience);
     }
 
     private Claims extractAllClaims(String token) {

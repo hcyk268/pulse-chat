@@ -1,9 +1,15 @@
 package backend.xxx.chat.auth.controller;
 
 import backend.xxx.chat.auth.dto.AuthResponse;
+import backend.xxx.chat.auth.dto.ChangePasswordRequest;
+import backend.xxx.chat.auth.dto.ForgotPasswordRequest;
 import backend.xxx.chat.auth.dto.LoginRequest;
 import backend.xxx.chat.auth.dto.RefreshTokenRequest;
 import backend.xxx.chat.auth.dto.RegisterRequest;
+import backend.xxx.chat.auth.dto.RegisterResponse;
+import backend.xxx.chat.auth.dto.ResendVerificationRequest;
+import backend.xxx.chat.auth.dto.ResetPasswordRequest;
+import backend.xxx.chat.auth.dto.VerifyEmailRequest;
 import backend.xxx.chat.auth.service.AuthService;
 import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.ratelimit.RateLimit;
@@ -25,9 +31,9 @@ public class AuthController {
 
     @PostMapping("/register")
     @RateLimit(action = "register", maxRequests = 5, timeWindow = 300)
-    public ResponseEntity<ResponseData<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<ResponseData<RegisterResponse>> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ResponseData<>(true, "auth.register.success", authService.register(request)));
+                .body(new ResponseData<>(true, "auth.register.verification.sent", authService.register(request)));
     }
 
     @PostMapping("/login")
@@ -46,5 +52,44 @@ public class AuthController {
     public ResponseData<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request);
         return new ResponseData<>(true, "auth.logout.success");
+    }
+
+    @PostMapping("/forgot-password")
+    @RateLimit(action = "forgot-password", maxRequests = 3, timeWindow = 300)
+    public ResponseData<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return new ResponseData<>(true, "auth.password.forgot.accepted");
+    }
+
+    @PostMapping("/reset-password")
+    @RateLimit(action = "reset-password", maxRequests = 5, timeWindow = 300)
+    public ResponseData<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return new ResponseData<>(true, "auth.password.reset.success");
+    }
+
+
+    @PostMapping("/verify-email")
+    @RateLimit(action = "verify-email", maxRequests = 10, timeWindow = 300)
+    public ResponseData<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request);
+        return new ResponseData<>(true, "auth.email.verification.success");
+    }
+
+    @PostMapping("/resend-verification")
+    @RateLimit(action = "resend-verification", maxRequests = 3, timeWindow = 300)
+    public ResponseData<Void> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        authService.resendVerification(request);
+        return new ResponseData<>(true, "auth.email.verification.accepted");
+    }
+
+    @PostMapping("/change-password")
+    @RateLimit(action = "change-password", maxRequests = 5, timeWindow = 300)
+    public ResponseData<AuthResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        return new ResponseData<>(
+                true,
+                "auth.password.change.success",
+                authService.changePassword(request)
+        );
     }
 }

@@ -19,6 +19,7 @@ public class UserMapper {
                 user.getAvatarUrl(),
                 user.getBio(),
                 user.getAccountStatus(),
+                user.isEmailVerified(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

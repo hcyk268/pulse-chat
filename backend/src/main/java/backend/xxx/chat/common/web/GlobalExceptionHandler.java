@@ -7,8 +7,11 @@ import backend.xxx.chat.common.dto.ApiErrorResponse;
 import backend.xxx.chat.common.dto.ApiFieldErrorResponse;
 import backend.xxx.chat.common.exception.ApiException;
 import backend.xxx.chat.common.exception.ErrorCode;
+import backend.xxx.chat.common.exception.LimitExceedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -21,6 +24,22 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(LimitExceedException.class)
+    public ResponseEntity<ApiErrorResponse> handleLimitExceeded(
+            LimitExceedException ex,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(ex.getStatus())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.getRetryAfterSeconds()))
+                .cacheControl(CacheControl.noStore())
+                .body(buildErrorResponse(
+                        ex.getCode(),
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        null
+                ));
+    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException ex, HttpServletRequest request) {

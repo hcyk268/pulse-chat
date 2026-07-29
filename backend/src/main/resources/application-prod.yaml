@@ -26,6 +26,10 @@ spring:
   flyway:
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
 
+server:
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:NONE}
+
+
 jwt:
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}
   refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET}

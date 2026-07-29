@@ -12,6 +12,7 @@ public record UserResponse(
         String avatarUrl,
         String bio,
         AccountStatus accountStatus,
+        boolean emailVerified,
         Instant createdAt,
         Instant updatedAt
 ) {

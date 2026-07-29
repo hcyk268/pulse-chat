@@ -1,6 +1,5 @@
 package backend.xxx.chat.common.ratelimit;
 
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -10,7 +9,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Duration;
-import java.util.Objects;
 
 @RequiredArgsConstructor
 @Aspect
@@ -18,6 +16,7 @@ import java.util.Objects;
 public class RateLimitAspect {
     
     private final RateLimitProvider rateLimitProvider;
+    private final ClientIpResolver clientIpResolver;
 
     @Around("@annotation(rateLimit)")
     public Object checkLimit(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
@@ -25,32 +24,17 @@ public class RateLimitAspect {
         String action = rateLimit.action();
         int maxReq = rateLimit.maxRequests();
         Duration windowDuration = Duration.ofSeconds(rateLimit.timeWindow());
-        String ipClient = this.getIpClient();
+        String ipClient = clientIpResolver.resolve(currentRequest());
 
-        this.rateLimitProvider.rateLimit(ipClient, action, maxReq, windowDuration);
+        rateLimitProvider.rateLimit(ipClient, action, maxReq, windowDuration);
 
         return joinPoint.proceed();
     }
 
-    private String getIpClient() {
-        String[] HEADERS = {
-                "X-Forwarded-For",
-                "X-Real-IP",
-                "Proxy-Client-IP",
-                "WL-Proxy-Client-IP"
-        };
-
-        HttpServletRequest request =
-                ((ServletRequestAttributes) Objects.requireNonNull(RequestContextHolder.getRequestAttributes()))
-                        .getRequest();
-
-        for (String header : HEADERS) {
-            String ip = request.getHeader(header);
-            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-                return ip.split(",")[0].trim();
-            }
+    private jakarta.servlet.http.HttpServletRequest currentRequest() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+            throw new IllegalStateException("Rate limiting requires an active HTTP request");
         }
-
-        return request.getRemoteAddr();
+        return attributes.getRequest();
     }
 }
