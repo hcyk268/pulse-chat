@@ -1,12 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: chat-postgres
+    container_name: traderhub-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-chat_app}
-      POSTGRES_USER: ${DB_USERNAME:-chat_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_db_password}
+      POSTGRES_DB: ${POSTGRES_DB:-traderhub}
+      POSTGRES_USER: ${DB_USERNAME:-user_db}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password_db}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,12 +18,16 @@ services:
       retries: 5
     networks:
       - data
+      - host-access
 
   redis:
     image: redis:7-alpine
+    container_name: traderhub-redis
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me_redis_password}
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-change_me_redis_password}"]
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis_password}"]
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -31,12 +37,13 @@ services:
       retries: 5
     networks:
       - data
+      - host-access
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: chat-backend
+    container_name: traderhub-backend
     restart: unless-stopped
     depends_on:
       postgres:
@@ -47,19 +54,21 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       SERVER_PORT: 8080
       SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-NONE}
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-chat_app}
-      DB_USERNAME: ${DB_USERNAME:-chat_user}
-      DB_PASSWORD: ${DB_PASSWORD:-change_me_db_password}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me_redis_password}
-      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-characters}
+      SPRINGDOC_API_DOCS_ENABLED: ${SPRINGDOC_API_DOCS_ENABLED:-true}
+      SPRINGDOC_SWAGGER_UI_ENABLED: ${SPRINGDOC_SWAGGER_UI_ENABLED:-true}
+      POSTGRES_DB: ${POSTGRES_DB:-traderhub}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USERNAME: ${DB_USERNAME:-user_db}
+      DB_PASSWORD: ${DB_PASSWORD:-password_db}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
       JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:-change-me-access-token-secret-at-least-32-characters}
       JWT_REFRESH_TOKEN_SECRET: ${JWT_REFRESH_TOKEN_SECRET:-change-me-refresh-token-secret-at-least-32-characters}
-      JWT_ISSUER: ${JWT_ISSUER:-chat-backend}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-chat-web}
+      JWT_ISSUER: ${JWT_ISSUER:-traderhub-backend}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-traderhub-web}
       JWT_REFRESH_TOKEN_HASH_SECRET: ${JWT_REFRESH_TOKEN_HASH_SECRET:-change-me-refresh-token-hash-secret-at-least-32-characters}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
       JWT_ACCESS_TOKEN_EXPIRATION_MS: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:-900000}
       JWT_REFRESH_TOKEN_EXPIRATION_MS: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:-604800000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
@@ -70,11 +79,52 @@ services:
       SENDGRID_ENABLED: ${SENDGRID_ENABLED:-true}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
-      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-ChatApp}
-      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-update}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-TraderHub}
+      SENDGRID_PASSWORD_RESET_SUBJECT: ${SENDGRID_PASSWORD_RESET_SUBJECT:-Reset your TraderHub password}
+      SENDGRID_EMAIL_VERIFICATION_SUBJECT: ${SENDGRID_EMAIL_VERIFICATION_SUBJECT:-Verify your TraderHub email}
+      SENDGRID_LOGIN_ALERT_SUBJECT: ${SENDGRID_LOGIN_ALERT_SUBJECT:-New login to your TraderHub account}
+      SENDGRID_PASSWORD_CHANGED_SUBJECT: ${SENDGRID_PASSWORD_CHANGED_SUBJECT:-Your TraderHub password was changed}
+      OUTBOX_WORKER_ENABLED: ${OUTBOX_WORKER_ENABLED:-true}
+      OUTBOX_WORKER_FIXED_DELAY_MS: ${OUTBOX_WORKER_FIXED_DELAY_MS:-500}
+      OUTBOX_WORKER_INITIAL_DELAY_MS: ${OUTBOX_WORKER_INITIAL_DELAY_MS:-1000}
+      OUTBOX_WORKER_BATCH_SIZE: ${OUTBOX_WORKER_BATCH_SIZE:-20}
+      OUTBOX_WORKER_MAX_ATTEMPTS: ${OUTBOX_WORKER_MAX_ATTEMPTS:-10}
+      OUTBOX_WORKER_INITIAL_RETRY_DELAY: ${OUTBOX_WORKER_INITIAL_RETRY_DELAY:-5s}
+      OUTBOX_WORKER_MAX_RETRY_DELAY: ${OUTBOX_WORKER_MAX_RETRY_DELAY:-15m}
+      OUTBOX_WORKER_PROCESSING_TIMEOUT: ${OUTBOX_WORKER_PROCESSING_TIMEOUT:-60s}
+      OUTBOX_WORKER_SCHEDULER_POOL_SIZE: ${OUTBOX_WORKER_SCHEDULER_POOL_SIZE:-1}
+      MARKET_SYNC_ENABLED: ${MARKET_SYNC_ENABLED:-true}
+      MARKET_SYNC_INITIAL_DELAY_MS: ${MARKET_SYNC_INITIAL_DELAY_MS:-10000}
+      MARKET_SYNC_MARKETS_DELAY_MS: ${MARKET_SYNC_MARKETS_DELAY_MS:-1800000}
+      MARKET_SYNC_TRENDING_DELAY_MS: ${MARKET_SYNC_TRENDING_DELAY_MS:-3600000}
+      MARKET_SYNC_SCHEDULER_POOL_SIZE: ${MARKET_SYNC_SCHEDULER_POOL_SIZE:-1}
+      MARKET_STREAM_ENABLED: ${MARKET_STREAM_ENABLED:-true}
+      MARKET_STREAM_BASE_URL: ${MARKET_STREAM_BASE_URL:-wss://stream.binance.com:9443/ws}
+      MARKET_STREAM_REST_BASE_URL: ${MARKET_STREAM_REST_BASE_URL:-https://api.binance.com}
+      MARKET_STREAM_INITIAL_DELAY_MS: ${MARKET_STREAM_INITIAL_DELAY_MS:-15000}
+      MARKET_STREAM_RECONNECT_DELAY_MS: ${MARKET_STREAM_RECONNECT_DELAY_MS:-60000}
+      MARKET_STREAM_MAX_PAIRS: ${MARKET_STREAM_MAX_PAIRS:-200}
+      MARKET_STREAM_CANDLE_INTERVALS: ${MARKET_STREAM_CANDLE_INTERVALS:-4h,1d,1w}
+      MARKET_STREAM_CANDLE_HISTORY_LIMIT: ${MARKET_STREAM_CANDLE_HISTORY_LIMIT:-200}
+      MARKET_STREAM_TICKER_CACHE_TTL: ${MARKET_STREAM_TICKER_CACHE_TTL:-10m}
+      MARKET_STREAM_TICKER_SYMBOLS_CACHE_TTL: ${MARKET_STREAM_TICKER_SYMBOLS_CACHE_TTL:-5m}
+      MARKET_STREAM_CANDLE_CACHE_TTL: ${MARKET_STREAM_CANDLE_CACHE_TTL:-8d}
+      R2_ENABLED: ${R2_ENABLED:-true}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_PRESIGNED_UPLOAD_TTL: ${R2_PRESIGNED_UPLOAD_TTL:-10m}
+      R2_MAX_FILE_SIZE_BYTES: ${R2_MAX_FILE_SIZE_BYTES:-26214400}
+      R2_ALLOWED_CONTENT_TYPES: ${R2_ALLOWED_CONTENT_TYPES:-image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/ogg,application/pdf,text/plain,application/zip}
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
       HIBERNATE_FORMAT_SQL: ${HIBERNATE_FORMAT_SQL:-true}
+      FLYWAY_BASELINE_ON_MIGRATE: ${FLYWAY_BASELINE_ON_MIGRATE:-true}
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${BACKEND_HOST_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - app
       - data
@@ -86,6 +136,8 @@ volumes:
 
 networks:
   app:
+    driver: bridge
+  host-access:
     driver: bridge
   data:
     driver: bridge

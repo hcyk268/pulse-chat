@@ -4,32 +4,32 @@ spring:
       on-profile: dev
 
   datasource:
-    url: ${DB_URL}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
       timeout: 2s
 
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:validate}
+      ddl-auto: ${JPA_DDL_AUTO}
     properties:
       hibernate:
-        format_sql: ${HIBERNATE_FORMAT_SQL:true}
+        format_sql: ${HIBERNATE_FORMAT_SQL}
 
   flyway:
-    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE}
 
 jwt:
-  access-token-secret: ${JWT_ACCESS_TOKEN_SECRET:${JWT_SECRET}}
+  access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}
   refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET}
-  refresh-token-hash-secret: ${JWT_REFRESH_TOKEN_HASH_SECRET:${JWT_REFRESH_TOKEN_SECRET}}
+  refresh-token-hash-secret: ${JWT_REFRESH_TOKEN_HASH_SECRET}
 
 logging:
   level:

@@ -2,7 +2,7 @@ spring:
   application:
     name: chat
   profiles:
-    default: ${SPRING_PROFILES_ACTIVE:dev}
+    default: ${SPRING_PROFILES_ACTIVE}
 
   data:
     redis:
@@ -13,12 +13,12 @@ spring:
     open-in-view: false
 
 server:
-  port: ${SERVER_PORT:8080}
-  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:NONE}
+  port: ${SERVER_PORT}
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY}
 
 jwt:
-  issuer: ${JWT_ISSUER:chat-backend}
-  audience: ${JWT_AUDIENCE:chat-web}
+  issuer: ${JWT_ISSUER}
+  audience: ${JWT_AUDIENCE}
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}
   refresh-token-secret: ${JWT_REFRESH_TOKEN_SECRET}
   refresh-token-hash-secret: ${JWT_REFRESH_TOKEN_HASH_SECRET}
@@ -31,67 +31,67 @@ app:
 
   auth:
     email-verification:
-      token-ttl: ${EMAIL_VERIFICATION_TOKEN_TTL:24h}
-      frontend-url: ${EMAIL_VERIFICATION_FRONTEND_URL:http://localhost:5173/verify-email}
+      token-ttl: ${EMAIL_VERIFICATION_TOKEN_TTL}
+      frontend-url: ${EMAIL_VERIFICATION_FRONTEND_URL}
     password-reset:
-      token-ttl: ${PASSWORD_RESET_TOKEN_TTL:15m}
-      frontend-url: ${PASSWORD_RESET_FRONTEND_URL:http://localhost:5173/reset-password}
+      token-ttl: ${PASSWORD_RESET_TOKEN_TTL}
+      frontend-url: ${PASSWORD_RESET_FRONTEND_URL}
 
   mail:
     sendgrid:
-      enabled: ${SENDGRID_ENABLED:false}
-      api-key: ${SENDGRID_API_KEY:}
-      from-email: ${SENDGRID_FROM_EMAIL:}
-      from-name: ${SENDGRID_FROM_NAME:ChatApp}
-      password-reset-subject: Reset your ChatApp password
-      email-verification-subject: Verify your ChatApp email
-      login-alert-subject: New login to your ChatApp account
-      password-changed-subject: Your ChatApp password was changed
+      enabled: ${SENDGRID_ENABLED}
+      api-key: ${SENDGRID_API_KEY}
+      from-email: ${SENDGRID_FROM_EMAIL}
+      from-name: ${SENDGRID_FROM_NAME}
+      password-reset-subject: ${SENDGRID_PASSWORD_RESET_SUBJECT}
+      email-verification-subject: ${SENDGRID_EMAIL_VERIFICATION_SUBJECT}
+      login-alert-subject: ${SENDGRID_LOGIN_ALERT_SUBJECT}
+      password-changed-subject: ${SENDGRID_PASSWORD_CHANGED_SUBJECT}
 
   outbox:
     worker:
-      enabled: true
-      fixed-delay-ms: ${OUTBOX_WORKER_FIXED_DELAY_MS:500}
-      initial-delay-ms: ${OUTBOX_WORKER_INITIAL_DELAY_MS:1000}
-      batch-size: ${OUTBOX_WORKER_BATCH_SIZE:20}
-      max-attempts: ${OUTBOX_WORKER_MAX_ATTEMPTS:10}
-      initial-retry-delay: ${OUTBOX_WORKER_INITIAL_RETRY_DELAY:5s}
-      max-retry-delay: ${OUTBOX_WORKER_MAX_RETRY_DELAY:15m}
-      processing-timeout: ${OUTBOX_WORKER_PROCESSING_TIMEOUT:60s}
-      scheduler-pool-size: ${OUTBOX_WORKER_SCHEDULER_POOL_SIZE:1}
+      enabled: ${OUTBOX_WORKER_ENABLED}
+      fixed-delay-ms: ${OUTBOX_WORKER_FIXED_DELAY_MS}
+      initial-delay-ms: ${OUTBOX_WORKER_INITIAL_DELAY_MS}
+      batch-size: ${OUTBOX_WORKER_BATCH_SIZE}
+      max-attempts: ${OUTBOX_WORKER_MAX_ATTEMPTS}
+      initial-retry-delay: ${OUTBOX_WORKER_INITIAL_RETRY_DELAY}
+      max-retry-delay: ${OUTBOX_WORKER_MAX_RETRY_DELAY}
+      processing-timeout: ${OUTBOX_WORKER_PROCESSING_TIMEOUT}
+      scheduler-pool-size: ${OUTBOX_WORKER_SCHEDULER_POOL_SIZE}
 
   market:
     sync:
-      enabled: ${MARKET_SYNC_ENABLED:true}
-      initial-delay-ms: ${MARKET_SYNC_INITIAL_DELAY_MS:10000}
-      markets-delay-ms: ${MARKET_SYNC_MARKETS_DELAY_MS:1800000}
-      trending-delay-ms: ${MARKET_SYNC_TRENDING_DELAY_MS:3600000}
-      scheduler-pool-size: ${MARKET_SYNC_SCHEDULER_POOL_SIZE:1}
+      enabled: ${MARKET_SYNC_ENABLED}
+      initial-delay-ms: ${MARKET_SYNC_INITIAL_DELAY_MS}
+      markets-delay-ms: ${MARKET_SYNC_MARKETS_DELAY_MS}
+      trending-delay-ms: ${MARKET_SYNC_TRENDING_DELAY_MS}
+      scheduler-pool-size: ${MARKET_SYNC_SCHEDULER_POOL_SIZE}
 
     stream:
-      enabled: ${MARKET_STREAM_ENABLED:true}
-      base-url: ${MARKET_STREAM_BASE_URL:wss://stream.binance.com:9443/ws}
-      rest-base-url: ${MARKET_STREAM_REST_BASE_URL:https://api.binance.com}
-      initial-delay-ms: ${MARKET_STREAM_INITIAL_DELAY_MS:15000}
-      reconnect-delay-ms: ${MARKET_STREAM_RECONNECT_DELAY_MS:60000}
-      max-pairs: ${MARKET_STREAM_MAX_PAIRS:200}
-      candle-intervals: ${MARKET_STREAM_CANDLE_INTERVALS:4h,1d,1w}
-      candle-history-limit: ${MARKET_STREAM_CANDLE_HISTORY_LIMIT:200}
-      ticker-cache-ttl: ${MARKET_STREAM_TICKER_CACHE_TTL:10m}
-      ticker-symbols-cache-ttl: ${MARKET_STREAM_TICKER_SYMBOLS_CACHE_TTL:5m}
-      candle-cache-ttl: ${MARKET_STREAM_CANDLE_CACHE_TTL:8d}
+      enabled: ${MARKET_STREAM_ENABLED}
+      base-url: ${MARKET_STREAM_BASE_URL}
+      rest-base-url: ${MARKET_STREAM_REST_BASE_URL}
+      initial-delay-ms: ${MARKET_STREAM_INITIAL_DELAY_MS}
+      reconnect-delay-ms: ${MARKET_STREAM_RECONNECT_DELAY_MS}
+      max-pairs: ${MARKET_STREAM_MAX_PAIRS}
+      candle-intervals: ${MARKET_STREAM_CANDLE_INTERVALS}
+      candle-history-limit: ${MARKET_STREAM_CANDLE_HISTORY_LIMIT}
+      ticker-cache-ttl: ${MARKET_STREAM_TICKER_CACHE_TTL}
+      ticker-symbols-cache-ttl: ${MARKET_STREAM_TICKER_SYMBOLS_CACHE_TTL}
+      candle-cache-ttl: ${MARKET_STREAM_CANDLE_CACHE_TTL}
 
   storage:
     r2:
-      enabled: ${R2_ENABLED:false}
-      account-id: ${R2_ACCOUNT_ID:}
-      access-key-id: ${R2_ACCESS_KEY_ID:}
-      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
-      bucket: ${R2_BUCKET:}
-      public-base-url: ${R2_PUBLIC_BASE_URL:}
-      presigned-upload-ttl: ${R2_PRESIGNED_UPLOAD_TTL:10m}
-      max-file-size-bytes: ${R2_MAX_FILE_SIZE_BYTES:26214400}
-      allowed-content-types: ${R2_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/ogg,application/pdf,text/plain,application/zip}
+      enabled: ${R2_ENABLED}
+      account-id: ${R2_ACCOUNT_ID}
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}
+      bucket: ${R2_BUCKET}
+      public-base-url: ${R2_PUBLIC_BASE_URL}
+      presigned-upload-ttl: ${R2_PRESIGNED_UPLOAD_TTL}
+      max-file-size-bytes: ${R2_MAX_FILE_SIZE_BYTES}
+      allowed-content-types: ${R2_ALLOWED_CONTENT_TYPES}
 
 springdoc:
   paths-to-match: /api/v1/**
