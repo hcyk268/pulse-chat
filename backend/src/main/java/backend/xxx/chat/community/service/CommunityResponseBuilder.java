@@ -117,7 +117,7 @@ public class CommunityResponseBuilder {
                 .stream()
                 .collect(Collectors.groupingBy(
                         link -> link.getCommunity().getId(),
-                        Collectors.mapping(link -> CommunityTagResponse.from(link.getTag()), Collectors.toList())
+                        Collectors.mapping(link -> communityMapper.toTagResponse(link.getTag()), Collectors.toList())
                 ));
     }
 
