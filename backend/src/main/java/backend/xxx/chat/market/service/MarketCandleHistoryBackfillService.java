@@ -52,7 +52,7 @@ public class MarketCandleHistoryBackfillService {
             List<BinanceKlineResponse> klines = binanceMarketHistoryClient
                     .getKlines(pair.getSymbol(), interval, Math.min(historyLimit + 1, 1000))
                     .stream()
-                    .filter(kline -> kline.isClosedAt(now))
+                    .filter(kline -> isClosedKline(kline, now))
                     .toList();
             for (BinanceKlineResponse kline : klines) {
                 upsertCandle(pair, interval, kline);
@@ -60,6 +60,10 @@ public class MarketCandleHistoryBackfillService {
         } catch (RuntimeException exception) {
             log.warn("Failed to backfill Binance candle history for {} {}", pair.getSymbol(), interval, exception);
         }
+    }
+
+    private boolean isClosedKline(BinanceKlineResponse kline, Instant now) {
+        return kline.closeTime() != null && kline.closeTime().isBefore(now);
     }
 
     private boolean isStale(MarketCandle candle, String interval, Instant now) {
@@ -87,28 +91,27 @@ public class MarketCandleHistoryBackfillService {
             default -> Duration.ofHours(1);
         };
     }
+
     private void upsertCandle(MarketPair pair, String interval, BinanceKlineResponse kline) {
         MarketCandle candle = marketCandleRepository
                 .findByPairIdAndIntervalNameAndOpenTime(pair.getId(), interval, kline.openTime())
                 .orElseGet(() -> createCandle(pair, interval, kline));
 
-        candle.setCloseTime(kline.closeTime());
-        candle.setOpen(kline.open());
-        candle.setHigh(kline.high());
-        candle.setLow(kline.low());
-        candle.setClose(kline.close());
-        candle.setVolume(kline.volume());
-        candle.setQuoteVolume(kline.quoteVolume());
-        candle.setTradeCount(kline.tradeCount());
-        candle.setClosed(true);
+        candle.updateOhlcv(
+                kline.closeTime(),
+                kline.open(),
+                kline.high(),
+                kline.low(),
+                kline.close(),
+                kline.volume(),
+                kline.quoteVolume(),
+                kline.tradeCount(),
+                true
+        );
         marketCandleRepository.save(candle);
     }
 
     private MarketCandle createCandle(MarketPair pair, String interval, BinanceKlineResponse kline) {
-        MarketCandle candle = new MarketCandle();
-        candle.setPair(pair);
-        candle.setIntervalName(interval);
-        candle.setOpenTime(kline.openTime());
-        return candle;
+        return MarketCandle.create(pair, interval, kline.openTime());
     }
 }

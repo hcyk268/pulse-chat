@@ -3,7 +3,7 @@ package backend.xxx.chat.market.dto;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record CoinDetailResponse(
+public record WatchlistAssetResponse(
         Long id,
         String coingeckoId,
         String symbol,
@@ -16,10 +16,6 @@ public record CoinDetailResponse(
         BigDecimal low24h,
         BigDecimal marketCap,
         BigDecimal totalVolume,
-        BigDecimal circulatingSupply,
-        BigDecimal totalSupply,
-        BigDecimal maxSupply,
-        Instant lastSyncedAt,
-        MarketPairResponse binancePair
+        Instant lastSyncedAt
 ) {
 }

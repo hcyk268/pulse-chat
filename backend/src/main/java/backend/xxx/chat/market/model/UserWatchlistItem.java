@@ -1,5 +1,7 @@
 package backend.xxx.chat.market.model;
 
+import java.util.Objects;
+
 import backend.xxx.chat.common.model.AbstractBaseEntity;
 import backend.xxx.chat.user.model.User;
 import jakarta.persistence.Entity;
@@ -31,4 +33,19 @@ public class UserWatchlistItem extends AbstractBaseEntity<Long> {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "asset_id", nullable = false)
     private MarketAsset asset;
+
+    public static UserWatchlistItem create(User user, MarketAsset asset) {
+        UserWatchlistItem item = new UserWatchlistItem();
+        item.user = Objects.requireNonNull(user, "watchlist.user.required");
+        item.changeAsset(asset);
+        return item;
+    }
+
+    public void changeAsset(MarketAsset asset) {
+        this.asset = Objects.requireNonNull(asset, "watchlist.asset.required");
+    }
+
+    public boolean hasActiveAsset() {
+        return asset != null && asset.isActive();
+    }
 }

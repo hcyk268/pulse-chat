@@ -7,19 +7,15 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
+
 
 @Getter
 @Setter
-@RedisHash("market_live_candles")
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketLiveCandleHash {
 
-    @Id
     private String id;
-
     private Long pairId;
     private String exchange;
     private String symbol;

@@ -25,18 +25,20 @@ public class WatchlistService {
     private final UserWatchlistItemRepository userWatchlistItemRepository;
     private final MarketAssetRepository marketAssetRepository;
     private final UserRepository userRepository;
+    private final MarketMapper marketMapper;
 
     @Transactional(readOnly = true)
     public List<WatchlistItemResponse> getWatchlist(String username) {
         return userWatchlistItemRepository.findAllByUser_UsernameIgnoreCaseOrderByCreatedAtDescIdDesc(username)
                 .stream()
-                .map(WatchlistItemResponse::from)
+                .filter(UserWatchlistItem::hasActiveAsset)
+                .map(marketMapper::toWatchlistItemResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public WatchlistItemResponse getWatchlistItem(String username, Long itemId) {
-        return WatchlistItemResponse.from(findUserItem(username, itemId));
+        return marketMapper.toWatchlistItemResponse(findActiveUserItem(username, itemId));
     }
 
     @Transactional
@@ -48,26 +50,24 @@ public class WatchlistService {
                     throw new ConflictException("market.watchlist.item.already.exists");
                 });
 
-        UserWatchlistItem item = new UserWatchlistItem();
-        item.setUser(user);
-        item.setAsset(asset);
-        return WatchlistItemResponse.from(userWatchlistItemRepository.save(item));
+        UserWatchlistItem item = UserWatchlistItem.create(user, asset);
+        return marketMapper.toWatchlistItemResponse(userWatchlistItemRepository.save(item));
     }
 
     @Transactional
     public WatchlistItemResponse updateWatchlistItem(String username, Long itemId, WatchlistItemRequest request) {
-        UserWatchlistItem item = findUserItem(username, itemId);
+        UserWatchlistItem item = findActiveUserItem(username, itemId);
         MarketAsset asset = resolveAsset(request.symbol());
         if (item.getAsset().getId().equals(asset.getId())) {
-            return WatchlistItemResponse.from(item);
+            return marketMapper.toWatchlistItemResponse(item);
         }
 
         if (userWatchlistItemRepository.existsByUser_IdAndAsset_Id(item.getUser().getId(), asset.getId())) {
             throw new ConflictException("market.watchlist.item.already.exists");
         }
 
-        item.setAsset(asset);
-        return WatchlistItemResponse.from(userWatchlistItemRepository.save(item));
+        item.changeAsset(asset);
+        return marketMapper.toWatchlistItemResponse(userWatchlistItemRepository.save(item));
     }
 
     @Transactional
@@ -86,6 +86,14 @@ public class WatchlistService {
     private UserWatchlistItem findUserItem(String username, Long itemId) {
         return userWatchlistItemRepository.findByUser_UsernameIgnoreCaseAndId(username, itemId)
                 .orElseThrow(() -> new NotFoundException("market.watchlist.item.not.found"));
+    }
+
+    private UserWatchlistItem findActiveUserItem(String username, Long itemId) {
+        UserWatchlistItem item = findUserItem(username, itemId);
+        if (!item.hasActiveAsset()) {
+            throw new NotFoundException("market.watchlist.item.not.found");
+        }
+        return item;
     }
 
     private User resolveUser(String username) {
