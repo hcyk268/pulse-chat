@@ -4,7 +4,8 @@ import java.util.List;
 import java.util.Optional;
 
 import backend.xxx.chat.config.properties.BinanceStreamProperties;
-import backend.xxx.chat.market.dto.MarketTickerResponse;
+import backend.xxx.chat.market.dto.CoinMarketItemResponse;
+import backend.xxx.chat.market.dto.MarketCandleResponse;
 import backend.xxx.chat.market.dto.OverviewMarketResponse;
 import backend.xxx.chat.market.model.MarketAsset;
 import backend.xxx.chat.market.model.MarketPair;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 
@@ -51,6 +53,9 @@ class MarketServiceTest {
     @Mock
     private MarketCandleHistoryBackfillService marketCandleHistoryBackfillService;
 
+    @Spy
+    private MarketMapper marketMapper = new MarketMapper();
+
     @InjectMocks
     private MarketService marketService;
 
@@ -74,7 +79,7 @@ class MarketServiceTest {
         OverviewMarketResponse response = marketService.getMarket();
 
         assertThat(response.coins())
-                .extracting(OverviewMarketResponse.CoinMarketItemResponse::symbol)
+                .extracting(CoinMarketItemResponse::symbol)
                 .containsExactly("BTC");
         assertThat(response.coins().get(0).pairSymbol()).isEqualTo("BTCUSDT");
     }
@@ -99,7 +104,7 @@ class MarketServiceTest {
                 any(Pageable.class)
         )).thenReturn(List.of());
 
-        List<MarketTickerResponse.CandleResponse> candles = marketService.getCandles("btc", "4H");
+        List<MarketCandleResponse> candles = marketService.getCandles("btc", "4H");
 
         assertThat(candles).isEmpty();
         verify(marketCandleHistoryBackfillService).backfillIfNeeded(btcPair, List.of("4h"));
@@ -127,6 +132,8 @@ class MarketServiceTest {
         return pair;
     }
 }
+
+
 
 
 
