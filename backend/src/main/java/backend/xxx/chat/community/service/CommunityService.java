@@ -69,12 +69,13 @@ public class CommunityService {
     private final CommunityAccessPolicy communityAccessPolicy;
     private final CommunityAssetResolver communityAssetResolver;
     private final CommunityResponseBuilder communityResponseBuilder;
+    private final CommunityMapper communityMapper;
 
     @Transactional(readOnly = true)
     public List<CommunityCategoryResponse> getCategories() {
         return communityCategoryRepository.findAllByActiveTrueOrderBySortOrderAscIdAsc()
                 .stream()
-                .map(CommunityCategoryResponse::from)
+                .map(communityMapper::toCategoryResponse)
                 .toList();
     }
 
@@ -82,7 +83,7 @@ public class CommunityService {
     public List<CommunityTagResponse> getTags() {
         return communityTagRepository.findAllByActiveTrueOrderByNameAsc()
                 .stream()
-                .map(CommunityTagResponse::from)
+                .map(communityMapper::toTagResponse)
                 .toList();
     }
 
@@ -288,7 +289,7 @@ public class CommunityService {
             community.setDefaultChannel(channel);
         }
 
-        return CommunityChannelResponse.from(channel, 0L);
+        return communityMapper.toChannelResponse(channel, 0L);
     }
 
     @Transactional
@@ -327,7 +328,7 @@ public class CommunityService {
                 )
                 .map(ConversationParticipant::getUnreadCount)
                 .orElse(0L);
-        return CommunityChannelResponse.from(channel, unreadCount);
+        return communityMapper.toChannelResponse(channel, unreadCount);
     }
 
     private CommunityChannel createChannelInternal(
@@ -487,3 +488,4 @@ public class CommunityService {
         return community.getAvatarAsset().getPublicUrl();
     }
 }
+

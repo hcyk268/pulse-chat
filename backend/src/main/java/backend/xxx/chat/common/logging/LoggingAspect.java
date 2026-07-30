@@ -1,5 +1,6 @@
 package backend.xxx.chat.common.logging;
 
+import backend.xxx.chat.auth.service.JwtService;
 import java.lang.reflect.RecordComponent;
 import java.time.Duration;
 import java.time.temporal.TemporalAccessor;
@@ -11,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -90,6 +92,10 @@ public class LoggingAspect {
             return result;
         } catch (Throwable ex) {
             long elapsedMs = elapsedMs(startedAt);
+            if (isExpectedJwtFailure(targetClass, signature.getName(), ex)) {
+                throw ex;
+            }
+
             log.warn(
                     "Failed {} {} request={} exception={} message={} elapsedMs={}",
                     layer,
@@ -101,6 +107,12 @@ public class LoggingAspect {
             );
             throw ex;
         }
+    }
+
+    private static boolean isExpectedJwtFailure(Class<?> targetClass, String methodName, Throwable ex) {
+        return JwtService.class.equals(targetClass)
+                && ("extractUsername".equals(methodName) || "extractTokenType".equals(methodName))
+                && (ex instanceof JwtException || ex instanceof IllegalArgumentException);
     }
 
     private static long elapsedMs(long startedAt) {
