@@ -12,14 +12,11 @@ import org.springframework.data.redis.core.RedisHash;
 
 @Getter
 @Setter
-@RedisHash("market_ticker_latest")
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketTickerLatestHash {
 
-    @Id
     private String symbol;
-
     private Long pairId;
     private String exchange;
     private BigDecimal price;

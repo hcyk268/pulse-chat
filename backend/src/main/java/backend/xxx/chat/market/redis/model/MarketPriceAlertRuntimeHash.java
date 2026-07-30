@@ -12,13 +12,9 @@ import org.springframework.data.redis.core.RedisHash;
 
 @Getter
 @Setter
-@RedisHash("price_alert_runtime")
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketPriceAlertRuntimeHash {
-
-    @Id
-    private Long alertId;
 
     private Long userId;
     private Long assetId;

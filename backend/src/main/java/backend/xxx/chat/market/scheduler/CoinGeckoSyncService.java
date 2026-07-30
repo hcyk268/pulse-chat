@@ -7,11 +7,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import backend.xxx.chat.market.client.BinanceExchangeInfoClient;
 import backend.xxx.chat.market.client.CoinGeckoClient;
 import backend.xxx.chat.market.client.dto.CoinMarketResponse;
+import backend.xxx.chat.market.client.dto.CoinTrendingEntry;
+import backend.xxx.chat.market.client.dto.CoinTrendingItem;
 import backend.xxx.chat.market.client.dto.CoinTrendingResponse;
 import backend.xxx.chat.market.model.MarketAsset;
 import backend.xxx.chat.market.model.MarketPair;
@@ -19,6 +24,7 @@ import backend.xxx.chat.market.model.MarketTrending;
 import backend.xxx.chat.market.repository.MarketAssetRepository;
 import backend.xxx.chat.market.repository.MarketPairRepository;
 import backend.xxx.chat.market.repository.MarketTrendingRepository;
+import backend.xxx.chat.market.stream.BinanceMarketDataCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,9 +39,11 @@ public class CoinGeckoSyncService {
     private static final String USDT_SYMBOL = "USDT";
 
     private final CoinGeckoClient coinGeckoClient;
+    private final BinanceExchangeInfoClient binanceExchangeInfoClient;
     private final MarketAssetRepository marketAssetRepository;
     private final MarketPairRepository marketPairRepository;
     private final MarketTrendingRepository marketTrendingRepository;
+    private final BinanceMarketDataCache binanceMarketDataCache;
 
     @Transactional
     public int syncTopMarkets() {
@@ -53,6 +61,14 @@ public class CoinGeckoSyncService {
             return 0;
         }
 
+        Collection<String> candidatePairSymbols = toBinancePairSymbols(validCoins);
+        Optional<Set<String>> supportedPairSymbols = loadSupportedBinancePairSymbols(candidatePairSymbols);
+        if (supportedPairSymbols.isEmpty()) {
+            log.warn("Skipped market asset sync. Binance exchangeInfo is unavailable");
+            return 0;
+        }
+        Set<String> supportedSymbols = supportedPairSymbols.get();
+
         Map<String, MarketAsset> assetsByCoingeckoId = marketAssetRepository
                 .findAllByCoingeckoIdIn(toMarketCoinIds(validCoins))
                 .stream()
@@ -61,19 +77,36 @@ public class CoinGeckoSyncService {
 
         for (CoinMarketResponse coin : validCoins) {
             MarketAsset asset = assetsByCoingeckoId.getOrDefault(coin.id(), new MarketAsset());
-            applyMarketCoin(asset, coin, syncedAt);
+            boolean supportedByBinance = supportedSymbols.contains(toBinancePairSymbol(coin.symbol()));
+            applyMarketCoin(asset, coin, syncedAt, supportedByBinance);
             assetsToSave.add(asset);
         }
 
         List<MarketAsset> savedAssets = marketAssetRepository.saveAll(assetsToSave);
         Map<String, MarketPair> pairsBySymbol = marketPairRepository
-                .findAllByExchangeAndSymbolIn(BINANCE_EXCHANGE, toBinancePairSymbols(savedAssets))
+                .findAllByExchangeAndSymbolIn(BINANCE_EXCHANGE, candidatePairSymbols)
                 .stream()
                 .collect(Collectors.toMap(MarketPair::getSymbol, Function.identity()));
-        List<MarketPair> pairsToSave = savedAssets.stream()
-                .map(asset -> buildBinanceUsdtPair(asset, pairsBySymbol, syncedAt))
-                .toList();
-        marketPairRepository.saveAll(pairsToSave);
+        List<MarketPair> pairsToSave = new ArrayList<>();
+        for (MarketAsset asset : savedAssets) {
+            String pairSymbol = toBinancePairSymbol(asset.getSymbol());
+            if (asset.isActive() && supportedSymbols.contains(pairSymbol)) {
+                pairsToSave.add(buildBinanceUsdtPair(asset, pairsBySymbol, syncedAt));
+            }
+        }
+        pairsBySymbol.values()
+                .stream()
+                .filter(pair -> !supportedSymbols.contains(pair.getSymbol()))
+                .filter(MarketPair::isActive)
+                .forEach(pair -> {
+                    pair.deactivate(syncedAt);
+                    pairsToSave.add(pair);
+                });
+        List<MarketPair> savedPairs = marketPairRepository.saveAll(pairsToSave);
+        binanceMarketDataCache.cacheTickerSymbols(savedPairs.stream()
+                .filter(MarketPair::isActive)
+                .map(MarketPair::getSymbol)
+                .toList());
 
         return savedAssets.size();
     }
@@ -87,8 +120,8 @@ public class CoinGeckoSyncService {
         }
 
         Instant snapshotAt = Instant.now();
-        List<CoinTrendingResponse.CoinTrendingItem> validItems = response.coins().stream()
-                .map(CoinTrendingResponse.CoinTrendingEntry::item)
+        List<CoinTrendingItem> validItems = response.coins().stream()
+                .map(CoinTrendingEntry::item)
                 .filter(this::isValidTrendingItem)
                 .toList();
         if (validItems.isEmpty()) {
@@ -108,14 +141,16 @@ public class CoinGeckoSyncService {
         List<MarketTrending> trendingToSave = validItems.stream()
                 .map(item -> {
                     MarketTrending trending = trendingByCoingeckoId.getOrDefault(item.id(), new MarketTrending());
-                    trending.setAsset(assetsByCoingeckoId.get(item.id()));
-                    trending.setCoingeckoId(item.id());
-                    trending.setSymbol(item.symbol().toUpperCase(Locale.ROOT));
-                    trending.setName(item.name());
-                    trending.setThumbUrl(item.thumb());
-                    trending.setMarketCapRank(item.marketCapRank());
-                    trending.setScore(item.score() == null ? 0 : item.score());
-                    trending.setSnapshotAt(snapshotAt);
+                    trending.syncSnapshot(
+                            assetsByCoingeckoId.get(item.id()),
+                            item.id(),
+                            item.symbol(),
+                            item.name(),
+                            item.thumb(),
+                            item.marketCapRank(),
+                            item.score(),
+                            snapshotAt
+                    );
                     return trending;
                 })
                 .toList();
@@ -127,7 +162,7 @@ public class CoinGeckoSyncService {
         return coin != null && coin.id() != null && coin.symbol() != null && coin.name() != null;
     }
 
-    private boolean isValidTrendingItem(CoinTrendingResponse.CoinTrendingItem item) {
+    private boolean isValidTrendingItem(CoinTrendingItem item) {
         return item != null && item.id() != null && item.symbol() != null && item.name() != null;
     }
 
@@ -138,36 +173,73 @@ public class CoinGeckoSyncService {
                 .collect(Collectors.toSet());
     }
 
-    private Collection<String> toTrendingCoinIds(List<CoinTrendingResponse.CoinTrendingItem> items) {
+    private Collection<String> toTrendingCoinIds(List<CoinTrendingItem> items) {
         return items.stream()
-                .map(CoinTrendingResponse.CoinTrendingItem::id)
+                .map(CoinTrendingItem::id)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
     }
 
-    private Collection<String> toBinancePairSymbols(List<MarketAsset> assets) {
-        return assets.stream()
-                .map(asset -> asset.getSymbol().toUpperCase(Locale.ROOT) + USDT_SYMBOL)
+    private Collection<String> toBinancePairSymbols(List<CoinMarketResponse> coins) {
+        return coins.stream()
+                .map(CoinMarketResponse::symbol)
+                .map(this::toBinancePairSymbol)
                 .collect(Collectors.toSet());
     }
 
-    private void applyMarketCoin(MarketAsset asset, CoinMarketResponse coin, Instant syncedAt) {
-        asset.setCoingeckoId(coin.id());
-        asset.setSymbol(coin.symbol().toUpperCase(Locale.ROOT));
-        asset.setName(coin.name());
-        asset.setImageUrl(coin.image());
-        asset.setMarketCapRank(coin.marketCapRank());
-        asset.setCurrentPriceUsd(coin.currentPrice());
-        asset.setPriceChangePercentage24h(coin.priceChangePercentage24h());
-        asset.setHigh24h(coin.high24h());
-        asset.setLow24h(coin.low24h());
-        asset.setMarketCap(coin.marketCap());
-        asset.setTotalVolume(coin.totalVolume());
-        asset.setCirculatingSupply(coin.circulatingSupply());
-        asset.setTotalSupply(coin.totalSupply());
-        asset.setMaxSupply(coin.maxSupply());
-        asset.setActive(true);
-        asset.setLastSyncedAt(syncedAt);
+    private String toBinancePairSymbol(String symbol) {
+        return symbol.toUpperCase(Locale.ROOT) + USDT_SYMBOL;
+    }
+
+    private Optional<Set<String>> loadSupportedBinancePairSymbols(Collection<String> candidatePairSymbols) {
+        if (candidatePairSymbols == null || candidatePairSymbols.isEmpty()) {
+            return Optional.of(Set.of());
+        }
+
+        try {
+            Set<String> candidateSymbols = candidatePairSymbols.stream()
+                    .map(symbol -> symbol.toUpperCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+            Set<String> tradingSymbols = binanceExchangeInfoClient.getTradingSpotSymbolsByQuote(USDT_SYMBOL);
+            if (tradingSymbols.isEmpty()) {
+                log.warn("Binance exchangeInfo returned no trading {} symbols", USDT_SYMBOL);
+                return Optional.empty();
+            }
+
+            Set<String> supportedSymbols = tradingSymbols.stream()
+                    .filter(candidateSymbols::contains)
+                    .collect(Collectors.toSet());
+            return Optional.of(supportedSymbols);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to load Binance exchangeInfo", exception);
+            return Optional.empty();
+        }
+    }
+
+    private void applyMarketCoin(
+            MarketAsset asset,
+            CoinMarketResponse coin,
+            Instant syncedAt,
+            boolean supportedByBinance
+    ) {
+        asset.syncMarketData(
+                coin.id(),
+                coin.symbol(),
+                coin.name(),
+                coin.image(),
+                coin.marketCapRank(),
+                coin.currentPrice(),
+                coin.priceChangePercentage24h(),
+                coin.high24h(),
+                coin.low24h(),
+                coin.marketCap(),
+                coin.totalVolume(),
+                coin.circulatingSupply(),
+                coin.totalSupply(),
+                coin.maxSupply(),
+                supportedByBinance,
+                syncedAt
+        );
     }
 
     private MarketPair buildBinanceUsdtPair(
@@ -179,13 +251,9 @@ public class CoinGeckoSyncService {
         String pairSymbol = baseSymbol + USDT_SYMBOL;
 
         MarketPair pair = pairsBySymbol.getOrDefault(pairSymbol, new MarketPair());
-        pair.setAsset(asset);
-        pair.setExchange(BINANCE_EXCHANGE);
-        pair.setBaseSymbol(baseSymbol);
-        pair.setQuoteSymbol(USDT_SYMBOL);
-        pair.setSymbol(pairSymbol);
-        pair.setActive(true);
-        pair.setLastSyncedAt(syncedAt);
+        pair.syncPair(asset, BINANCE_EXCHANGE, baseSymbol, USDT_SYMBOL, pairSymbol, true, syncedAt);
         return pair;
     }
 }
+
+

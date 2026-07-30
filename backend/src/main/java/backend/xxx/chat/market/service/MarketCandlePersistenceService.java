@@ -36,23 +36,21 @@ public class MarketCandlePersistenceService {
 
     private MarketCandle createCandle(MarketLiveCandleHash candle) {
         MarketPair pair = marketPairRepository.getReferenceById(candle.getPairId());
-        MarketCandle marketCandle = new MarketCandle();
-        marketCandle.setPair(pair);
-        marketCandle.setIntervalName(candle.getIntervalName());
-        marketCandle.setOpenTime(candle.getOpenTime());
-        return marketCandle;
+        return MarketCandle.create(pair, candle.getIntervalName(), candle.getOpenTime());
     }
 
     private void applyValues(MarketCandle marketCandle, MarketLiveCandleHash candle) {
-        marketCandle.setCloseTime(candle.getCloseTime());
-        marketCandle.setOpen(candle.getOpen());
-        marketCandle.setHigh(candle.getHigh());
-        marketCandle.setLow(candle.getLow());
-        marketCandle.setClose(candle.getClose());
-        marketCandle.setVolume(candle.getVolume());
-        marketCandle.setQuoteVolume(candle.getQuoteVolume());
-        marketCandle.setTradeCount(candle.getTradeCount() == null ? 0L : candle.getTradeCount());
-        marketCandle.setClosed(true);
+        marketCandle.updateOhlcv(
+                candle.getCloseTime(),
+                candle.getOpen(),
+                candle.getHigh(),
+                candle.getLow(),
+                candle.getClose(),
+                candle.getVolume(),
+                candle.getQuoteVolume(),
+                candle.getTradeCount() == null ? 0L : candle.getTradeCount(),
+                true
+        );
     }
 
     private boolean canPersist(MarketLiveCandleHash candle) {

@@ -11,14 +11,11 @@ import org.springframework.data.redis.core.RedisHash;
 
 @Getter
 @Setter
-@RedisHash("market_stream_state")
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketStreamStateHash {
 
-    @Id
     private String exchange;
-
     private boolean connected;
     private Instant lastHeartbeatAt;
     private Instant lastTickerEventAt;
