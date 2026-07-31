@@ -3,6 +3,7 @@ package backend.xxx.chat.market.service;
 import java.math.BigDecimal;
 
 import backend.xxx.chat.market.model.PriceAlertConditionType;
+import backend.xxx.chat.market.model.PriceAlertRule;
 import backend.xxx.chat.market.redis.model.MarketTickerLatestHash;
 import org.junit.jupiter.api.Test;
 

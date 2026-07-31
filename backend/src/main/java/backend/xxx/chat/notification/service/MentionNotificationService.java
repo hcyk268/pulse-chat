@@ -1,10 +1,6 @@
 package backend.xxx.chat.notification.service;
 
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,7 +45,7 @@ public class MentionNotificationService {
 
         mentionedUsernames.stream()
                 .map(activeParticipants::get)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .forEach(recipient -> notificationService.create(new NotificationCommand(
                         recipient,
                         sender,

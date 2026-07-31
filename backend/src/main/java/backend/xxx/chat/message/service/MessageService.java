@@ -30,6 +30,7 @@ import backend.xxx.chat.outbox.payload.MessagePinnedOutboxPayload;
 import backend.xxx.chat.outbox.payload.MessageReadOutboxPayload;
 import backend.xxx.chat.outbox.payload.MessageUnPinnedOutboxPayload;
 import backend.xxx.chat.outbox.service.OutBoxService;
+import backend.xxx.chat.notification.service.MentionNotificationService;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
@@ -59,6 +60,7 @@ public class MessageService {
     private final MessageAccessPolicy messageAccessPolicy;
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
     private final OutBoxService outBoxService;
+    private final MentionNotificationService mentionNotificationService;
 
     @Transactional(readOnly = true)
     public MessageHistoryResponse getHistory(String currentUsername, Long conversationId, Short limit, String cursor) {
@@ -160,6 +162,8 @@ public class MessageService {
                 RealtimeEventType.MESSAGE_CREATED.getValue(),
                 new MessageCreatedOutboxPayload(conversation.getId(), savedMessage.getId())
         );
+
+        mentionNotificationService.notifyMentions(savedMessage, currentUser, participants);
 
         return messageMapper.toResponse(savedMessage);
     }
@@ -408,4 +412,3 @@ public class MessageService {
     ) {
     }
 }
-
