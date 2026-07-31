@@ -36,7 +36,7 @@ class PresenceServiceTest {
     private PresenceService presenceService;
 
     @Test
-    void markConnectedCreatesPresenceAndPublishesOnlineEvent() {
+    void publishesOnlineEvent() {
         User alice = user(1L, "alice");
         when(userLookupService.getCurrentUser("alice")).thenReturn(alice);
         when(presenceRepository.findByUserIdForUpdate(alice.getId())).thenReturn(Optional.empty());
@@ -62,7 +62,7 @@ class PresenceServiceTest {
     }
 
     @Test
-    void markConnectedDoesNotPublishWhenUserWasAlreadyOnline() {
+    void skipsDuplicateOnlineEvent() {
         User alice = user(1L, "alice");
         Presence presence = Presence.offline(alice);
         presence.markOnline(java.time.Instant.parse("2026-01-01T00:00:00Z"));
@@ -79,7 +79,7 @@ class PresenceServiceTest {
     }
 
     @Test
-    void resetAllConnectionsDelegatesToRepository() {
+    void resetsConnections() {
         presenceService.resetAllConnections();
 
         verify(presenceRepository).resetAllConnections();

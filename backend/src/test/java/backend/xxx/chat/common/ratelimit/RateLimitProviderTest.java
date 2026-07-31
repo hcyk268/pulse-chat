@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RateLimitProviderTest {
 
     @Test
-    void scopesRedisKeyByActionAndNormalizedClientIp() {
+    void buildsRedisKey() {
         StubRedisTemplate redis = new StubRedisTemplate(0L);
         RateLimitProvider provider = new RateLimitProvider(redis);
 
@@ -29,7 +29,7 @@ class RateLimitProviderTest {
     }
 
     @Test
-    void convertsRedisRetryMillisecondsToCeilingSeconds() {
+    void roundsRetrySeconds() {
         RateLimitProvider provider = new RateLimitProvider(new StubRedisTemplate(1_501L));
 
         assertThatThrownBy(() -> provider.rateLimit("203.0.113.10", "login", 5, Duration.ofMinutes(1)))
@@ -38,7 +38,7 @@ class RateLimitProviderTest {
     }
 
     @Test
-    void failsClosedWhenRedisIsUnavailableOrReturnsNoDecision() {
+    void failsWhenRedisUnavailable() {
         StubRedisTemplate unavailable = new StubRedisTemplate(0L);
         unavailable.failure = new DataAccessResourceFailureException("redis unavailable");
 
@@ -52,7 +52,7 @@ class RateLimitProviderTest {
     }
 
     @Test
-    void rejectsInvalidPoliciesBeforeCallingRedis() {
+    void rejectsInvalidPolicy() {
         RateLimitProvider provider = new RateLimitProvider(new StubRedisTemplate(0L));
 
         assertThatThrownBy(() -> provider.rateLimit("", "login", 5, Duration.ofMinutes(1)))

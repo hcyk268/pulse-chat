@@ -10,7 +10,7 @@ class ClientIpResolverTest {
     private final ClientIpResolver resolver = new ClientIpResolver();
 
     @Test
-    void trustsOnlyContainerNormalizedRemoteAddress() {
+    void usesRemoteAddress() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("203.0.113.10");
         request.addHeader("X-Forwarded-For", "198.51.100.25");
@@ -20,7 +20,7 @@ class ClientIpResolverTest {
     }
 
     @Test
-    void normalizesIpv4MappedIpv6AndZoneIdentifiers() {
+    void normalizesIpAddress() {
         MockHttpServletRequest mappedIpv4 = new MockHttpServletRequest();
         mappedIpv4.setRemoteAddr("::FFFF:192.0.2.44");
 
@@ -32,7 +32,7 @@ class ClientIpResolverTest {
     }
 
     @Test
-    void returnsStableFallbackWhenRemoteAddressIsMissing() {
+    void usesFallbackAddress() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr(" ");
 

@@ -32,7 +32,7 @@ class PasswordResetTokenServiceTest {
     private PasswordResetTokenService tokenService;
 
     @Test
-    void issueStoresOnlyHashedTokenWithTtl() {
+    void storesHashedToken() {
         Duration ttl = Duration.ofMinutes(15);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
@@ -49,7 +49,7 @@ class PasswordResetTokenServiceTest {
     }
 
     @Test
-    void consumeAtomicallyDeletesTokenAndReturnsUserId() {
+    void consumesToken() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.getAndDelete(anyString())).thenReturn(10L);
 
@@ -64,7 +64,7 @@ class PasswordResetTokenServiceTest {
     }
 
     @Test
-    void consumeRejectsMissingOrExpiredToken() {
+    void rejectsInvalidToken() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.getAndDelete(anyString())).thenReturn(null);
 
@@ -73,7 +73,7 @@ class PasswordResetTokenServiceTest {
     }
 
     @Test
-    void issueRejectsNonPositiveTtl() {
+    void rejectsInvalidTtl() {
         assertThatThrownBy(() -> tokenService.issue(10L, Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("auth.password.reset.ttl.positive");

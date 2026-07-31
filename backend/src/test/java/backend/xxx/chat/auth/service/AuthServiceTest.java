@@ -109,7 +109,7 @@ class AuthServiceTest {
     private AuthService authService;
 
     @Test
-    void registerCreatesUnverifiedUserAndSendsVerificationEmailWithoutIssuingJwt() {
+    void registersUnverifiedUser() {
         RegisterRequest request = new RegisterRequest(
                 " Alice ",
                 " ALICE@EXAMPLE.COM ",
@@ -156,7 +156,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerRejectsDuplicateUsername() {
+    void rejectsDuplicateUsername() {
         RegisterRequest request = new RegisterRequest(
                 "alice",
                 "alice@example.com",
@@ -175,7 +175,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void loginAuthenticatesUserAndReturnsTokenResponse() {
+    void logsInUser() {
         LoginRequest request = new LoginRequest("alice", "Password123!");
         Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
         User user = User.create("alice", "alice@example.com", "hashed-password", "Alice");
@@ -222,7 +222,7 @@ verify(authMailAsyncService).sendLoginAlert(
     }
 
     @Test
-    void forgotPasswordIssuesTokenAndSendsResetLinkWhenUserExists() {
+    void sendsPasswordReset() {
         ForgotPasswordRequest request = new ForgotPasswordRequest(" ALICE@EXAMPLE.COM ");
         User user = User.create("alice", "alice@example.com", "old-hash", "Alice");
         user.setId(10L);
@@ -245,7 +245,7 @@ verify(authMailAsyncService).sendLoginAlert(
     }
 
     @Test
-    void forgotPasswordReturnsNormallyWithoutRevealingUnknownEmail() {
+    void hidesUnknownEmail() {
         ForgotPasswordRequest request = new ForgotPasswordRequest("missing@example.com");
 
         when(authValidator.normalizeEmail(request.email())).thenReturn("missing@example.com");
@@ -259,7 +259,7 @@ verify(authMailAsyncService).sendLoginAlert(
 
 
     @Test
-    void resetPasswordConsumesTokenChangesPasswordAndRevokesRefreshSessions() {
+    void resetsPassword() {
         ResetPasswordRequest request = new ResetPasswordRequest(
                 "reset-token",
                 "NewPassword123!",
@@ -286,7 +286,7 @@ verify(authMailAsyncService).sendLoginAlert(
     }
 
     @Test
-    void resetPasswordRejectsMismatchedConfirmationBeforeConsumingToken() {
+    void rejectsResetMismatch() {
         ResetPasswordRequest request = new ResetPasswordRequest(
                 "reset-token",
                 "NewPassword123!",
@@ -302,7 +302,7 @@ verify(authMailAsyncService).sendLoginAlert(
         verify(passwordResetTokenService, never()).consume(any());
     }
     @Test
-    void verifyEmailMarksAccountVerified() {
+    void verifiesEmail() {
         VerifyEmailRequest request = new VerifyEmailRequest("verify-token");
         User user = User.create("alice", "alice@example.com", "old-hash", "Alice");
         user.setId(10L);
@@ -317,7 +317,7 @@ verify(authMailAsyncService).sendLoginAlert(
     }
 
     @Test
-    void changePasswordValidatesCurrentPasswordRevokesSessionsAndReturnsFreshJwtPair() {
+    void changesPassword() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "CurrentPassword123!",
                 "NewPassword123!",

@@ -26,7 +26,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void rejectsAccessTokenAfterCredentialsVersionChanges() {
+    void rejectsStaleToken() {
         AuthenticatedUser original = principal(3L, true);
         String token = jwtService.generateAccessToken(original);
 
@@ -35,7 +35,7 @@ class JwtServiceTest {
     }
 
     @Test
-    void rejectsTokenForUnverifiedAccount() {
+    void rejectsUnverifiedUser() {
         AuthenticatedUser verified = principal(0L, true);
         String token = jwtService.generateAccessToken(verified);
 

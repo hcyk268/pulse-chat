@@ -13,19 +13,19 @@ class AuthValidatorTest {
     private final AuthValidator authValidator = new AuthValidator();
 
     @Test
-    void normalizeEmailTrimsAndLowercases() {
+    void normalizesEmail() {
         assertThat(authValidator.normalizeEmail(" ALICE@EXAMPLE.COM "))
                 .isEqualTo("alice@example.com");
     }
 
     @Test
-    void validatePasswordConfirmationRejectsMismatch() {
+    void rejectsPasswordMismatch() {
         assertThatThrownBy(() -> authValidator.validatePasswordConfirmation("Password123!", "Different123!"))
                 .isInstanceOf(PasswordConfirmationMismatchException.class);
     }
 
     @Test
-    void validateRedisValueRequiresPositiveTtl() {
+    void rejectsInvalidRedisTtl() {
         assertThatThrownBy(() -> authValidator.validateRedisValue("refresh:key", new Object(), Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("redis.ttl.positive");
