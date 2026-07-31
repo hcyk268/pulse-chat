@@ -41,7 +41,7 @@ class StompAuthChannelInterceptorTest {
     private StompAuthChannelInterceptor interceptor;
 
     @Test
-    void connectWithValidAccessTokenSetsPrincipal() {
+    void authenticatesValidToken() {
         UserDetails userDetails = User.withUsername("alice")
                 .password("password")
                 .authorities("ROLE_USER")
@@ -64,7 +64,7 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
-    void connectWithoutAccessTokenIsAllowedAsGuest() {
+    void allowsGuestConnection() {
         Message<?> message = connectMessage(null);
 
         Message<?> result = interceptor.preSend(message, channel);
@@ -79,14 +79,14 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
-    void subscribeToPublicMarketTopicIsAllowedWithoutAuthentication() {
+    void allowsPublicMarketSubscription() {
         Message<?> message = stompMessage(StompCommand.SUBSCRIBE, "/topic/market/tickers/BTCUSDT", null);
 
         assertThat(interceptor.preSend(message, channel)).isSameAs(message);
     }
 
     @Test
-    void subscribeToPrivateUserQueueRequiresAuthentication() {
+    void rejectsAnonymousUserQueue() {
         Message<?> message = stompMessage(StompCommand.SUBSCRIBE, "/user/queue/events", null);
 
         assertThatThrownBy(() -> interceptor.preSend(message, channel))
@@ -95,7 +95,7 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
-    void sendToApplicationDestinationIsAllowedWhenAuthenticated() {
+    void allowsAuthenticatedSend() {
         UserDetails userDetails = User.withUsername("alice")
                 .password("password")
                 .authorities("ROLE_USER")

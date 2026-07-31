@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GlobalExceptionHandlerRateLimitTest {
 
     @Test
-    void returnsRetryAfterAndNoStoreForRateLimitResponses() {
+    void addsRateLimitHeaders() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
         ResponseEntity<ApiErrorResponse> response =
                 new GlobalExceptionHandler().handleLimitExceeded(new LimitExceedException(42), request);

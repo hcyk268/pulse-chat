@@ -60,7 +60,7 @@ class MarketServiceTest {
     private MarketService marketService;
 
     @Test
-    void getMarketFiltersOutActivePairsWithoutTickerCache() {
+    void filtersMissingTickers() {
         MarketAsset btc = asset(1L, "BTC", "Bitcoin");
         MarketAsset doge = asset(2L, "DOGE", "Dogecoin");
         MarketPair btcPair = pair(10L, btc, "BTCUSDT");
@@ -85,7 +85,7 @@ class MarketServiceTest {
     }
 
     @Test
-    void getCandlesBackfillsConfiguredIntervalAndReturnsRecentCandles() {
+    void backfillsCandles() {
         MarketAsset btc = asset(1L, "BTC", "Bitcoin");
         MarketPair btcPair = pair(10L, btc, "BTCUSDT");
 

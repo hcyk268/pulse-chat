@@ -14,32 +14,32 @@ class CommunityValidatorTest {
     private final CommunityValidator communityValidator = new CommunityValidator();
 
     @Test
-    void normalizeSearchPatternKeepsAbsentSearchNull() {
+    void keepsEmptySearchNull() {
         assertThat(communityValidator.normalizeSearchPattern(null)).isNull();
         assertThat(communityValidator.normalizeSearchPattern("   ")).isNull();
     }
 
     @Test
-    void normalizeSearchPatternTrimsLowercasesAndAddsWildcards() {
+    void normalizesSearch() {
         assertThat(communityValidator.normalizeSearchPattern("  BitCoin  "))
                 .isEqualTo("%bitcoin%");
     }
 
     @Test
-    void normalizeLimitUsesDefaultAndCapsAtMaximum() {
+    void normalizesLimit() {
         assertThat(communityValidator.normalizeLimit(null)).isEqualTo(20);
         assertThat(communityValidator.normalizeLimit((short) 50)).isEqualTo(50);
         assertThat(communityValidator.normalizeLimit((short) 51)).isEqualTo(50);
     }
 
     @Test
-    void normalizeLimitRejectsNonPositiveValue() {
+    void rejectsInvalidLimit() {
         assertThatThrownBy(() -> communityValidator.normalizeLimit((short) 0))
                 .isInstanceOf(ValidationException.class);
     }
 
     @Test
-    void normalizeCreateChannelRequestsAddsDefaultChannel() {
+    void addsDefaultChannel() {
         List<CreateCommunityChannelRequest> channels =
                 communityValidator.normalizeCreateChannelRequests(null);
 

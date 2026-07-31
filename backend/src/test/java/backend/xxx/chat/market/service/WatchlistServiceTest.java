@@ -37,7 +37,7 @@ class WatchlistServiceTest {
     private WatchlistService watchlistService;
 
     @Test
-    void getWatchlistFiltersInactiveAssets() {
+    void filtersInactiveAssets() {
         UserWatchlistItem activeItem = item(1L, asset(10L, "BTC", true));
         UserWatchlistItem inactiveItem = item(2L, asset(20L, "DOGE", false));
 

@@ -36,7 +36,7 @@ class AuthMailAsyncServiceTest {
     }
 
     @Test
-    void invalidatesPasswordResetTokenWhenDeliveryFails() {
+    void invalidatesResetToken() {
         doThrow(new IllegalStateException("mail unavailable"))
                 .when(mailService)
                 .sendPasswordResetEmail("alice@example.com", "Alice", "https://app.example/reset");
@@ -52,7 +52,7 @@ class AuthMailAsyncServiceTest {
     }
 
     @Test
-    void invalidatesEmailVerificationTokenWhenDeliveryFails() {
+    void invalidatesVerificationToken() {
         doThrow(new IllegalStateException("mail unavailable"))
                 .when(mailService)
                 .sendEmailVerificationEmail("alice@example.com", "Alice", "https://app.example/verify");

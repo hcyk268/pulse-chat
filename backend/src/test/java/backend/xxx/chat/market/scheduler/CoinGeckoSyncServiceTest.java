@@ -51,7 +51,7 @@ class CoinGeckoSyncServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void syncTopMarketsOnlyKeepsBinanceSupportedAssetsAndPairsActive() {
+    void syncsBinanceAssets() {
         MarketPair unsupportedExistingPair = new MarketPair();
         unsupportedExistingPair.setExchange("BINANCE");
         unsupportedExistingPair.setBaseSymbol("DOGE");
