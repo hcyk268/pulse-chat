@@ -144,7 +144,25 @@ public class PriceAlert extends AbstractBaseEntity<Long> {
     }
 
     public void changeActive(boolean active) {
+        if (active && !this.active) {
+            resetTriggerState();
+        }
         this.active = active;
+    }
+
+    public boolean markTriggered(BigDecimal price, Instant triggeredAt) {
+        if (!active) {
+            return false;
+        }
+        if (price == null || price.signum() <= 0) {
+            throw new ValidationException("market.price-alert.current-price.positive");
+        }
+        Instant checkedAt = Objects.requireNonNull(triggeredAt, "price-alert.triggered-at.required");
+        this.lastCheckedAt = checkedAt;
+        this.triggeredAt = checkedAt;
+        this.lastTriggeredPrice = price;
+        this.active = false;
+        return true;
     }
 
     private BigDecimal currentTargetPrice() {

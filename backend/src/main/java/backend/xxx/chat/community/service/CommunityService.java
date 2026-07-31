@@ -43,6 +43,10 @@ import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.model.ConversationParticipantId;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
+import backend.xxx.chat.notification.model.NotificationTargetType;
+import backend.xxx.chat.notification.model.NotificationType;
+import backend.xxx.chat.notification.service.NotificationCommand;
+import backend.xxx.chat.notification.service.NotificationService;
 import backend.xxx.chat.storage.model.UploadPurpose;
 import backend.xxx.chat.storage.model.UploadedAsset;
 import backend.xxx.chat.user.model.User;
@@ -70,6 +74,7 @@ public class CommunityService {
     private final CommunityAssetResolver communityAssetResolver;
     private final CommunityResponseBuilder communityResponseBuilder;
     private final CommunityMapper communityMapper;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<CommunityCategoryResponse> getCategories() {
@@ -239,6 +244,7 @@ public class CommunityService {
 
         if (countMember) {
             community.incrementMemberCount();
+            notifyCommunityOwnerAboutJoin(community, currentUser);
         }
 
         List<CommunityChannel> channels = communityChannelRepository.findByCommunityIdAndStatusWithConversation(
@@ -329,6 +335,25 @@ public class CommunityService {
                 .map(ConversationParticipant::getUnreadCount)
                 .orElse(0L);
         return communityMapper.toChannelResponse(channel, unreadCount);
+    }
+
+    private void notifyCommunityOwnerAboutJoin(Community community, User member) {
+        if (community.getOwner().getId().equals(member.getId())) {
+            return;
+        }
+
+        notificationService.create(new NotificationCommand(
+                community.getOwner(),
+                member,
+                NotificationType.COMMUNITY,
+                "New community member",
+                member.getDisplayName() + " joined " + community.getName() + ".",
+                NotificationTargetType.COMMUNITY,
+                community.getId(),
+                "COMMUNITY_MEMBER",
+                member.getId(),
+                null
+        ));
     }
 
     private CommunityChannel createChannelInternal(
@@ -488,4 +513,3 @@ public class CommunityService {
         return community.getAvatarAsset().getPublicUrl();
     }
 }
-

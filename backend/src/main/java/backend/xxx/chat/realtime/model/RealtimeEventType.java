@@ -18,7 +18,11 @@ public enum RealtimeEventType {
     GROUP_MEMBER_REMOVED("group.member.removed"),
     GROUP_UPDATED("group.updated"),
     MARKET_TICKER_UPDATED("market.ticker.updated"),
-    MARKET_CANDLE_UPDATED("market.candle.updated");
+    MARKET_CANDLE_UPDATED("market.candle.updated"),
+    NOTIFICATION_CREATED("notification.created"),
+    NOTIFICATION_UPDATED("notification.updated"),
+    NOTIFICATION_READ_ALL("notification.read-all"),
+    NOTIFICATION_DELETED("notification.deleted");
 
     private final String value;
 

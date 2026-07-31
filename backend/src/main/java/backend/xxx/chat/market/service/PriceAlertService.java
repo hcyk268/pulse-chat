@@ -32,6 +32,7 @@ public class PriceAlertService {
     private final MarketPairRepository marketPairRepository;
     private final UserRepository userRepository;
     private final MarketMapper marketMapper;
+    private final PriceAlertRegistry priceAlertRegistry;
 
     @Transactional(readOnly = true)
     public List<PriceAlertResponse> getPriceAlerts(String username) {
@@ -62,7 +63,9 @@ public class PriceAlertService {
                 request.active() == null || request.active()
         );
 
-        return marketMapper.toPriceAlertResponse(priceAlertRepository.save(alert));
+        PriceAlert savedAlert = priceAlertRepository.save(alert);
+        priceAlertRegistry.refreshPairsAfterCommit(List.of(pair.getId()));
+        return marketMapper.toPriceAlertResponse(savedAlert);
     }
 
     @Transactional
@@ -72,6 +75,7 @@ public class PriceAlertService {
         }
 
         PriceAlert alert = findUserAlert(username, alertId);
+        Long previousPairId = alert.getPair().getId();
 
         if (request.symbol() != null) {
             MarketAsset asset = resolveAsset(request.symbol());
@@ -86,12 +90,17 @@ public class PriceAlertService {
             alert.changeActive(request.active());
         }
 
-        return marketMapper.toPriceAlertResponse(priceAlertRepository.save(alert));
+        PriceAlert savedAlert = priceAlertRepository.save(alert);
+        priceAlertRegistry.refreshPairsAfterCommit(List.of(previousPairId, savedAlert.getPair().getId()));
+        return marketMapper.toPriceAlertResponse(savedAlert);
     }
 
     @Transactional
     public void deletePriceAlert(String username, Long alertId) {
-        priceAlertRepository.delete(findUserAlert(username, alertId));
+        PriceAlert alert = findUserAlert(username, alertId);
+        Long pairId = alert.getPair().getId();
+        priceAlertRepository.delete(alert);
+        priceAlertRegistry.refreshPairsAfterCommit(List.of(pairId));
     }
 
     private PriceAlert findUserAlert(String username, Long alertId) {
