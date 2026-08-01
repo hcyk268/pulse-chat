@@ -13,13 +13,18 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MapsId;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Getter
@@ -29,10 +34,15 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Table(name = "community_members")
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommunityMember {
+public class CommunityMember implements Persistable<CommunityMemberId> {
 
     @EmbeddedId
     private CommunityMemberId id;
+
+    @Transient
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private boolean newEntity = true;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId("communityId")
@@ -65,6 +75,22 @@ public class CommunityMember {
 
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
+
+    @Override
+    public CommunityMemberId getId() {
+        return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return newEntity;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        newEntity = false;
+    }
 
     public static CommunityMember owner(Community community, User user, Instant joinedAt) {
         CommunityMember member = active(community, user, joinedAt);

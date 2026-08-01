@@ -13,14 +13,17 @@ import org.springframework.data.repository.query.Param;
 public interface CommunityChannelRepository extends JpaRepository<CommunityChannel, Long> {
 
     @Query("""
-            select count(channel) > 0
+            select channel.slug
             from CommunityChannel channel
             where channel.community.id = :communityId
-                and channel.slug = :slug
+                and (
+                    channel.slug = :baseSlug
+                    or channel.slug like concat(:baseSlug, '-%')
+                )
             """)
-    boolean existsByCommunityIdAndSlug(
+    List<String> findSlugsByCommunityIdAndBase(
             @Param("communityId") Long communityId,
-            @Param("slug") String slug
+            @Param("baseSlug") String baseSlug
     );
 
     @Query("""
@@ -37,7 +40,8 @@ public interface CommunityChannelRepository extends JpaRepository<CommunityChann
 
     @Query("""
             from CommunityChannel channel
-            join fetch channel.community
+            join fetch channel.community community
+            left join fetch community.avatarAsset
             join fetch channel.conversation
             where channel.id = :channelId
             """)

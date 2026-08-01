@@ -21,11 +21,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Pageable;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,19 +92,17 @@ class MarketServiceTest {
                 .thenReturn(Optional.of(btc));
         when(marketPairRepository.findFirstByAsset_IdAndExchangeAndActiveTrue(1L, "BINANCE"))
                 .thenReturn(Optional.of(btcPair));
-        when(marketPairRepository.findByExchangeAndSymbol("BINANCE", "BTCUSDT"))
-                .thenReturn(Optional.of(btcPair));
         when(binanceStreamProperties.getCandleIntervals()).thenReturn(List.of("4h", "1d", "1w"));
-        when(marketCandleRepository.findByPairIdAndIntervalNameOrderByOpenTimeDesc(
-                eq(10L),
-                eq("4h"),
-                any(Pageable.class)
-        )).thenReturn(List.of());
 
         List<MarketCandleResponse> candles = marketService.getCandles("btc", "4H");
 
         assertThat(candles).isEmpty();
         verify(marketCandleHistoryBackfillService).backfillIfNeeded(btcPair, List.of("4h"));
+        verify(marketCandleRepository).findRecentByPairIdAndIntervalNameIn(
+                10L,
+                List.of("4h"),
+                300
+        );
     }
 
     private MarketAsset asset(Long id, String symbol, String name) {

@@ -121,9 +121,13 @@ public class MarketMapper {
     }
 
     public MarketCandleResponse toCandleResponse(MarketCandle candle) {
+        return toCandleResponse(candle, candle.getPair().getId());
+    }
+
+    public MarketCandleResponse toCandleResponse(MarketCandle candle, Long pairId) {
         return new MarketCandleResponse(
                 candle.getId(),
-                candle.getPair().getId(),
+                pairId,
                 candle.getIntervalName(),
                 candle.getOpenTime(),
                 candle.getCloseTime(),

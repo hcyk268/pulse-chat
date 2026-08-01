@@ -18,7 +18,6 @@ import backend.xxx.chat.community.model.CommunityMemberStatus;
 import backend.xxx.chat.community.repository.CommunityChannelRepository;
 import backend.xxx.chat.community.repository.CommunityMemberRepository;
 import backend.xxx.chat.community.repository.CommunityTagLinkRepository;
-import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.user.model.Presence;
 import backend.xxx.chat.user.model.User;
@@ -51,7 +50,7 @@ public class CommunityResponseBuilder {
         Map<Long, CommunityMember> membershipByCommunityId = communityMemberRepository
                 .findByCommunityIdInAndUserIdWithCommunity(communityIds, currentUser.getId())
                 .stream()
-                .collect(Collectors.toMap(member -> member.getCommunity().getId(), Function.identity()));
+                .collect(Collectors.toMap(member -> member.getId().getCommunityId(), Function.identity()));
         Map<Long, Long> onlineCounts = onlineCountsByCommunityId(communityIds);
 
         return communities.stream()
@@ -116,7 +115,7 @@ public class CommunityResponseBuilder {
         return communityTagLinkRepository.findByCommunityIdInWithTag(communityIds)
                 .stream()
                 .collect(Collectors.groupingBy(
-                        link -> link.getCommunity().getId(),
+                        link -> link.getId().getCommunityId(),
                         Collectors.mapping(link -> communityMapper.toTagResponse(link.getTag()), Collectors.toList())
                 ));
     }
@@ -143,11 +142,11 @@ public class CommunityResponseBuilder {
         List<Long> conversationIds = channels.stream()
                 .map(channel -> channel.getConversation().getId())
                 .toList();
-        return conversationParticipantRepository.findByConversationIdInAndUserId(conversationIds, userId)
+        return conversationParticipantRepository.findUnreadCountsByConversationIdInAndUserId(conversationIds, userId)
                 .stream()
                 .collect(Collectors.toMap(
-                        participant -> participant.getConversation().getId(),
-                        ConversationParticipant::getUnreadCount
+                        ConversationParticipantRepository.ConversationUnreadCount::getConversationId,
+                        ConversationParticipantRepository.ConversationUnreadCount::getUnreadCount
                 ));
     }
 

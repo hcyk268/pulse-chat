@@ -18,6 +18,9 @@ public interface MessagePinRepository extends JpaRepository<MessagePin, Long> {
             join fetch messagePin.message message
             join fetch message.conversation
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             join fetch messagePin.pinnedBy
             where messagePin.conversation.id = :conversationId
             order by messagePin.pinnedAt desc, messagePin.id desc
@@ -30,6 +33,9 @@ public interface MessagePinRepository extends JpaRepository<MessagePin, Long> {
             join fetch messagePin.message message
             join fetch message.conversation
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             join fetch messagePin.pinnedBy
             where messagePin.id = :messagePinId
             """)
@@ -41,6 +47,9 @@ public interface MessagePinRepository extends JpaRepository<MessagePin, Long> {
             join fetch messagePin.message message
             join fetch message.conversation
             join fetch message.sender
+            left join fetch message.replyToMessage replyToMessage
+            left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             join fetch messagePin.pinnedBy
             where messagePin.message.id = :messageId
             """)

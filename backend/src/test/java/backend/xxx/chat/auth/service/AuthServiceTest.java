@@ -121,8 +121,6 @@ class AuthServiceTest {
 
         when(authValidator.normalizeUsername(" Alice ")).thenReturn("Alice");
         when(authValidator.normalizeEmail(" ALICE@EXAMPLE.COM ")).thenReturn("alice@example.com");
-        when(userRepository.existsByUsernameIgnoreCase("Alice")).thenReturn(false);
-        when(userRepository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(false);
         when(passwordEncoder.encode("Password123!")).thenReturn("hashed-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -166,7 +164,11 @@ class AuthServiceTest {
         );
         when(authValidator.normalizeUsername("alice")).thenReturn("alice");
         when(authValidator.normalizeEmail("alice@example.com")).thenReturn("alice@example.com");
-        when(userRepository.existsByUsernameIgnoreCase("alice")).thenReturn(true);
+        UserRepository.UserRegistrationConflict conflict =
+                org.mockito.Mockito.mock(UserRepository.UserRegistrationConflict.class);
+        when(conflict.getUsername()).thenReturn("alice");
+        when(userRepository.findRegistrationConflicts("alice", "alice@example.com"))
+                .thenReturn(List.of(conflict));
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(UsernameAlreadyExistsException.class);

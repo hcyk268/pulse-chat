@@ -12,7 +12,13 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommunityRepository extends JpaRepository<Community, Long> {
 
-    boolean existsBySlug(String slug);
+    @Query("""
+            select community.slug
+            from Community community
+            where community.slug = :baseSlug
+                or community.slug like concat(:baseSlug, '-%')
+            """)
+    List<String> findSlugsByBase(@Param("baseSlug") String baseSlug);
 
     @Query("""
             from Community community

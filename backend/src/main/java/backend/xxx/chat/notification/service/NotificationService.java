@@ -1,7 +1,13 @@
 package backend.xxx.chat.notification.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.exception.ValidationException;
@@ -106,30 +112,75 @@ public class NotificationService {
 
     @Transactional
     public NotificationResponse create(NotificationCommand command) {
-        if (command.dedupeKey() != null
-                && notificationRepository.existsByRecipient_IdAndDedupeKey(
-                        command.recipient().getId(),
-                        command.dedupeKey()
-                )) {
-            return null;
+        return createAll(List.of(command))
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Transactional
+    public List<NotificationResponse> createAll(Collection<NotificationCommand> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return List.of();
         }
 
-        Notification notification = Notification.create(
-                command.recipient(),
-                command.actor(),
-                command.type(),
-                command.title(),
-                command.body(),
-                command.targetType(),
-                command.targetId(),
-                command.sourceType(),
-                command.sourceId(),
-                command.dedupeKey()
-        );
-        Notification saved = notificationRepository.save(notification);
-        NotificationResponse response = notificationMapper.toResponse(saved);
-        realtimeNotifier.created(command.recipient().getUsername(), response);
-        return response;
+        List<NotificationCommand> requestedCommands = commands.stream()
+                .filter(Objects::nonNull)
+                .toList();
+        Set<Long> recipientIds = requestedCommands.stream()
+                .filter(command -> command.dedupeKey() != null)
+                .map(command -> command.recipient().getId())
+                .collect(Collectors.toSet());
+        Set<String> dedupeKeys = requestedCommands.stream()
+                .map(NotificationCommand::dedupeKey)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Set<NotificationDedupe> usedDedupeKeys = new HashSet<>();
+        if (!recipientIds.isEmpty() && !dedupeKeys.isEmpty()) {
+            notificationRepository.findExistingDedupeKeys(recipientIds, dedupeKeys)
+                    .stream()
+                    .map(key -> new NotificationDedupe(key.getRecipientId(), key.getDedupeKey()))
+                    .forEach(usedDedupeKeys::add);
+        }
+
+        List<NotificationCommand> acceptedCommands = new ArrayList<>();
+        List<Notification> notifications = new ArrayList<>();
+        for (NotificationCommand command : requestedCommands) {
+            if (command.dedupeKey() != null
+                    && !usedDedupeKeys.add(new NotificationDedupe(
+                            command.recipient().getId(),
+                            command.dedupeKey()
+                    ))) {
+                continue;
+            }
+
+            acceptedCommands.add(command);
+            notifications.add(Notification.create(
+                    command.recipient(),
+                    command.actor(),
+                    command.type(),
+                    command.title(),
+                    command.body(),
+                    command.targetType(),
+                    command.targetId(),
+                    command.sourceType(),
+                    command.sourceId(),
+                    command.dedupeKey()
+            ));
+        }
+        if (notifications.isEmpty()) {
+            return List.of();
+        }
+
+        List<Notification> savedNotifications = notificationRepository.saveAll(notifications);
+        List<NotificationResponse> responses = new ArrayList<>(savedNotifications.size());
+        for (int index = 0; index < savedNotifications.size(); index++) {
+            NotificationResponse response = notificationMapper.toResponse(savedNotifications.get(index));
+            responses.add(response);
+            realtimeNotifier.created(acceptedCommands.get(index).recipient().getUsername(), response);
+        }
+        return responses;
     }
 
     private Notification findOwnedNotification(String username, Long notificationId) {
@@ -148,6 +199,9 @@ public class NotificationService {
         if (beforeId != null && beforeId <= 0) {
             throw new ValidationException("notification.before-id.positive");
         }
+    }
+
+    private record NotificationDedupe(Long recipientId, String dedupeKey) {
     }
 
     private int normalizeLimit(Short limit) {

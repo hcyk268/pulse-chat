@@ -21,6 +21,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             join fetch message.sender
             left join fetch message.replyToMessage replyToMessage
             left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             where message.id in :messageIds
             """)
     List<Message> findByIdInWithSender(@Param("messageIds") Collection<Long> messageIds);
@@ -31,6 +32,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             join fetch message.sender
             left join fetch message.replyToMessage replyToMessage
             left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             where message.id = :messageId
             """)
     Optional<Message> findByIdWithConversationAndSender(@Param("messageId") Long messageId);
@@ -40,6 +42,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         join fetch m.sender
         left join fetch m.replyToMessage replyToMessage
         left join fetch replyToMessage.sender
+        left join fetch m.deletedBy
         where m.conversation.id = :conversationId
         order by m.createdAt desc, m.id desc
         """)
@@ -53,6 +56,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         join fetch m.sender
         left join fetch m.replyToMessage replyToMessage
         left join fetch replyToMessage.sender
+        left join fetch m.deletedBy
         where m.conversation.id = :conversationId
           and (
               m.createdAt < :cursorCreatedAt
@@ -75,6 +79,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             join fetch message.sender
             left join fetch message.replyToMessage replyToMessage
             left join fetch replyToMessage.sender
+            left join fetch message.deletedBy
             where message.conversation.id = :conversationId
                 and message.clientMessageId = :clientMessageId
             """)

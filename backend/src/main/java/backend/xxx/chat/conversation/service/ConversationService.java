@@ -1,8 +1,12 @@
 package backend.xxx.chat.conversation.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
 import backend.xxx.chat.common.exception.NotFoundException;
@@ -73,11 +77,12 @@ public class ConversationService {
 
         ConversationParticipant owner = ConversationParticipant.create(conversation, currentUser, true);
         owner.promoteToOwner();
-        conversationParticipantRepository.save(owner);
-
-        invitedUsers.forEach(user -> conversationParticipantRepository.save(
-                ConversationParticipant.createPending(conversation, user, currentUser)
-        ));
+        List<ConversationParticipant> participants = new ArrayList<>(invitedUsers.size() + 1);
+        participants.add(owner);
+        participants.addAll(invitedUsers.stream()
+                .map(user -> ConversationParticipant.createPending(conversation, user, currentUser))
+                .toList());
+        conversationParticipantRepository.saveAll(participants);
 
         return buildConversationDetailResponse(conversation, currentUser);
     }
@@ -93,13 +98,22 @@ public class ConversationService {
         conversationAccessPolicy.requireActiveMember(conversationId, currentUser.getId());
         List<User> invitedUsers = resolveGroupInvitees(currentUser, request.memberIds(), 1);
 
-        for (User invitedUser : invitedUsers) {
-            ConversationParticipant participant = conversationParticipantRepository.findById(
-                    new ConversationParticipantId(conversationId, invitedUser.getId())
-            ).orElse(null);
+        List<ConversationParticipantId> participantIds = invitedUsers.stream()
+                .map(user -> new ConversationParticipantId(conversationId, user.getId()))
+                .toList();
+        Map<Long, ConversationParticipant> participantByUserId = conversationParticipantRepository
+                .findAllById(participantIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        participant -> participant.getId().getUserId(),
+                        Function.identity()
+                ));
+        List<ConversationParticipant> newParticipants = new ArrayList<>();
 
+        for (User invitedUser : invitedUsers) {
+            ConversationParticipant participant = participantByUserId.get(invitedUser.getId());
             if (participant == null) {
-                conversationParticipantRepository.save(ConversationParticipant.createPending(
+                newParticipants.add(ConversationParticipant.createPending(
                         conversation,
                         invitedUser,
                         currentUser
@@ -109,6 +123,9 @@ public class ConversationService {
 
             conversationValidator.validateCanInviteParticipant(participant);
             participant.markPendingInvitation(currentUser);
+        }
+        if (!newParticipants.isEmpty()) {
+            conversationParticipantRepository.saveAll(newParticipants);
         }
 
         return buildConversationDetailResponse(conversation, currentUser);
@@ -238,8 +255,10 @@ public class ConversationService {
     private CreateOrOpenDirectConversationResult createDirectConversation(User currentUser, User targetUser) {
         Conversation conversation = conversationRepository.save(Conversation.createDirectConversation());
 
-        conversationParticipantRepository.save(ConversationParticipant.create(conversation, currentUser, true));
-        conversationParticipantRepository.save(ConversationParticipant.create(conversation, targetUser, false));
+        conversationParticipantRepository.saveAll(List.of(
+                ConversationParticipant.create(conversation, currentUser, true),
+                ConversationParticipant.create(conversation, targetUser, false)
+        ));
 
         return new CreateOrOpenDirectConversationResult(
                 conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser),

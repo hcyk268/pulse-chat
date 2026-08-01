@@ -1,15 +1,16 @@
 package backend.xxx.chat.message.service;
 
-import backend.xxx.chat.message.dto.MessageReadReceiptResponse;
-import backend.xxx.chat.message.dto.MessageReadReceiptsResponse;
-import backend.xxx.chat.message.dto.MessageResponse;
-import backend.xxx.chat.message.dto.MessageReplyResponse;
+import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageAttachment;
 import backend.xxx.chat.message.model.MessageRead;
 import backend.xxx.chat.user.dto.SummarizeUserResponse;
 import backend.xxx.chat.user.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -17,8 +18,9 @@ public class MessageMapper {
 
     private final MessageAttachmentMapper messageAttachmentMapper;
 
-    public MessageResponse toResponse(Message message) {
+    public MessageResponse toResponse(Message message, Map<Long, List<MessageAttachment>> attachmentsByMessageId) {
         User sender = message.getSender();
+        Message replyToMessage = message.getReplyToMessage();
 
         return new MessageResponse(
                 message.getId(),
@@ -31,8 +33,8 @@ public class MessageMapper {
                         sender.getAvatarUrl()
                 ),
                 message.isDeleted() ? null : message.getContent(),
-                toReplyResponse(message.getReplyToMessage()),
-                message.isDeleted() ? java.util.List.of() : messageAttachmentMapper.toResponses(message.getAttachments()),
+                toReplyResponse(replyToMessage, attachmentsFor(replyToMessage, attachmentsByMessageId)),
+                messageAttachmentMapper.toResponses(attachmentsFor(message, attachmentsByMessageId)),
                 message.getMessageType(),
                 message.getStatus(),
                 message.getCreatedAt(),
@@ -60,7 +62,8 @@ public class MessageMapper {
                 read.getReadAt()
         );
     }
-    private MessageReplyResponse toReplyResponse(Message replyToMessage) {
+
+    private MessageReplyResponse toReplyResponse(Message replyToMessage, List<MessageAttachment> messageAttachments) {
         if (replyToMessage == null) {
             return null;
         }
@@ -69,11 +72,22 @@ public class MessageMapper {
                 replyToMessage.getId(),
                 toSummaryUserResponse(replyToMessage.getSender()),
                 replyToMessage.isDeleted() ? null : replyToMessage.getContent(),
-                replyToMessage.isDeleted() ? java.util.List.of() : messageAttachmentMapper.toResponses(replyToMessage.getAttachments()),
+                replyToMessage.isDeleted() ? List.of() : messageAttachmentMapper.toResponses(messageAttachments),
                 replyToMessage.getMessageType(),
                 replyToMessage.getCreatedAt(),
                 replyToMessage.getDeletedAt()
         );
+    }
+
+    private List<MessageAttachment> attachmentsFor(
+            Message message,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
+    ) {
+        if (message == null || message.isDeleted()) {
+            return List.of();
+        }
+
+        return attachmentsByMessageId.getOrDefault(message.getId(), List.of());
     }
 
     private SummarizeUserResponse toSummaryUserResponse(User user) {

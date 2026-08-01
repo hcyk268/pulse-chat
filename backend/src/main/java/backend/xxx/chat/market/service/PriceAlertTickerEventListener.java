@@ -18,15 +18,15 @@ public class PriceAlertTickerEventListener {
 
     @EventListener
     public void onTickerUpdated(TickerUpdatedDomainEvent event) {
-        priceAlertRegistry.matchingAlertIds(event.ticker())
-                .forEach(alertId -> triggerSafely(alertId, event));
-    }
+        var alertIds = priceAlertRegistry.matchingAlertIds(event.ticker());
+        if (alertIds.isEmpty()) {
+            return;
+        }
 
-    private void triggerSafely(Long alertId, TickerUpdatedDomainEvent event) {
         try {
-            priceAlertTriggerService.triggerIfMatched(alertId, event.ticker());
+            priceAlertTriggerService.triggerMatched(alertIds, event.ticker());
         } catch (RuntimeException exception) {
-            log.warn("Could not process price alert {}", alertId, exception);
+            log.warn("Could not process price alerts {}", alertIds, exception);
         }
     }
 }

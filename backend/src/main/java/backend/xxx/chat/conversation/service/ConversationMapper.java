@@ -16,6 +16,7 @@ import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageAttachment;
 import backend.xxx.chat.message.model.MessageType;
 import backend.xxx.chat.user.dto.PresenceResponse;
 import backend.xxx.chat.user.model.Presence;
@@ -33,7 +34,8 @@ public class ConversationMapper {
             User currentUser,
             User targetUser,
             Map<Long, Presence> presenceByUserId,
-            Message lastMessage
+            Message lastMessage,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
     ) {
         ConversationParticipant currentParticipant = participants.stream()
                 .filter(participant -> participant.getUser().getId().equals(currentUser.getId()))
@@ -54,7 +56,7 @@ public class ConversationMapper {
                 participantResponses,
                 toConversationUserResponse(targetUser, presenceByUserId.get(targetUser.getId())),
                 currentParticipant.getUnreadCount(),
-                toConversationLastMessageResponse(lastMessage),
+                toConversationLastMessageResponse(lastMessage, attachmentsByMessageId),
                 conversation.getLastMessageAt(),
                 conversation.getCreatedAt(),
                 conversation.getUpdatedAt()
@@ -66,7 +68,8 @@ public class ConversationMapper {
             User currentUser,
             List<ConversationParticipant> participants,
             Map<Long, Presence> presenceByUserId,
-            Message lastMessage
+            Message lastMessage,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
     ) {
         ConversationParticipant currentParticipant = participants.stream()
                 .filter(participant -> participant.getUser().getId().equals(currentUser.getId()))
@@ -126,16 +129,18 @@ public class ConversationMapper {
                 group ? currentParticipant.getStatus() : null,
                 memberResponses,
                 activeParticipants.size(),
-                toConversationLastMessageResponse(lastMessage),
+                toConversationLastMessageResponse(lastMessage, attachmentsByMessageId),
                 currentParticipant.getUnreadCount()
         );
     }
+
     public ConversationResponse toConversationResponse(
             ConversationParticipant currentParticipant,
             User currentUser,
             List<ConversationParticipant> participants,
             Map<Long, Presence> presenceByUserId,
-            Map<Long, Message> lastMessageById
+            Map<Long, Message> lastMessageById,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
     ) {
         Conversation conversation = currentParticipant.getConversation();
         ConversationParticipant otherParticipant = participants.stream()
@@ -172,7 +177,7 @@ public class ConversationMapper {
                 group ? currentParticipant.getRole() : null,
                 group ? currentParticipant.getStatus() : null,
                 participantCount,
-                toConversationLastMessageResponse(lastMessage),
+                toConversationLastMessageResponse(lastMessage, attachmentsByMessageId),
                 currentParticipant.getUnreadCount()
         );
     }
@@ -193,6 +198,7 @@ public class ConversationMapper {
                 participant.getLeftAt()
         );
     }
+
     private ConversationParticipantResponse toParticipantResponse(
             ConversationParticipant participant,
             Presence presence
@@ -218,7 +224,10 @@ public class ConversationMapper {
         );
     }
 
-    private ConversationLastMessageResponse toConversationLastMessageResponse(Message message) {
+    private ConversationLastMessageResponse toConversationLastMessageResponse(
+            Message message,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
+    ) {
         if (message == null) {
             return null;
         }
@@ -226,28 +235,39 @@ public class ConversationMapper {
         return new ConversationLastMessageResponse(
                 message.getId(),
                 message.getSender().getId(),
-                message.isDeleted() ? null : toContentPreview(message),
+                message.isDeleted() ? null : toContentPreview(message, attachmentsFor(message, attachmentsByMessageId)),
                 message.getStatus(),
                 message.getCreatedAt(),
                 message.getDeletedAt()
         );
     }
 
-    private String toContentPreview(Message message) {
+    private String toContentPreview(Message message, List<MessageAttachment> attachments) {
         String content = message.getContent();
         if (content != null && !content.isBlank()) {
             return trimPreview(content);
         }
 
-        if (message.getMessageType() == MessageType.MEDIA && !message.getAttachments().isEmpty()) {
-            if (message.getAttachments().size() == 1) {
-                return trimPreview(message.getAttachments().get(0).getFileName());
+        if (message.getMessageType() == MessageType.MEDIA && !attachments.isEmpty()) {
+            if (attachments.size() == 1) {
+                return trimPreview(attachments.get(0).getFileName());
             }
 
-            return message.getAttachments().size() + " attachments";
+            return attachments.size() + " attachments";
         }
 
         return null;
+    }
+
+    private List<MessageAttachment> attachmentsFor(
+            Message message,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
+    ) {
+        if (message == null || message.isDeleted()) {
+            return List.of();
+        }
+
+        return attachmentsByMessageId.getOrDefault(message.getId(), List.of());
     }
 
     private String trimPreview(String content) {

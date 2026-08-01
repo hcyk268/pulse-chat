@@ -1,10 +1,14 @@
 package backend.xxx.chat.community.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.exception.ConflictException;
@@ -41,6 +45,7 @@ import backend.xxx.chat.community.repository.CommunityTagRepository;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.model.ConversationParticipantId;
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.notification.model.NotificationTargetType;
@@ -165,9 +170,17 @@ public class CommunityService {
 
         List<CreateCommunityChannelRequest> channelRequests =
                 communityValidator.normalizeCreateChannelRequests(request.channels());
+        Set<String> reservedChannelSlugs = new LinkedHashSet<>();
         for (int index = 0; index < channelRequests.size(); index++) {
-            CommunityChannel channel =
-                    createChannelInternal(community, currentUser, channelRequests.get(index), index == 0);
+            CommunityChannel channel = createChannelInternal(
+                    community,
+                    currentUser,
+                    channelRequests.get(index),
+                    index == 0,
+                    (index + 1) * 10,
+                    List.of(owner),
+                    reservedChannelSlugs
+            );
             if (index == 0) {
                 community.setDefaultChannel(channel);
             }
@@ -251,9 +264,7 @@ public class CommunityService {
                 community.getId(),
                 CommunityChannelStatus.ACTIVE
         );
-        CommunityMemberRole memberRole = member.getRole();
-        channels.forEach(channel ->
-                syncConversationParticipant(channel.getConversation(), currentUser, memberRole, false));
+        syncConversationParticipants(channels, currentUser, member.getRole(), false);
 
         return communityResponseBuilder.buildDetail(community, currentUser, member);
     }
@@ -276,7 +287,18 @@ public class CommunityService {
                 community.getId(),
                 CommunityChannelStatus.ACTIVE
         );
-        channels.forEach(channel -> markConversationParticipantLeft(channel.getConversation(), currentUser, now));
+        List<Long> conversationIds = channels.stream()
+                .map(channel -> channel.getConversation().getId())
+                .toList();
+        if (!conversationIds.isEmpty()) {
+            conversationParticipantRepository.markLeftByConversationIdInAndUserId(
+                    conversationIds,
+                    currentUser.getId(),
+                    now,
+                    ParticipantStatus.ACTIVE,
+                    ParticipantStatus.LEFT
+            );
+        }
     }
 
     @Transactional
@@ -290,7 +312,20 @@ public class CommunityService {
         communityAccessPolicy.requireChannelManager(community.getId(), currentUser.getId());
 
         boolean defaultChannel = community.getDefaultChannel() == null;
-        CommunityChannel channel = createChannelInternal(community, currentUser, request, defaultChannel);
+        int sortOrder = communityChannelRepository.findMaxSortOrderByCommunityId(community.getId()) + 10;
+        List<CommunityMember> activeMembers = communityMemberRepository.findByCommunityIdAndStatusWithUser(
+                community.getId(),
+                CommunityMemberStatus.ACTIVE
+        );
+        CommunityChannel channel = createChannelInternal(
+                community,
+                currentUser,
+                request,
+                defaultChannel,
+                sortOrder,
+                activeMembers,
+                null
+        );
         if (defaultChannel) {
             community.setDefaultChannel(channel);
         }
@@ -360,7 +395,10 @@ public class CommunityService {
             Community community,
             User creator,
             CreateCommunityChannelRequest request,
-            boolean defaultChannel
+            boolean defaultChannel,
+            int sortOrder,
+            List<CommunityMember> activeMembers,
+            Set<String> reservedSlugs
     ) {
         String name =
                 communityValidator.normalizeRequiredChannelName(request == null ? null : request.name());
@@ -370,8 +408,12 @@ public class CommunityService {
         CommunityChannelType type =
                 request == null || request.type() == null ? CommunityChannelType.TEXT : request.type();
         boolean readOnly = request != null && Boolean.TRUE.equals(request.readOnly());
-        String slug = buildUniqueChannelSlug(community.getId(), name);
-        int sortOrder = communityChannelRepository.findMaxSortOrderByCommunityId(community.getId()) + 10;
+        String slug = reservedSlugs == null
+                ? buildUniqueChannelSlug(community.getId(), name)
+                : reserveUniqueSlug(
+                        communityValidator.normalizeRequiredSlug(name, "community.channel.slug"),
+                        reservedSlugs
+                );
 
         Conversation conversation = conversationRepository.save(Conversation.createGroupConversation(
                 buildConversationName(community, name),
@@ -379,12 +421,14 @@ public class CommunityService {
                 creator
         ));
 
-        List<CommunityMember> activeMembers = communityMemberRepository.findByCommunityIdAndStatusWithUser(
-                community.getId(),
-                CommunityMemberStatus.ACTIVE
-        );
-        activeMembers.forEach(member ->
-                syncConversationParticipant(conversation, member.getUser(), member.getRole(), false));
+        conversationParticipantRepository.saveAll(activeMembers.stream()
+                .map(member -> createConversationParticipant(
+                        conversation,
+                        member.getUser(),
+                        member.getRole(),
+                        false
+                ))
+                .toList());
 
         return communityChannelRepository.save(CommunityChannel.create(
                 community,
@@ -400,44 +444,72 @@ public class CommunityService {
         ));
     }
 
-    private void syncConversationParticipant(
-            Conversation conversation,
+    private void syncConversationParticipants(
+            List<CommunityChannel> channels,
             User user,
             CommunityMemberRole communityRole,
             boolean visibleInList
     ) {
-        ConversationParticipantId id = new ConversationParticipantId(conversation.getId(), user.getId());
-        ConversationParticipant participant = conversationParticipantRepository.findById(id).orElse(null);
-        if (participant == null) {
-            participant = ConversationParticipant.create(conversation, user, visibleInList);
+        if (channels.isEmpty()) {
+            return;
+        }
+
+        List<Long> conversationIds = channels.stream()
+                .map(channel -> channel.getConversation().getId())
+                .toList();
+        Map<Long, ConversationParticipant> participantByConversationId =
+                conversationParticipantRepository.findByConversationIdInAndUserId(conversationIds, user.getId())
+                        .stream()
+                        .collect(Collectors.toMap(
+                                participant -> participant.getId().getConversationId(),
+                                Function.identity()
+                        ));
+        List<ConversationParticipant> newParticipants = new ArrayList<>();
+
+        for (CommunityChannel channel : channels) {
+            Conversation conversation = channel.getConversation();
+            ConversationParticipant participant = participantByConversationId.get(conversation.getId());
+            if (participant == null) {
+                newParticipants.add(createConversationParticipant(
+                        conversation,
+                        user,
+                        communityRole,
+                        visibleInList
+                ));
+                continue;
+            }
+
+            if (!participant.isActive()) {
+                participant.acceptInvitation();
+            }
             if (communityRole == CommunityMemberRole.OWNER) {
                 participant.promoteToOwner();
             }
             if (!visibleInList) {
                 participant.hideFromList();
             }
-            conversationParticipantRepository.save(participant);
-            return;
         }
 
-        if (!participant.isActive()) {
-            participant.acceptInvitation();
+        if (!newParticipants.isEmpty()) {
+            conversationParticipantRepository.saveAll(newParticipants);
         }
+    }
+
+    private ConversationParticipant createConversationParticipant(
+            Conversation conversation,
+            User user,
+            CommunityMemberRole communityRole,
+            boolean visibleInList
+    ) {
+        ConversationParticipant participant =
+                ConversationParticipant.create(conversation, user, visibleInList);
         if (communityRole == CommunityMemberRole.OWNER) {
             participant.promoteToOwner();
         }
         if (!visibleInList) {
             participant.hideFromList();
         }
-    }
-
-    private void markConversationParticipantLeft(Conversation conversation, User user, Instant leftAt) {
-        conversationParticipantRepository.findById(new ConversationParticipantId(conversation.getId(), user.getId()))
-                .filter(ConversationParticipant::isActive)
-                .ifPresent(participant -> {
-                    participant.markLeft(leftAt);
-                    participant.hideFromList();
-                });
+        return participant;
     }
 
     private CommunityCategory resolveCategory(String categorySlug) {
@@ -482,24 +554,34 @@ public class CommunityService {
 
     private String buildUniqueCommunitySlug(String name) {
         String baseSlug = communityValidator.normalizeRequiredSlug(name, "community.slug");
-        String candidate = baseSlug;
-        int suffix = 2;
-        while (communityRepository.existsBySlug(candidate)) {
-            candidate = baseSlug + "-" + suffix;
-            suffix++;
-        }
-        return candidate;
+        return nextAvailableSlug(baseSlug, communityRepository.findSlugsByBase(baseSlug));
     }
 
     private String buildUniqueChannelSlug(Long communityId, String name) {
         String baseSlug = communityValidator.normalizeRequiredSlug(name, "community.channel.slug");
-        String candidate = baseSlug;
+        return nextAvailableSlug(
+                baseSlug,
+                communityChannelRepository.findSlugsByCommunityIdAndBase(communityId, baseSlug)
+        );
+    }
+
+    private String reserveUniqueSlug(String baseSlug, Set<String> reservedSlugs) {
+        String slug = nextAvailableSlug(baseSlug, reservedSlugs);
+        reservedSlugs.add(slug);
+        return slug;
+    }
+
+    private String nextAvailableSlug(String baseSlug, java.util.Collection<String> existingSlugs) {
+        Set<String> existing = new LinkedHashSet<>(existingSlugs);
+        if (!existing.contains(baseSlug)) {
+            return baseSlug;
+        }
+
         int suffix = 2;
-        while (communityChannelRepository.existsByCommunityIdAndSlug(communityId, candidate)) {
-            candidate = baseSlug + "-" + suffix;
+        while (existing.contains(baseSlug + "-" + suffix)) {
             suffix++;
         }
-        return candidate;
+        return baseSlug + "-" + suffix;
     }
 
     private String buildConversationName(Community community, String channelName) {

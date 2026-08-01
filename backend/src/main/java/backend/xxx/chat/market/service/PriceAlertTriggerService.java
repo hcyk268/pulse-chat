@@ -2,7 +2,11 @@ package backend.xxx.chat.market.service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import backend.xxx.chat.market.model.PriceAlert;
 import backend.xxx.chat.market.model.PriceAlertRule;
@@ -26,17 +30,51 @@ public class PriceAlertTriggerService {
 
     @Transactional
     public void triggerIfMatched(Long alertId, MarketTickerLatestHash ticker) {
-        PriceAlert alert = priceAlertRepository.findByIdAndActiveTrueWithDetails(alertId).orElse(null);
-        if (alert == null || !PriceAlertRule.createFrom(alert).matches(ticker)) {
+        triggerMatched(List.of(alertId), ticker);
+    }
+
+    @Transactional
+    public void triggerMatched(Collection<Long> alertIds, MarketTickerLatestHash ticker) {
+        if (alertIds == null || alertIds.isEmpty()) {
+            return;
+        }
+
+        List<Long> normalizedAlertIds = alertIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (normalizedAlertIds.isEmpty()) {
+            return;
+        }
+
+        List<PriceAlert> alerts =
+                priceAlertRepository.findAllByIdInAndActiveTrueWithDetails(normalizedAlertIds);
+        if (alerts.isEmpty()) {
             return;
         }
 
         Instant triggeredAt = ticker.getEventTime() == null ? Instant.now() : ticker.getEventTime();
-        if (!alert.markTriggered(ticker.getPrice(), triggeredAt)) {
-            return;
+        List<NotificationCommand> notifications = new ArrayList<>();
+        Set<Long> affectedPairIds = new LinkedHashSet<>();
+        for (PriceAlert alert : alerts) {
+            if (!PriceAlertRule.createFrom(alert).matches(ticker)
+                    || !alert.markTriggered(ticker.getPrice(), triggeredAt)) {
+                continue;
+            }
+            notifications.add(toNotificationCommand(alert, ticker, triggeredAt));
+            affectedPairIds.add(alert.getPair().getId());
         }
 
-        notificationService.create(new NotificationCommand(
+        notificationService.createAll(notifications);
+        priceAlertRegistry.refreshPairsAfterCommit(affectedPairIds);
+    }
+
+    private NotificationCommand toNotificationCommand(
+            PriceAlert alert,
+            MarketTickerLatestHash ticker,
+            Instant triggeredAt
+    ) {
+        return new NotificationCommand(
                 alert.getUser(),
                 null,
                 NotificationType.PRICE_ALERT,
@@ -47,8 +85,7 @@ public class PriceAlertTriggerService {
                 "PRICE_ALERT",
                 alert.getId(),
                 "price-alert:" + alert.getId() + ":" + triggeredAt.toEpochMilli()
-        ));
-        priceAlertRegistry.refreshPairsAfterCommit(List.of(alert.getPair().getId()));
+        );
     }
 
     private String buildBody(PriceAlert alert, MarketTickerLatestHash ticker) {
