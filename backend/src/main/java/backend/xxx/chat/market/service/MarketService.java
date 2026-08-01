@@ -28,7 +28,6 @@ import backend.xxx.chat.market.repository.MarketPairRepository;
 import backend.xxx.chat.market.repository.MarketTrendingRepository;
 import backend.xxx.chat.market.stream.BinanceMarketDataCache;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -133,17 +132,15 @@ public class MarketService {
 
     @Transactional
     public MarketTickerResponse getTicker(String symbol) {
-        String pairSymbol = resolveBinancePairSymbol(symbol);
-        MarketTickerLatestHash ticker = binanceMarketDataCache.getTicker(pairSymbol)
+        MarketPair pair = resolveActiveBinancePair(symbol);
+        MarketTickerLatestHash ticker = binanceMarketDataCache.getTicker(pair.getSymbol())
                 .orElseThrow(() -> new NotFoundException("market.ticker.not.found"));
-        MarketPair pair = marketPairRepository.findByExchangeAndSymbol(BINANCE_EXCHANGE, pairSymbol)
-                .filter(MarketPair::isActive)
-                .orElse(null);
-        Long pairId = pair == null ? ticker.getPairId() : pair.getId();
-        if (pair != null) {
-            marketCandleHistoryBackfillService.backfillIfNeeded(pair, binanceStreamProperties.getCandleIntervals());
-        }
-        Map<String, List<MarketCandleResponse>> candlesByInterval = getRecentCandlesByInterval(pairId);
+        marketCandleHistoryBackfillService.backfillIfNeeded(
+                pair,
+                binanceStreamProperties.getCandleIntervals()
+        );
+        Map<String, List<MarketCandleResponse>> candlesByInterval =
+                getRecentCandlesByInterval(pair.getId());
         List<MarketCandleResponse> candles = candlesByInterval.values()
                 .stream()
                 .findFirst()
@@ -154,30 +151,25 @@ public class MarketService {
 
     @Transactional
     public List<MarketCandleResponse> getCandles(String symbol, String interval) {
-        String pairSymbol = resolveBinancePairSymbol(symbol);
+        MarketPair pair = resolveActiveBinancePair(symbol);
         String candleInterval = resolveCandleInterval(interval);
-        MarketPair pair = marketPairRepository.findByExchangeAndSymbol(BINANCE_EXCHANGE, pairSymbol)
-                .filter(MarketPair::isActive)
-                .orElseThrow(() -> new NotFoundException("market.pair.not.found"));
 
         marketCandleHistoryBackfillService.backfillIfNeeded(pair, List.of(candleInterval));
         return getRecentCandles(pair.getId(), candleInterval);
     }
 
-    private String resolveBinancePairSymbol(String symbol) {
+    private MarketPair resolveActiveBinancePair(String symbol) {
         String normalizedSymbol = normalizeSymbol(symbol);
         return marketPairRepository.findByExchangeAndSymbol(BINANCE_EXCHANGE, normalizedSymbol)
                 .filter(MarketPair::isActive)
-                .map(MarketPair::getSymbol)
-                .orElseGet(() -> resolvePairSymbolFromAssetSymbol(normalizedSymbol));
+                .orElseGet(() -> resolvePairFromAssetSymbol(normalizedSymbol));
     }
 
-    private String resolvePairSymbolFromAssetSymbol(String symbol) {
+    private MarketPair resolvePairFromAssetSymbol(String symbol) {
         MarketAsset asset = marketAssetRepository.findFirstBySymbolIgnoreCaseAndActiveTrue(symbol)
                 .orElseThrow(() -> new NotFoundException("market.coin.not.found"));
 
         return marketPairRepository.findFirstByAsset_IdAndExchangeAndActiveTrue(asset.getId(), BINANCE_EXCHANGE)
-                .map(MarketPair::getSymbol)
                 .orElseThrow(() -> new NotFoundException("market.pair.not.found"));
     }
 
@@ -196,26 +188,48 @@ public class MarketService {
             return Map.of();
         }
 
-        Map<String, List<MarketCandleResponse>> candlesByInterval = new LinkedHashMap<>();
-        binanceStreamProperties.getCandleIntervals()
+        List<String> intervals = binanceStreamProperties.getCandleIntervals()
                 .stream()
                 .filter(interval -> interval != null && !interval.isBlank())
                 .distinct()
-                .forEach(interval -> candlesByInterval.put(interval, getRecentCandles(pairId, interval)));
-        return candlesByInterval;
+                .toList();
+        return getRecentCandles(pairId, intervals);
     }
 
     private List<MarketCandleResponse> getRecentCandles(Long pairId, String interval) {
-        List<MarketCandle> candles = new ArrayList<>(marketCandleRepository
-                .findByPairIdAndIntervalNameOrderByOpenTimeDesc(
-                        pairId,
-                        interval,
-                        PageRequest.of(0, TICKER_CANDLE_HISTORY_LIMIT)
-                ));
-        Collections.reverse(candles);
-        return candles.stream()
-                .map(marketMapper::toCandleResponse)
-                .toList();
+        return getRecentCandles(pairId, List.of(interval))
+                .getOrDefault(interval, List.of());
+    }
+
+    private Map<String, List<MarketCandleResponse>> getRecentCandles(
+            Long pairId,
+            List<String> intervals
+    ) {
+        if (pairId == null || intervals.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, List<MarketCandle>> candlesByInterval = new LinkedHashMap<>();
+        intervals.forEach(interval -> candlesByInterval.put(interval, new ArrayList<>()));
+        marketCandleRepository.findRecentByPairIdAndIntervalNameIn(
+                pairId,
+                intervals,
+                TICKER_CANDLE_HISTORY_LIMIT
+        ).forEach(candle -> candlesByInterval
+                .computeIfAbsent(candle.getIntervalName(), ignored -> new ArrayList<>())
+                .add(candle));
+
+        Map<String, List<MarketCandleResponse>> responsesByInterval = new LinkedHashMap<>();
+        candlesByInterval.forEach((interval, candles) -> {
+            Collections.reverse(candles);
+            responsesByInterval.put(
+                    interval,
+                    candles.stream()
+                            .map(candle -> marketMapper.toCandleResponse(candle, pairId))
+                            .toList()
+            );
+        });
+        return responsesByInterval;
     }
 
     private boolean isSupportedTrendingCoin(MarketAsset asset, Set<Long> supportedAssetIds) {

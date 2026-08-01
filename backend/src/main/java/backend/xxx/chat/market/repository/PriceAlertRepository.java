@@ -1,5 +1,6 @@
 package backend.xxx.chat.market.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,6 +56,32 @@ public interface PriceAlertRepository extends JpaRepository<PriceAlert, Long> {
                 and alert.active = true
             """)
     List<PriceAlert> findAllByPair_IdAndActiveTrueWithDetails(@Param("pairId") Long pairId);
+
+    @Query("""
+            select alert
+            from PriceAlert alert
+            join fetch alert.user
+            join fetch alert.asset
+            join fetch alert.pair pair
+            where pair.id in :pairIds
+                and alert.active = true
+            """)
+    List<PriceAlert> findAllByPairIdInAndActiveTrueWithDetails(
+            @Param("pairIds") Collection<Long> pairIds
+    );
+
+    @Query("""
+            select alert
+            from PriceAlert alert
+            join fetch alert.user
+            join fetch alert.asset
+            join fetch alert.pair
+            where alert.id in :ids
+                and alert.active = true
+            """)
+    List<PriceAlert> findAllByIdInAndActiveTrueWithDetails(
+            @Param("ids") Collection<Long> ids
+    );
 
     @Query("""
             select alert

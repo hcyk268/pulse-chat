@@ -283,11 +283,13 @@ public class AuthService {
     }
 
     private void checkUserRegisterUnique(String username, String email) {
-        if (userRepository.existsByUsernameIgnoreCase(username)) {
+        List<UserRepository.UserRegistrationConflict> conflicts =
+                userRepository.findRegistrationConflicts(username, email);
+
+        if (conflicts.stream().anyMatch(conflict -> conflict.getUsername().equalsIgnoreCase(username))) {
             throw new UsernameAlreadyExistsException();
         }
-
-        if (userRepository.existsByEmailIgnoreCase(email)) {
+        if (conflicts.stream().anyMatch(conflict -> conflict.getEmail().equalsIgnoreCase(email))) {
             throw new EmailAlreadyExistsException();
         }
     }

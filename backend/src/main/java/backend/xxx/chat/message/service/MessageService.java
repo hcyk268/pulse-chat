@@ -1,24 +1,23 @@
 package backend.xxx.chat.message.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.dto.CursorPageResponse;
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.common.util.CursorCodec;
 import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
+import backend.xxx.chat.conversation.model.ParticipantStatus;
 import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
+import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.dto.*;
-import backend.xxx.chat.message.model.Message;
-import backend.xxx.chat.message.model.MessagePin;
-import backend.xxx.chat.message.model.MessageRead;
-import backend.xxx.chat.message.model.MessageStatus;
+import backend.xxx.chat.message.model.*;
+import backend.xxx.chat.message.repository.MessageAttachmentRepository;
 import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageReadRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
@@ -53,6 +52,7 @@ public class MessageService {
     private final CursorCodec cursorCodec;
     private final UserLookupService userLookupService;
     private final ConversationRepository conversationRepository;
+    private final ConversationParticipantRepository conversationParticipantRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
@@ -61,6 +61,7 @@ public class MessageService {
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
     private final OutBoxService outBoxService;
     private final MentionNotificationService mentionNotificationService;
+    private final MessageAttachmentRepository messageAttachmentRepository;
 
     @Transactional(readOnly = true)
     public MessageHistoryResponse getHistory(String currentUsername, Long conversationId, Short limit, String cursor) {
@@ -104,8 +105,12 @@ public class MessageService {
             nextCursor = encodeCursor(new MessageCursor(lastMessage.getCreatedAt(), lastMessage.getId()));
         }
 
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(
+                collectMessageAndReplyIds(displayPage)
+        );
+
         List<MessageResponse> items = displayPage.stream()
-                .map(messageMapper::toResponse)
+                .map(msg -> messageMapper.toResponse(msg, attachmentsByMessageId))
                 .toList();
 
         return new MessageHistoryResponse(
@@ -133,7 +138,7 @@ public class MessageService {
                 .orElse(null);
 
         if (existingMessage != null) {
-            return messageMapper.toResponse(existingMessage);
+            return toResponseWithAttachments(existingMessage);
         }
 
         Message replyToMessage = resolveReplyToMessage(request.replyToMessageId(), conversation.getId());
@@ -149,12 +154,11 @@ public class MessageService {
 
         conversation.updateLastMessage(savedMessage.getId(), savedMessage.getCreatedAt());
 
-        conversationAccessPolicy.filterActiveParticipants(participants).forEach(participant -> {
-            participant.markVisibleInList();
-            if (!participant.getUser().getId().equals(currentUser.getId())) {
-                participant.incrementUnreadCount();
-            }
-        });
+        conversationParticipantRepository.markVisibleAndIncrementUnreadForMessage(
+                conversation.getId(),
+                currentUser.getId(),
+                ParticipantStatus.ACTIVE
+        );
 
         outBoxService.pushEvent(
                 "MESSAGE",
@@ -165,7 +169,7 @@ public class MessageService {
 
         mentionNotificationService.notifyMentions(savedMessage, currentUser, participants);
 
-        return messageMapper.toResponse(savedMessage);
+        return toResponseWithAttachments(savedMessage);
     }
 
 
@@ -200,7 +204,7 @@ public class MessageService {
         MessagePin existingPin = messagePinRepository.findByMessageIdWithDetails(message.getId())
                 .orElse(null);
         if (existingPin != null) {
-            return new PinMessageResult(messagePinMapper.toResponse(existingPin), false);
+            return new PinMessageResult(toPinResponseWithAttachments(existingPin), false);
         }
 
         long pinnedCount = messagePinRepository.countByConversationId(conversationId);
@@ -217,7 +221,7 @@ public class MessageService {
                 new MessagePinnedOutboxPayload(conversationId, savedPin.getId())
         );
 
-        return new PinMessageResult(messagePinMapper.toResponse(savedPin), true);
+        return new PinMessageResult(toPinResponseWithAttachments(savedPin), true);
     }
 
     @Transactional(readOnly = true)
@@ -225,9 +229,15 @@ public class MessageService {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
 
-        List<MessagePinResponse> items = messagePinRepository.findByConversationIdWithDetails(conversationId)
-                .stream()
-                .map(messagePinMapper::toResponse)
+        List<MessagePin> messagePins = messagePinRepository.findByConversationIdWithDetails(conversationId);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(
+                collectMessageAndReplyIds(messagePins.stream()
+                        .map(MessagePin::getMessage)
+                        .toList())
+        );
+
+        List<MessagePinResponse> items = messagePins.stream()
+                .map(messagePin -> messagePinMapper.toResponse(messagePin, attachmentsByMessageId))
                 .toList();
 
         return new ConversationPinnedMessagesResponse(conversationId, items);
@@ -333,7 +343,7 @@ public class MessageService {
                 new MessageOutboxPayload(conversationId, message.getId())
         );
 
-        return messageMapper.toResponse(message);
+        return toResponseWithAttachments(message);
     }
 
     @Transactional
@@ -361,9 +371,51 @@ public class MessageService {
             );
         }
 
-        return messageMapper.toResponse(message);
+        return toResponseWithAttachments(message);
     }
 
+
+    private MessageResponse toResponseWithAttachments(Message message) {
+        return messageMapper.toResponse(
+                message,
+                findAttachmentsByMessageId(collectMessageAndReplyIds(List.of(message)))
+        );
+    }
+
+    private MessagePinResponse toPinResponseWithAttachments(MessagePin messagePin) {
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(
+                collectMessageAndReplyIds(List.of(messagePin.getMessage()))
+        );
+        return messagePinMapper.toResponse(messagePin, attachmentsByMessageId);
+    }
+
+    private Set<Long> collectMessageAndReplyIds(Collection<Message> messages) {
+        Set<Long> messageIds = messages.stream()
+                .map(Message::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        messages.stream()
+                .map(Message::getReplyToMessage)
+                .filter(Objects::nonNull)
+                .map(Message::getId)
+                .forEach(messageIds::add);
+
+        return messageIds;
+    }
+
+    private Map<Long, List<MessageAttachment>> findAttachmentsByMessageId(Collection<Long> messageIds) {
+        if (messageIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return messageAttachmentRepository.findByMessageIdInWithUploadedAsset(messageIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        attachment -> attachment.getMessage().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+    }
 
     private void saveReadReceipts(Long conversationId, User reader, Message lastReadMessage, Instant readAt) {
         List<Message> unreadMessages = messageReadRepository.findUnreadMessagesByReaderUpTo(

@@ -5,8 +5,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -246,8 +248,9 @@ public class CloudflareR2MultipartUploadService implements MultipartUploadServic
 
     private MultipartUploadResumeResponse buildResumeResponse(UploadSession session) {
         List<Integer> uploadedParts = uploadPartRepository.findUploadedPartNumbers(session.getId());
+        Set<Integer> uploadedPartNumbers = new HashSet<>(uploadedParts);
         List<Integer> missingParts = IntStream.range(1, session.getTotalParts() + 1)
-                .filter(part -> !uploadedParts.contains(part))
+                .filter(part -> !uploadedPartNumbers.contains(part))
                 .boxed()
                 .toList();
 

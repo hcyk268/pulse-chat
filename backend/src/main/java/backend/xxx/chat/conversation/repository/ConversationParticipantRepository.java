@@ -11,6 +11,7 @@ import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.model.ParticipantStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -111,6 +112,51 @@ public interface ConversationParticipantRepository
             @Param("conversationIds") Collection<Long> conversationIds
     );
 
+    @Query("""
+        from ConversationParticipant participant
+        where participant.id.conversationId in :conversationIds
+            and participant.id.userId = :userId
+        """)
+    List<ConversationParticipant> findByConversationIdInAndUserId(
+            @Param("conversationIds") Collection<Long> conversationIds,
+            @Param("userId") Long userId
+    );
+
+    @Modifying
+    @Query("""
+        update ConversationParticipant participant
+        set participant.isVisibleInList = true,
+            participant.unreadCount = case
+                when participant.id.userId <> :senderId then participant.unreadCount + 1
+                else participant.unreadCount
+            end
+        where participant.id.conversationId = :conversationId
+            and participant.status = :status
+        """)
+    int markVisibleAndIncrementUnreadForMessage(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId,
+            @Param("status") ParticipantStatus status
+    );
+
+    @Modifying
+    @Query("""
+        update ConversationParticipant participant
+        set participant.status = :leftStatus,
+            participant.leftAt = :leftAt,
+            participant.isVisibleInList = false
+        where participant.id.conversationId in :conversationIds
+            and participant.id.userId = :userId
+            and participant.status = :activeStatus
+        """)
+    int markLeftByConversationIdInAndUserId(
+            @Param("conversationIds") Collection<Long> conversationIds,
+            @Param("userId") Long userId,
+            @Param("leftAt") Instant leftAt,
+            @Param("activeStatus") ParticipantStatus activeStatus,
+            @Param("leftStatus") ParticipantStatus leftStatus
+    );
+
     boolean existsByConversationIdAndUserIdAndStatus(
             Long conversationId,
             Long userId,
@@ -137,14 +183,23 @@ public interface ConversationParticipantRepository
 
 
     @Query("""
+        select participant.id.conversationId as conversationId,
+               participant.unreadCount as unreadCount
         from ConversationParticipant participant
-        where participant.conversation.id in :conversationIds
-            and participant.user.id = :userId
+        where participant.id.conversationId in :conversationIds
+            and participant.id.userId = :userId
         """)
-    List<ConversationParticipant> findByConversationIdInAndUserId(
+    List<ConversationUnreadCount> findUnreadCountsByConversationIdInAndUserId(
             @Param("conversationIds") Collection<Long> conversationIds,
             @Param("userId") Long userId
     );
+
+    interface ConversationUnreadCount {
+        Long getConversationId();
+
+        long getUnreadCount();
+    }
+
     interface DirectConversationLookup {
         Long getUserId();
 

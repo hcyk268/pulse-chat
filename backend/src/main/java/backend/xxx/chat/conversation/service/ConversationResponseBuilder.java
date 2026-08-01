@@ -1,5 +1,6 @@
 package backend.xxx.chat.conversation.service;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,9 @@ import backend.xxx.chat.conversation.model.Conversation;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageAttachment;
+import backend.xxx.chat.message.model.MessageType;
+import backend.xxx.chat.message.repository.MessageAttachmentRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.user.model.Presence;
 import backend.xxx.chat.user.model.User;
@@ -27,6 +31,7 @@ public class ConversationResponseBuilder {
 
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final MessageRepository messageRepository;
+    private final MessageAttachmentRepository messageAttachmentRepository;
     private final PresenceRepository presenceRepository;
     private final ConversationMapper conversationMapper;
 
@@ -46,6 +51,7 @@ public class ConversationResponseBuilder {
                         .toList()
         );
         Map<Long, Message> lastMessageById = findLastMessageById(currentParticipants);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(lastMessageById.values());
 
         return currentParticipants.stream()
                 .map(currentParticipant -> {
@@ -60,21 +66,23 @@ public class ConversationResponseBuilder {
                             currentUser,
                             participants,
                             presenceByUserId,
-                            lastMessageById
+                            lastMessageById,
+                            attachmentsByMessageId
                     );
                 })
                 .toList();
     }
 
     public Map<String, ConversationResponse> buildByUsernameForParticipants(
-            List<ConversationParticipant> participants
+            List<ConversationParticipant> participants,
+            Map<Long, Message> lastMessageById,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
     ) {
         if (participants.isEmpty()) {
             return Map.of();
         }
 
         Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
-        Map<Long, Message> lastMessageById = findLastMessageById(participants);
 
         return participants.stream()
                 .collect(Collectors.toMap(
@@ -84,7 +92,8 @@ public class ConversationResponseBuilder {
                                 participant.getUser(),
                                 participants,
                                 presenceByUserId,
-                                lastMessageById
+                                lastMessageById,
+                                attachmentsByMessageId
                         ),
                         (existing, replacement) -> existing,
                         LinkedHashMap::new
@@ -98,13 +107,15 @@ public class ConversationResponseBuilder {
     ) {
         Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
         Message lastMessage = findLastMessage(conversation);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(singleMessage(lastMessage));
 
         return conversationMapper.toConversationDetailResponse(
                 conversation,
                 currentUser,
                 participants,
                 presenceByUserId,
-                lastMessage
+                lastMessage,
+                attachmentsByMessageId
         );
     }
 
@@ -117,6 +128,7 @@ public class ConversationResponseBuilder {
                 conversationParticipantRepository.findByConversationIdWithUser(conversation.getId());
         Map<Long, Presence> presenceByUserId = findPresenceByUserId(participants);
         Message lastMessage = findLastMessage(conversation);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(singleMessage(lastMessage));
 
         return conversationMapper.toDirectConversationResponse(
                 conversation,
@@ -124,7 +136,8 @@ public class ConversationResponseBuilder {
                 currentUser,
                 targetUser,
                 presenceByUserId,
-                lastMessage
+                lastMessage,
+                attachmentsByMessageId
         );
     }
 
@@ -174,6 +187,43 @@ public class ConversationResponseBuilder {
         return messageRepository.findByIdInWithSender(lastMessageIds)
                 .stream()
                 .collect(Collectors.toMap(Message::getId, Function.identity()));
+    }
+
+    private Map<Long, List<MessageAttachment>> findAttachmentsByMessageId(Collection<Message> messages) {
+        List<Long> messageIds = messages.stream()
+                .filter(this::needsAttachmentPreview)
+                .map(Message::getId)
+                .distinct()
+                .toList();
+
+        if (messageIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return messageAttachmentRepository.findByMessageIdInWithUploadedAsset(messageIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        attachment -> attachment.getMessage().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+    }
+
+    private boolean needsAttachmentPreview(Message message) {
+        if (message == null || message.isDeleted() || message.getId() == null) {
+            return false;
+        }
+
+        if (message.getMessageType() != MessageType.MEDIA) {
+            return false;
+        }
+
+        String content = message.getContent();
+        return content == null || content.isBlank();
+    }
+
+    private List<Message> singleMessage(Message message) {
+        return message == null ? List.of() : List.of(message);
     }
 
     private Message findLastMessage(Conversation conversation) {

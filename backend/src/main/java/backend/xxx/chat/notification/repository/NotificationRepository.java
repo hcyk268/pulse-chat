@@ -1,6 +1,7 @@
 package backend.xxx.chat.notification.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,7 +33,17 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     long countByRecipient_UsernameIgnoreCaseAndReadAtIsNull(String username);
 
-    boolean existsByRecipient_IdAndDedupeKey(Long recipientId, String dedupeKey);
+    @Query("""
+            select notification.recipient.id as recipientId,
+                   notification.dedupeKey as dedupeKey
+            from Notification notification
+            where notification.recipient.id in :recipientIds
+                and notification.dedupeKey in :dedupeKeys
+            """)
+    List<NotificationDedupeKey> findExistingDedupeKeys(
+            @Param("recipientIds") Collection<Long> recipientIds,
+            @Param("dedupeKeys") Collection<String> dedupeKeys
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -45,4 +56,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             @Param("recipientId") Long recipientId,
             @Param("readAt") Instant readAt
     );
+    interface NotificationDedupeKey {
+        Long getRecipientId();
+
+        String getDedupeKey();
+    }
 }

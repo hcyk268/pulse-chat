@@ -16,6 +16,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmailIgnoreCase(String email);
 
+    Optional<User> findByUsernameIgnoreCaseOrEmailIgnoreCase(String username, String email);
+
+    @Query("""
+            select user.username as username,
+                   user.email as email
+            from User user
+            where lower(user.username) = lower(:username)
+                or lower(user.email) = lower(:email)
+            """)
+    List<UserRegistrationConflict> findRegistrationConflicts(
+            @Param("username") String username,
+            @Param("email") String email
+    );
+
     boolean existsByUsernameIgnoreCase(String username);
 
     boolean existsByEmailIgnoreCase(String email);
@@ -37,4 +51,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("activeStatus") AccountStatus activeStatus,
             Pageable pageable
     );
+
+    interface UserRegistrationConflict {
+        String getUsername();
+
+        String getEmail();
+    }
 }

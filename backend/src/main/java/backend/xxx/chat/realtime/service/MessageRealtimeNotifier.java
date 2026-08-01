@@ -7,7 +7,10 @@ import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.conversation.service.ConversationResponseBuilder;
 import backend.xxx.chat.message.dto.MessageResponse;
 import backend.xxx.chat.message.model.Message;
+import backend.xxx.chat.message.model.MessageAttachment;
+import backend.xxx.chat.message.model.MessagePin;
 import backend.xxx.chat.message.model.MessageStatus;
+import backend.xxx.chat.message.repository.MessageAttachmentRepository;
 import backend.xxx.chat.message.repository.MessagePinRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
 import backend.xxx.chat.message.service.MessageMapper;
@@ -26,15 +29,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MessageRealtimeNotifier {
 
     private final MessageRepository messageRepository;
+    private final MessageAttachmentRepository messageAttachmentRepository;
     private final MessagePinRepository messagePinRepository;
     private final ConversationParticipantRepository participantRepository;
     private final MessageMapper messageMapper;
@@ -50,11 +59,17 @@ public class MessageRealtimeNotifier {
                 .findFirst()
                 .orElseThrow();
 
-        MessageResponse messageResponse = messageMapper.toResponse(message);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId =
+                findAttachmentsByMessageId(collectMessageAndReplyIds(List.of(message)));
+        MessageResponse messageResponse = messageMapper.toResponse(message, attachmentsByMessageId);
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
         Map<String, ConversationResponse> conversationByUsername =
-                conversationResponseBuilder.buildByUsernameForParticipants(participants);
+                conversationResponseBuilder.buildByUsernameForParticipants(
+                        participants,
+                        Map.of(message.getId(), message),
+                        attachmentsByMessageId
+                );
 
         MessageCreatedEventData messageData = new MessageCreatedEventData(messageResponse);
 
@@ -88,7 +103,11 @@ public class MessageRealtimeNotifier {
     public void notifyUpdated(Long outboxEventId, Long conversationId, Long messageId) {
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
-        MessageUpdatedEventData messageData = new MessageUpdatedEventData(messageMapper.toResponse(message));
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId =
+                findAttachmentsByMessageId(collectMessageAndReplyIds(List.of(message)));
+        MessageUpdatedEventData messageData = new MessageUpdatedEventData(
+                messageMapper.toResponse(message, attachmentsByMessageId)
+        );
 
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
@@ -97,7 +116,11 @@ public class MessageRealtimeNotifier {
                 message.getConversation().getLastMessageId(),
                 message.getId()
         )
-                ? conversationResponseBuilder.buildByUsernameForParticipants(participants)
+                ? conversationResponseBuilder.buildByUsernameForParticipants(
+                        participants,
+                        Map.of(message.getId(), message),
+                        attachmentsByMessageId
+                )
                 : Map.of();
 
         for (ConversationParticipant participant : participants) {
@@ -130,7 +153,11 @@ public class MessageRealtimeNotifier {
     public void notifyDeleted(Long outboxEventId, Long conversationId, Long messageId) {
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow();
-        MessageDeletedEventData messageData = new MessageDeletedEventData(messageMapper.toResponse(message));
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId =
+                findAttachmentsByMessageId(collectMessageAndReplyIds(List.of(message)));
+        MessageDeletedEventData messageData = new MessageDeletedEventData(
+                messageMapper.toResponse(message, attachmentsByMessageId)
+        );
 
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
@@ -139,7 +166,11 @@ public class MessageRealtimeNotifier {
                 message.getConversation().getLastMessageId(),
                 message.getId()
         )
-                ? conversationResponseBuilder.buildByUsernameForParticipants(participants)
+                ? conversationResponseBuilder.buildByUsernameForParticipants(
+                        participants,
+                        Map.of(message.getId(), message),
+                        attachmentsByMessageId
+                )
                 : Map.of();
 
         for (ConversationParticipant participant : participants) {
@@ -170,10 +201,13 @@ public class MessageRealtimeNotifier {
 
     @Transactional(readOnly = true)
     public void notifyPinned(Long outboxEventId, Long conversationId, Long messagePinId) {
-        MessagePinnedEventData data = messagePinRepository.findByIdWithDetails(messagePinId)
-                .map(messagePinMapper::toResponse)
-                .map(MessagePinnedEventData::new)
+        MessagePin messagePin = messagePinRepository.findByIdWithDetails(messagePinId)
                 .orElseThrow();
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId =
+                findAttachmentsByMessageId(collectMessageAndReplyIds(List.of(messagePin.getMessage())));
+        MessagePinnedEventData data = new MessagePinnedEventData(
+                messagePinMapper.toResponse(messagePin, attachmentsByMessageId)
+        );
 
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
@@ -236,6 +270,31 @@ public class MessageRealtimeNotifier {
         sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
     }
 
+
+    private Set<Long> collectMessageAndReplyIds(Collection<Message> messages) {
+        Set<Long> messageIds = messages.stream()
+                .map(Message::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        messages.stream()
+                .map(Message::getReplyToMessage)
+                .filter(Objects::nonNull)
+                .map(Message::getId)
+                .forEach(messageIds::add);
+        return messageIds;
+    }
+
+    private Map<Long, List<MessageAttachment>> findAttachmentsByMessageId(Collection<Long> messageIds) {
+        if (messageIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageAttachmentRepository.findByMessageIdInWithUploadedAsset(messageIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        attachment -> attachment.getMessage().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+    }
 
     private List<ConversationParticipant> findActiveParticipants(Long conversationId) {
         return conversationAccessPolicy.filterActiveParticipants(

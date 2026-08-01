@@ -1,9 +1,12 @@
 package backend.xxx.chat.market.service;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import backend.xxx.chat.market.model.PriceAlertRule;
@@ -52,12 +55,18 @@ public class PriceAlertRegistry {
     }
 
     public void refreshPairsAfterCommit(Collection<Long> pairIds) {
+        Set<Long> normalizedPairIds = pairIds == null
+                ? Set.of()
+                : pairIds.stream()
+                        .filter(pairId -> pairId != null && pairId > 0)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedPairIds.isEmpty()) {
+            return;
+        }
+
         Runnable refresh = () -> {
             try {
-                pairIds.stream()
-                        .filter(pairId -> pairId != null && pairId > 0)
-                        .distinct()
-                        .forEach(this::refreshPair);
+                refreshPairs(normalizedPairIds);
             } catch (RuntimeException exception) {
                 log.warn("Could not refresh active price alert rules", exception);
             }
@@ -77,16 +86,21 @@ public class PriceAlertRegistry {
         });
     }
 
-    private void refreshPair(Long pairId) {
-        List<PriceAlertRule> rules = priceAlertRepository.findAllByPair_IdAndActiveTrueWithDetails(pairId)
+    private void refreshPairs(Set<Long> pairIds) {
+        Map<Long, List<PriceAlertRule>> refreshedRules = priceAlertRepository
+                .findAllByPairIdInAndActiveTrueWithDetails(pairIds)
                 .stream()
                 .map(PriceAlertRule::createFrom)
-                .toList();
-        if (rules.isEmpty()) {
-            rulesByPairId.remove(pairId);
-            return;
-        }
-        rulesByPairId.put(pairId, rules);
+                .collect(Collectors.groupingBy(PriceAlertRule::getPairId));
+
+        pairIds.forEach(pairId -> {
+            List<PriceAlertRule> rules = refreshedRules.get(pairId);
+            if (rules == null || rules.isEmpty()) {
+                rulesByPairId.remove(pairId);
+            } else {
+                rulesByPairId.put(pairId, List.copyOf(rules));
+            }
+        });
     }
 
     private List<PriceAlertRule> append(List<PriceAlertRule> currentRules, PriceAlertRule rule) {

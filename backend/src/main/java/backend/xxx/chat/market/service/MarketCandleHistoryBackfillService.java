@@ -2,8 +2,14 @@ package backend.xxx.chat.market.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import backend.xxx.chat.config.properties.BinanceStreamProperties;
 import backend.xxx.chat.market.client.BinanceMarketHistoryClient;
@@ -31,34 +37,104 @@ public class MarketCandleHistoryBackfillService {
             return;
         }
 
-        intervals.stream()
-                .filter(interval -> interval != null && !interval.isBlank())
-                .distinct()
-                .forEach(interval -> backfillIntervalIfNeeded(pair, interval));
-    }
-
-    private void backfillIntervalIfNeeded(MarketPair pair, String interval) {
-        int historyLimit = properties.getCandleHistoryLimit();
-        Instant now = Instant.now();
-        long existingCount = marketCandleRepository.countByPairIdAndIntervalName(pair.getId(), interval);
-        boolean stale = marketCandleRepository.findFirstByPairIdAndIntervalNameOrderByOpenTimeDesc(pair.getId(), interval)
-                .map(candle -> isStale(candle, interval, now))
-                .orElse(true);
-        if (existingCount >= historyLimit && !stale) {
+        List<String> normalizedIntervals = intervals == null
+                ? List.of()
+                : intervals.stream()
+                        .filter(interval -> interval != null && !interval.isBlank())
+                        .distinct()
+                        .toList();
+        if (normalizedIntervals.isEmpty()) {
             return;
         }
 
+        int historyLimit = properties.getCandleHistoryLimit();
+        Instant now = Instant.now();
+        Map<String, MarketCandleRepository.CandleHistoryState> stateByInterval =
+                marketCandleRepository.findHistoryStates(pair.getId(), normalizedIntervals)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                MarketCandleRepository.CandleHistoryState::getIntervalName,
+                                Function.identity()
+                        ));
+
+        List<String> intervalsToBackfill = normalizedIntervals.stream()
+                .filter(interval -> needsBackfill(
+                        stateByInterval.get(interval),
+                        interval,
+                        historyLimit,
+                        now
+                ))
+                .toList();
+        if (intervalsToBackfill.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<BinanceKlineResponse>> klinesByInterval = new LinkedHashMap<>();
+        for (String interval : intervalsToBackfill) {
+            List<BinanceKlineResponse> klines = loadClosedKlines(pair, interval, historyLimit, now);
+            if (!klines.isEmpty()) {
+                klinesByInterval.put(interval, klines);
+            }
+        }
+        if (klinesByInterval.isEmpty()) {
+            return;
+        }
+
+        Set<Instant> openTimes = klinesByInterval.values()
+                .stream()
+                .flatMap(Collection::stream)
+                .map(BinanceKlineResponse::openTime)
+                .collect(Collectors.toSet());
+        Map<CandleKey, MarketCandle> existingByKey = marketCandleRepository.findExistingCandles(
+                        pair.getId(),
+                        klinesByInterval.keySet(),
+                        openTimes
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        candle -> new CandleKey(candle.getIntervalName(), candle.getOpenTime()),
+                        Function.identity()
+                ));
+
+        List<MarketCandle> candlesToSave = new ArrayList<>();
+        klinesByInterval.forEach((interval, klines) -> klines.forEach(kline -> {
+            CandleKey key = new CandleKey(interval, kline.openTime());
+            MarketCandle candle = existingByKey.getOrDefault(
+                    key,
+                    MarketCandle.create(pair, interval, kline.openTime())
+            );
+            applyKline(candle, kline);
+            candlesToSave.add(candle);
+        }));
+        marketCandleRepository.saveAll(candlesToSave);
+    }
+
+    private boolean needsBackfill(
+            MarketCandleRepository.CandleHistoryState state,
+            String interval,
+            int historyLimit,
+            Instant now
+    ) {
+        return state == null
+                || state.getCandleCount() < historyLimit
+                || isStale(state.getLatestCloseTime(), interval, now);
+    }
+
+    private List<BinanceKlineResponse> loadClosedKlines(
+            MarketPair pair,
+            String interval,
+            int historyLimit,
+            Instant now
+    ) {
         try {
-            List<BinanceKlineResponse> klines = binanceMarketHistoryClient
+            return binanceMarketHistoryClient
                     .getKlines(pair.getSymbol(), interval, Math.min(historyLimit + 1, 1000))
                     .stream()
                     .filter(kline -> isClosedKline(kline, now))
                     .toList();
-            for (BinanceKlineResponse kline : klines) {
-                upsertCandle(pair, interval, kline);
-            }
         } catch (RuntimeException exception) {
             log.warn("Failed to backfill Binance candle history for {} {}", pair.getSymbol(), interval, exception);
+            return List.of();
         }
     }
 
@@ -66,9 +142,9 @@ public class MarketCandleHistoryBackfillService {
         return kline.closeTime() != null && kline.closeTime().isBefore(now);
     }
 
-    private boolean isStale(MarketCandle candle, String interval, Instant now) {
+    private boolean isStale(Instant closeTime, String interval, Instant now) {
         Duration intervalDuration = intervalDuration(interval);
-        return candle.getCloseTime() == null || candle.getCloseTime().plus(intervalDuration).isBefore(now);
+        return closeTime == null || closeTime.plus(intervalDuration).isBefore(now);
     }
 
     private Duration intervalDuration(String interval) {
@@ -92,11 +168,7 @@ public class MarketCandleHistoryBackfillService {
         };
     }
 
-    private void upsertCandle(MarketPair pair, String interval, BinanceKlineResponse kline) {
-        MarketCandle candle = marketCandleRepository
-                .findByPairIdAndIntervalNameAndOpenTime(pair.getId(), interval, kline.openTime())
-                .orElseGet(() -> createCandle(pair, interval, kline));
-
+    private void applyKline(MarketCandle candle, BinanceKlineResponse kline) {
         candle.updateOhlcv(
                 kline.closeTime(),
                 kline.open(),
@@ -108,10 +180,8 @@ public class MarketCandleHistoryBackfillService {
                 kline.tradeCount(),
                 true
         );
-        marketCandleRepository.save(candle);
     }
 
-    private MarketCandle createCandle(MarketPair pair, String interval, BinanceKlineResponse kline) {
-        return MarketCandle.create(pair, interval, kline.openTime());
+    private record CandleKey(String interval, Instant openTime) {
     }
 }

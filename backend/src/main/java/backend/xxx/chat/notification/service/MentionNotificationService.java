@@ -43,10 +43,10 @@ public class MentionNotificationService {
                         (first, second) -> first
                 ));
 
-        mentionedUsernames.stream()
+        List<NotificationCommand> commands = mentionedUsernames.stream()
                 .map(activeParticipants::get)
                 .filter(Objects::nonNull)
-                .forEach(recipient -> notificationService.create(new NotificationCommand(
+                .map(recipient -> new NotificationCommand(
                         recipient,
                         sender,
                         NotificationType.MENTION,
@@ -57,7 +57,9 @@ public class MentionNotificationService {
                         "MESSAGE",
                         message.getId(),
                         "message-mention:" + message.getId() + ":" + recipient.getId()
-                )));
+                ))
+                .toList();
+        notificationService.createAll(commands);
     }
 
     Set<String> extractUsernames(String content) {
