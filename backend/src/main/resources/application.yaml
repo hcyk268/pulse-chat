@@ -9,6 +9,9 @@ spring:
       repositories:
         enabled: false
 
+  cache:
+    type: redis
+
   jpa:
     open-in-view: false
     properties:
@@ -36,6 +39,8 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
 
   auth:
+    user-details-cache-ttl: ${AUTH_USER_DETAILS_CACHE_TTL:2m}
+    user-lookup-cache-ttl: ${AUTH_USER_LOOKUP_CACHE_TTL:10m}
     email-verification:
       token-ttl: ${EMAIL_VERIFICATION_TOKEN_TTL}
       frontend-url: ${EMAIL_VERIFICATION_FRONTEND_URL}
@@ -67,6 +72,9 @@ app:
       scheduler-pool-size: ${OUTBOX_WORKER_SCHEDULER_POOL_SIZE}
 
   market:
+    overview-cache-ttl: ${MARKET_OVERVIEW_CACHE_TTL:15s}
+    coin-detail-cache-ttl: ${MARKET_COIN_DETAIL_CACHE_TTL:1m}
+
     sync:
       enabled: ${MARKET_SYNC_ENABLED}
       initial-delay-ms: ${MARKET_SYNC_INITIAL_DELAY_MS}
@@ -99,6 +107,15 @@ app:
       max-file-size-bytes: ${R2_MAX_FILE_SIZE_BYTES}
       allowed-content-types: ${R2_ALLOWED_CONTENT_TYPES}
 
+  conversation:
+    participants-cache-ttl: ${CONVERSATION_PARTICIPANTS_CACHE_TTL:1m}
+    pinned-messages-cache-ttl: ${CONVERSATION_PINNED_MESSAGES_CACHE_TTL:1m}
+
+  community:
+    categories-cache-ttl: ${COMMUNITY_CATEGORIES_CACHE_TTL:1h}
+    tags-cache-ttl: ${COMMUNITY_TAGS_CACHE_TTL:1h}
+    discovery-cache-ttl: ${COMMUNITY_DISCOVERY_CACHE_TTL:15s}
+    detail-cache-ttl: ${COMMUNITY_DETAIL_CACHE_TTL:10s}
 springdoc:
   paths-to-match: /api/v1/**
   api-docs:

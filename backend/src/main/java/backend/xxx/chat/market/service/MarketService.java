@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.exception.NotFoundException;
+import backend.xxx.chat.config.RedisConfig;
 import backend.xxx.chat.config.properties.BinanceStreamProperties;
 import backend.xxx.chat.market.dto.CoinDetailResponse;
 import backend.xxx.chat.market.dto.CoinMarketItemResponse;
@@ -28,6 +29,7 @@ import backend.xxx.chat.market.repository.MarketPairRepository;
 import backend.xxx.chat.market.repository.MarketTrendingRepository;
 import backend.xxx.chat.market.stream.BinanceMarketDataCache;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +50,11 @@ public class MarketService {
     private final MarketMapper marketMapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = RedisConfig.MARKET_OVERVIEW_CACHE,
+            key = "'overview'",
+            unless = "#result.coins().isEmpty() && #result.trending().isEmpty()"
+    )
     public OverviewMarketResponse getMarket() {
         Map<Long, String> supportedAssetPairSymbols = getTickerBackedAssetPairSymbols();
         Set<Long> supportedAssetIds = supportedAssetPairSymbols.keySet();
@@ -99,8 +106,12 @@ public class MarketService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = RedisConfig.MARKET_COIN_DETAIL_CACHE,
+            key = "T(backend.xxx.chat.market.service.MarketService).coinDetailCacheKey(#symbol)"
+    )
     public CoinDetailResponse getCoinDetail(String symbol) {
-        MarketAsset asset = marketAssetRepository.findFirstBySymbolIgnoreCaseAndActiveTrue(symbol)
+        MarketAsset asset = marketAssetRepository.findFirstBySymbolIgnoreCaseAndActiveTrue(normalizeSymbol(symbol))
                 .orElseThrow(() -> new NotFoundException("market.coin.not.found"));
         MarketPairResponse binancePair = marketPairRepository
                 .findFirstByAsset_IdAndExchangeAndActiveTrue(asset.getId(), BINANCE_EXCHANGE)
@@ -166,7 +177,7 @@ public class MarketService {
     }
 
     private MarketPair resolvePairFromAssetSymbol(String symbol) {
-        MarketAsset asset = marketAssetRepository.findFirstBySymbolIgnoreCaseAndActiveTrue(symbol)
+        MarketAsset asset = marketAssetRepository.findFirstBySymbolIgnoreCaseAndActiveTrue(normalizeSymbol(symbol))
                 .orElseThrow(() -> new NotFoundException("market.coin.not.found"));
 
         return marketPairRepository.findFirstByAsset_IdAndExchangeAndActiveTrue(asset.getId(), BINANCE_EXCHANGE)
@@ -236,7 +247,15 @@ public class MarketService {
         return asset != null && supportedAssetIds.contains(asset.getId());
     }
 
+    public static String coinDetailCacheKey(String symbol) {
+        return normalizeSymbolValue(symbol);
+    }
+
     private String normalizeSymbol(String symbol) {
+        return normalizeSymbolValue(symbol);
+    }
+
+    private static String normalizeSymbolValue(String symbol) {
         if (symbol == null) {
             return "";
         }

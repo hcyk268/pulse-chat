@@ -36,6 +36,7 @@ import backend.xxx.chat.config.properties.PasswordResetProperties;
 
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
+import backend.xxx.chat.user.service.UserLookupService;
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.config.properties.EmailVerificationProperties;
 import io.jsonwebtoken.JwtException;
@@ -49,6 +50,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
@@ -77,6 +80,7 @@ public class AuthService {
     private final AuthMailAsyncService authMailAsyncService;
     private final RequestMetadataResolver requestMetadataResolver;
     private final CurrentUserProvider currentUserProvider;
+    private final UserLookupService userLookupService;
 
 
     @Transactional
@@ -203,6 +207,7 @@ public class AuthService {
 
         user.changePassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+        evictUserCachesAfterCommit(user);
         deleteAllRefreshTokensForUser(userId);
         authMailAsyncService.sendPasswordChanged(
                 user.getEmail(),
@@ -220,6 +225,7 @@ public class AuthService {
         if (!user.isEmailVerified()) {
             user.markEmailVerified(Instant.now());
             userRepository.save(user);
+            evictUserCachesAfterCommit(user);
         }
     }
 
@@ -247,6 +253,7 @@ public class AuthService {
 
         user.changePassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+        evictUserCachesAfterCommit(user);
         deleteAllRefreshTokensForUser(user.getId());
         authMailAsyncService.sendPasswordChanged(
                 user.getEmail(),
@@ -257,6 +264,24 @@ public class AuthService {
         return toAuthResponse(user);
     }
 
+    private void evictUserCachesAfterCommit(User user) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            customUserDetailsService.evictUserDetails(user);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                evictUserCaches(user);
+            }
+        });
+    }
+
+    private void evictUserCaches(User user) {
+        customUserDetailsService.evictUserDetails(user);
+        userLookupService.evictCachedUser(user);
+    }
     private void sendVerificationEmail(User user) {
         String token = emailVerificationTokenService.createVerToken(user.getId(), emailVerificationProperties.tokenTtl());
 

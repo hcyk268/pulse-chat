@@ -163,6 +163,12 @@ public interface ConversationParticipantRepository
             ParticipantStatus status
     );
 
+    boolean existsByConversationIdAndUserIdAndStatusAndLeftAtIsNull(
+            Long conversationId,
+            Long userId,
+            ParticipantStatus status
+    );
+
     @Query("""
         select distinct participant.user.username
         from ConversationParticipant participant

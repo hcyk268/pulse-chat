@@ -1,19 +1,23 @@
 package backend.xxx.chat.community.service;
 
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import backend.xxx.chat.common.exception.ConflictException;
 import backend.xxx.chat.common.exception.ForbiddenException;
 import backend.xxx.chat.common.exception.NotFoundException;
+import backend.xxx.chat.config.RedisConfig;
 import backend.xxx.chat.community.dto.CommunityCategoryResponse;
 import backend.xxx.chat.community.dto.CommunityChannelResponse;
 import backend.xxx.chat.community.dto.CommunityDetailResponse;
@@ -57,6 +61,9 @@ import backend.xxx.chat.storage.model.UploadedAsset;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,6 +71,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class CommunityService {
+
+    private static final int DEFAULT_COMMUNITY_LIMIT = 20;
+    private static final int MAX_COMMUNITY_LIMIT = 50;
+    private static final Pattern NON_ASCII_MARKS = Pattern.compile("\\p{M}+");
 
     private final UserLookupService userLookupService;
     private final CommunityCategoryRepository communityCategoryRepository;
@@ -82,6 +93,7 @@ public class CommunityService {
     private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = RedisConfig.COMMUNITY_CATEGORIES_CACHE, key = "'active'")
     public List<CommunityCategoryResponse> getCategories() {
         return communityCategoryRepository.findAllByActiveTrueOrderBySortOrderAscIdAsc()
                 .stream()
@@ -90,6 +102,7 @@ public class CommunityService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = RedisConfig.COMMUNITY_TAGS_CACHE, key = "'active'")
     public List<CommunityTagResponse> getTags() {
         return communityTagRepository.findAllByActiveTrueOrderByNameAsc()
                 .stream()
@@ -98,6 +111,10 @@ public class CommunityService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE,
+            key = "T(backend.xxx.chat.community.service.CommunityService).discoveryCacheKey(#currentUsername, #limit, #categorySlug, #tagSlug, #search)"
+    )
     public List<CommunitySummaryResponse> discoverCommunities(
             String currentUsername,
             Short limit,
@@ -123,6 +140,10 @@ public class CommunityService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+            cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE,
+            key = "T(backend.xxx.chat.community.service.CommunityService).detailCacheKey(#currentUsername, #slug)"
+    )
     public CommunityDetailResponse getCommunityDetail(String currentUsername, String slug) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Community community = communityAccessPolicy.requireCommunityBySlug(slug);
@@ -130,6 +151,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public CommunityDetailResponse createCommunity(String currentUsername, CreateCommunityRequest request) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Instant now = Instant.now();
@@ -190,6 +215,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public CommunityDetailResponse updateCommunity(
             String currentUsername,
             Long communityId,
@@ -237,6 +266,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public CommunityDetailResponse joinCommunity(String currentUsername, Long communityId) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Community community = communityAccessPolicy.requireCommunityById(communityId);
@@ -270,6 +303,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public void leaveCommunity(String currentUsername, Long communityId) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
         Community community = communityAccessPolicy.requireCommunityById(communityId);
@@ -302,6 +339,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public CommunityChannelResponse createChannel(
             String currentUsername,
             Long communityId,
@@ -334,6 +375,10 @@ public class CommunityService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DISCOVERY_CACHE, allEntries = true),
+            @CacheEvict(cacheNames = RedisConfig.COMMUNITY_DETAIL_CACHE, allEntries = true)
+    })
     public CommunityChannelResponse updateChannel(
             String currentUsername,
             Long channelId,
@@ -372,6 +417,50 @@ public class CommunityService {
         return communityMapper.toChannelResponse(channel, unreadCount);
     }
 
+    public static String discoveryCacheKey(
+            String currentUsername,
+            Short limit,
+            String categorySlug,
+            String tagSlug,
+            String search
+    ) {
+        return String.join(
+                ":",
+                normalizeCacheText(currentUsername),
+                String.valueOf(normalizeCacheLimit(limit)),
+                normalizeCacheSlug(categorySlug),
+                normalizeCacheSlug(tagSlug),
+                normalizeCacheText(search)
+        );
+    }
+
+    public static String detailCacheKey(String currentUsername, String slug) {
+        return normalizeCacheText(currentUsername) + ":" + normalizeCacheSlug(slug);
+    }
+
+    private static int normalizeCacheLimit(Short limit) {
+        if (limit == null) {
+            return DEFAULT_COMMUNITY_LIMIT;
+        }
+        return Math.min(Math.max(limit, 1), MAX_COMMUNITY_LIMIT);
+    }
+
+    private static String normalizeCacheSlug(String value) {
+        if (value == null) {
+            return "";
+        }
+        String ascii = Normalizer.normalize(value.trim().toLowerCase(Locale.ROOT), Normalizer.Form.NFD);
+        ascii = NON_ASCII_MARKS.matcher(ascii).replaceAll("");
+        String slug = ascii.replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        return slug.isBlank() ? "" : slug;
+    }
+
+    private static String normalizeCacheText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
     private void notifyCommunityOwnerAboutJoin(Community community, User member) {
         if (community.getOwner().getId().equals(member.getId())) {
             return;

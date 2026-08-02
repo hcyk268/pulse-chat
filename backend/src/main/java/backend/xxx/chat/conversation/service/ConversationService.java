@@ -26,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +42,7 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final ConversationResponseBuilder conversationResponseBuilder;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final ConversationParticipantCacheService conversationParticipantCacheService;
     private final ConversationValidator conversationValidator;
     private final CursorCodec cursorCodec;
 
@@ -127,6 +130,7 @@ public class ConversationService {
         if (!newParticipants.isEmpty()) {
             conversationParticipantRepository.saveAll(newParticipants);
         }
+        evictParticipantSnapshotsAfterCommit(conversationId);
 
         return buildConversationDetailResponse(conversation, currentUser);
     }
@@ -140,6 +144,7 @@ public class ConversationService {
         conversationValidator.validatePendingInvitation(participant);
 
         participant.acceptInvitation();
+        evictParticipantSnapshotsAfterCommit(conversationId);
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -153,6 +158,7 @@ public class ConversationService {
 
         participant.markLeft(Instant.now());
         participant.hideFromList();
+        evictParticipantSnapshotsAfterCommit(conversationId);
     }
 
     @Transactional
@@ -172,6 +178,7 @@ public class ConversationService {
 
         targetParticipant.markLeft(Instant.now());
         targetParticipant.hideFromList();
+        evictParticipantSnapshotsAfterCommit(conversationId);
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -187,6 +194,7 @@ public class ConversationService {
         if (participant.getRole() == ParticipantRole.OWNER) {
             promoteNextOwnerIfNeeded(conversationId, currentUser.getId());
         }
+        evictParticipantSnapshotsAfterCommit(conversationId);
     }
 
     @Transactional
@@ -229,6 +237,7 @@ public class ConversationService {
         );
 
         targetParticipant.changeRole(request.role());
+        evictParticipantSnapshotsAfterCommit(conversationId);
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -245,6 +254,7 @@ public class ConversationService {
                 )
                 .orElseThrow(() -> new NotFoundException("conversation.participant.not.found"));
         currentParticipant.markVisibleInList();
+        evictParticipantSnapshotsAfterCommit(conversationId);
 
         return new CreateOrOpenDirectConversationResult(
                 conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser),
@@ -328,17 +338,30 @@ public class ConversationService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new NotFoundException("conversation.not.found"));
 
-        List<ConversationParticipant> participants =
-                conversationAccessPolicy.requireParticipants(conversationId);
-        conversationAccessPolicy.assertCanReadConversation(currentUser, participants);
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
+        List<CachedConversationParticipant> participants =
+                conversationAccessPolicy.requireParticipantSnapshots(conversationId);
 
-        return conversationResponseBuilder.buildConversationDetailResponse(
+        return conversationResponseBuilder.buildCachedConversationDetailResponse(
                 conversation,
                 currentUser,
                 participants
         );
     }
 
+    private void evictParticipantSnapshotsAfterCommit(Long conversationId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            conversationParticipantCacheService.evictParticipants(conversationId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                conversationParticipantCacheService.evictParticipants(conversationId);
+            }
+        });
+    }
     private ConversationDetailResponse buildConversationDetailResponse(Conversation conversation, User currentUser) {
         List<ConversationParticipant> participants =
                 conversationParticipantRepository.findByConversationIdWithUser(conversation.getId());

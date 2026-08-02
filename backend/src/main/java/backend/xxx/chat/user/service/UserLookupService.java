@@ -1,6 +1,5 @@
 package backend.xxx.chat.user.service;
 
-import backend.xxx.chat.common.exception.UnauthorizedException;
 import backend.xxx.chat.common.exception.UserNotFoundException;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
@@ -14,14 +13,26 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserLookupService {
 
     private final UserRepository userRepository;
+    private final UserLookupCacheService userLookupCacheService;
 
     public User getCurrentUser(String username) {
-        return userRepository.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new UnauthorizedException("user.current.not.found"));
+        return userRepository.getReferenceById(getCurrentUserId(username));
+    }
+
+    public CachedUser getCurrentUserCached(String username) {
+        return userLookupCacheService.getCurrentUser(username);
+    }
+
+    public Long getCurrentUserId(String username) {
+        return getCurrentUserCached(username).id();
     }
 
     public User getUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(UserNotFoundException::new);
+    }
+
+    public void evictCachedUser(User user) {
+        userLookupCacheService.evictUser(user);
     }
 }

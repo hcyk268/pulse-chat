@@ -18,6 +18,7 @@ public class ConversationAccessPolicy {
 
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository conversationParticipantRepository;
+    private final ConversationParticipantCacheService conversationParticipantCacheService;
 
     public ConversationParticipant requireOwner(Long conversationId, Long userId) {
         ConversationParticipant participant = requireActiveMember(conversationId, userId);
@@ -63,11 +64,14 @@ public class ConversationAccessPolicy {
         return participants;
     }
 
+    public List<CachedConversationParticipant> requireParticipantSnapshots(Long conversationId) {
+        validateConversationId(conversationId);
+        return conversationParticipantCacheService.getParticipants(conversationId);
+    }
+
     public ConversationParticipant requireParticipant(Long conversationId, Long userId) {
         validateConversationId(conversationId);
-        if (userId == null) {
-            throw new ValidationException("user.id.required");
-        }
+        validateUserId(userId);
 
         return conversationParticipantRepository.findById(
                         new ConversationParticipantId(conversationId, userId)
@@ -88,6 +92,22 @@ public class ConversationAccessPolicy {
         }
 
         return participant;
+    }
+
+    public void assertCanSendMessage(Long conversationId, Long userId) {
+        requireActiveMembership(conversationId, userId, "You are not allowed to send message to this conversation");
+    }
+
+    public void assertCanReadConversation(Long conversationId, Long userId) {
+        requireActiveMembership(conversationId, userId, "You are not allowed to access this conversation");
+    }
+
+    public void assertCanUpdateTyping(Long conversationId, Long userId) {
+        requireActiveMembership(conversationId, userId, "You are not allowed to update typing status for this conversation");
+    }
+
+    public void assertCanUpdateMessageStatus(Long conversationId, Long userId) {
+        requireActiveMembership(conversationId, userId, "You are not allowed to update this message status");
     }
 
     public void assertCanSendMessage(User user, List<ConversationParticipant> participants) {
@@ -123,6 +143,28 @@ public class ConversationAccessPolicy {
                 .filter(ConversationParticipant::isActive)
                 .toList();
     }
+
+    private void requireActiveMembership(Long conversationId, Long userId, String forbiddenMessage) {
+        validateConversationId(conversationId);
+        validateUserId(userId);
+
+        boolean active = conversationParticipantRepository
+                .existsByConversationIdAndUserIdAndStatusAndLeftAtIsNull(
+                        conversationId,
+                        userId,
+                        ParticipantStatus.ACTIVE
+                );
+        if (active) {
+            return;
+        }
+
+        if (!conversationRepository.existsById(conversationId)) {
+            throw new NotFoundException("conversation.not.found");
+        }
+
+        throw new ForbiddenException(forbiddenMessage);
+    }
+
     private boolean isParticipant(User user, List<ConversationParticipant> participants) {
         if (user == null || user.getId() == null || participants == null) {
             return false;
@@ -136,6 +178,12 @@ public class ConversationAccessPolicy {
     private void validateConversationId(Long conversationId) {
         if (conversationId == null) {
             throw new ValidationException("conversationId must not be null");
+        }
+    }
+
+    private void validateUserId(Long userId) {
+        if (userId == null) {
+            throw new ValidationException("user.id.required");
         }
     }
 }
