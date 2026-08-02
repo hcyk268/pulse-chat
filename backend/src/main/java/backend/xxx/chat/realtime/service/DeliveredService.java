@@ -1,7 +1,6 @@
 package backend.xxx.chat.realtime.service;
 
 import backend.xxx.chat.common.exception.NotFoundException;
-import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.message.model.Message;
 import backend.xxx.chat.message.model.MessageStatus;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -41,9 +39,7 @@ public class DeliveredService {
                 .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
-        List<ConversationParticipant> participants =
-                conversationAccessPolicy.requireParticipants(conversationId);
-        conversationAccessPolicy.assertCanUpdateMessageStatus(currentUser, participants);
+        conversationAccessPolicy.assertCanUpdateMessageStatus(conversationId, currentUser.getId());
 
         messageAccessPolicy.requireNotSender(message, currentUser, "Sender cannot mark their own message as delivered");
 
@@ -73,4 +69,3 @@ public class DeliveredService {
         }
     }
 }
-

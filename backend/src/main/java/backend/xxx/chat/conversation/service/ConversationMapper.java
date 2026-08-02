@@ -134,6 +134,76 @@ public class ConversationMapper {
         );
     }
 
+    public ConversationDetailResponse toCachedConversationDetailResponse(
+            Conversation conversation,
+            User currentUser,
+            List<CachedConversationParticipant> participants,
+            Map<Long, Presence> presenceByUserId,
+            Message lastMessage,
+            Map<Long, List<MessageAttachment>> attachmentsByMessageId
+    ) {
+        CachedConversationParticipant currentParticipant = participants.stream()
+                .filter(participant -> participant.userId().equals(currentUser.getId()))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("conversation.participant.current.not.found"));
+
+        List<CachedConversationParticipant> activeParticipants = participants.stream()
+                .filter(CachedConversationParticipant::active)
+                .toList();
+        List<CachedConversationParticipant> visibleParticipants = participants.stream()
+                .filter(participant -> !participant.left())
+                .toList();
+
+        CachedConversationParticipant peerParticipant = activeParticipants.stream()
+                .filter(participant -> !participant.userId().equals(currentUser.getId()))
+                .findFirst()
+                .orElse(null);
+
+        boolean group = conversation.getType() == ConversationType.GROUP;
+        String title = group
+                ? conversation.getName()
+                : peerParticipant == null ? null : peerParticipant.displayName();
+        String avatarUrl = group
+                ? conversation.getAvatarUrl()
+                : peerParticipant == null ? null : peerParticipant.avatarUrl();
+
+        ConversationUserResponse peer = group || peerParticipant == null
+                ? null
+                : toConversationUserResponse(
+                        peerParticipant,
+                        presenceByUserId.get(peerParticipant.userId())
+                );
+
+        List<ConversationMemberResponse> memberResponses = visibleParticipants.stream()
+                .sorted(Comparator.comparing(CachedConversationParticipant::userId))
+                .map(participant -> toConversationMemberResponse(
+                        participant,
+                        presenceByUserId.get(participant.userId())
+                ))
+                .toList();
+
+        ConversationUserResponse createdBy = conversation.getCreatedBy() == null
+                ? null
+                : toConversationUserResponse(
+                        conversation.getCreatedBy(),
+                        presenceByUserId.get(conversation.getCreatedBy().getId())
+                );
+
+        return new ConversationDetailResponse(
+                conversation.getId(),
+                conversation.getType(),
+                title,
+                avatarUrl,
+                peer,
+                createdBy,
+                group ? currentParticipant.role() : null,
+                group ? currentParticipant.status() : null,
+                memberResponses,
+                activeParticipants.size(),
+                toConversationLastMessageResponse(lastMessage, attachmentsByMessageId),
+                currentParticipant.unreadCount()
+        );
+    }
     public ConversationResponse toConversationResponse(
             ConversationParticipant currentParticipant,
             User currentUser,
@@ -183,6 +253,21 @@ public class ConversationMapper {
     }
 
     private ConversationMemberResponse toConversationMemberResponse(
+            CachedConversationParticipant participant,
+            Presence presence
+    ) {
+        return new ConversationMemberResponse(
+                participant.userId(),
+                participant.username(),
+                participant.displayName(),
+                participant.avatarUrl(),
+                toPresenceResponse(presence),
+                participant.role(),
+                participant.joinedAt(),
+                participant.leftAt()
+        );
+    }
+    private ConversationMemberResponse toConversationMemberResponse(
             ConversationParticipant participant,
             Presence presence
     ) {
@@ -214,6 +299,15 @@ public class ConversationMapper {
         );
     }
 
+    private ConversationUserResponse toConversationUserResponse(CachedConversationParticipant user, Presence presence) {
+        return new ConversationUserResponse(
+                user.userId(),
+                user.username(),
+                user.displayName(),
+                user.avatarUrl(),
+                toPresenceResponse(presence)
+        );
+    }
     private ConversationUserResponse toConversationUserResponse(User user, Presence presence) {
         return new ConversationUserResponse(
                 user.getId(),

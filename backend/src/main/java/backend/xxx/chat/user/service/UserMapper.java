@@ -25,6 +25,21 @@ public class UserMapper {
         );
     }
 
+    public UserResponse toResponse(CachedUser user) {
+        return new UserResponse(
+                user.id(),
+                user.username(),
+                user.email(),
+                user.displayName(),
+                user.avatarUrl(),
+                user.bio(),
+                user.accountStatus(),
+                user.emailVerified(),
+                user.createdAt(),
+                user.updatedAt()
+        );
+    }
+
     public UserSearchItemResponse toSearchItem(User user, Presence presence, Long directConversationId) {
         return new UserSearchItemResponse(
                 user.getId(),

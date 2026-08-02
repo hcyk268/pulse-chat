@@ -1,13 +1,10 @@
 package backend.xxx.chat.realtime.service;
 
-import java.util.List;
-
-import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.realtime.dto.TypingStatusRequest;
 import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.realtime.model.TypingUpdatedEventData;
-import backend.xxx.chat.user.model.User;
+import backend.xxx.chat.user.service.CachedUser;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,21 +23,18 @@ public class TypingService {
     public void updateTyping(String currentUsername, Long conversationId, TypingStatusRequest request) {
         realtimeValidator.validateTypingRequest(conversationId, request);
 
-        User currentUser = userLookupService.getCurrentUser(currentUsername);
-
-        List<ConversationParticipant> participants =
-                conversationAccessPolicy.requireParticipants(conversationId);
-        conversationAccessPolicy.assertCanUpdateTyping(currentUser, participants);
+        CachedUser currentUser = userLookupService.getCurrentUserCached(currentUsername);
+        conversationAccessPolicy.assertCanUpdateTyping(conversationId, currentUser.id());
 
         TypingUpdatedEventData data = new TypingUpdatedEventData(
-                currentUser.getId(),
-                currentUser.getUsername(),
+                currentUser.id(),
+                currentUser.username(),
                 request.typing()
         );
 
-        participants.stream()
-                .filter(participant -> !participant.getUser().getId().equals(currentUser.getId()))
-                .map(participant -> participant.getUser().getUsername())
+        conversationAccessPolicy.requireParticipantSnapshots(conversationId).stream()
+                .filter(participant -> !participant.userId().equals(currentUser.id()))
+                .map(participant -> participant.username())
                 .forEach(username -> realtimeEventPublisher.sendToUser(
                         username,
                         RealtimeEventType.TYPING_UPDATED,

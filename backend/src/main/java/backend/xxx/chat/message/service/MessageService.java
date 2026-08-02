@@ -15,6 +15,7 @@ import backend.xxx.chat.conversation.dto.ConversationPinnedMessagesResponse;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
+import backend.xxx.chat.conversation.service.ConversationParticipantCacheService;
 import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.*;
 import backend.xxx.chat.message.repository.MessageAttachmentRepository;
@@ -37,6 +38,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -54,8 +57,10 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final ConversationParticipantCacheService conversationParticipantCacheService;
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
+    private final MessagePinCacheService messagePinCacheService;
     private final MessageValidator messageValidator;
     private final MessageAccessPolicy messageAccessPolicy;
     private final MessageTypeStrategyRegistry messageTypeStrategyRegistry;
@@ -72,7 +77,7 @@ public class MessageService {
                         () -> new NotFoundException("conversation.not.found")
                 );
 
-        conversationAccessPolicy.requireActiveParticipant(conversation.getId(), currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversation.getId(), currentUser.getId());
 
         int pageLimit = messageValidator.normalizeLimit(
                 limit,
@@ -159,6 +164,7 @@ public class MessageService {
                 currentUser.getId(),
                 ParticipantStatus.ACTIVE
         );
+        evictParticipantSnapshotsAfterCommit(conversation.getId());
 
         outBoxService.pushEvent(
                 "MESSAGE",
@@ -181,7 +187,7 @@ public class MessageService {
         Message message = messageRepository.findByIdWithConversationAndSender(messageId)
                 .orElseThrow(() -> new NotFoundException("message.not.found"));
 
-        conversationAccessPolicy.requireActiveParticipant(message.getConversation().getId(), currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(message.getConversation().getId(), currentUser.getId());
 
         return messageMapper.toReadReceiptsResponse(
                 message.getId(),
@@ -196,7 +202,7 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
 
         Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
                 .orElseThrow(() -> new NotFoundException("conversation.not.found"));
@@ -214,6 +220,8 @@ public class MessageService {
                 MessagePin.create(conversation, message, currentUser, Instant.now())
         );
 
+        evictPinnedMessagesAfterCommit(conversationId);
+
         outBoxService.pushEvent(
                 "MESSAGE_PIN",
                 savedPin.getId(),
@@ -227,20 +235,9 @@ public class MessageService {
     @Transactional(readOnly = true)
     public ConversationPinnedMessagesResponse getPinnedMessages(String currentUsername, Long conversationId) {
         User currentUser = userLookupService.getCurrentUser(currentUsername);
-        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
 
-        List<MessagePin> messagePins = messagePinRepository.findByConversationIdWithDetails(conversationId);
-        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(
-                collectMessageAndReplyIds(messagePins.stream()
-                        .map(MessagePin::getMessage)
-                        .toList())
-        );
-
-        List<MessagePinResponse> items = messagePins.stream()
-                .map(messagePin -> messagePinMapper.toResponse(messagePin, attachmentsByMessageId))
-                .toList();
-
-        return new ConversationPinnedMessagesResponse(conversationId, items);
+        return messagePinCacheService.getPinnedMessages(conversationId);
     }
 
     @Transactional
@@ -275,6 +272,7 @@ public class MessageService {
         }
 
         currentParticipant.markRead(lastReadMessage.getId());
+        evictParticipantSnapshotsAfterCommit(conversation.getId());
 
         outBoxService.pushEvent(
                 "MESSAGE",
@@ -304,11 +302,12 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("message.pin.not.found"));
 
         Long conversationId = unPinMessage.getConversation().getId();
-        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
 
         Long unPinnedMessageId = unPinMessage.getMessage().getId();
         Instant unPinnedAt = Instant.now();
         messagePinRepository.delete(unPinMessage);
+        evictPinnedMessagesAfterCommit(conversationId);
 
         outBoxService.pushEvent(
                 "MESSAGE",
@@ -329,12 +328,14 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
 
         messageAccessPolicy.requireSender(message, currentUser, "Only message sender can edit this message");
         messageValidator.validateCanEditMessage(message, request);
 
         message.editContent(request.newContent(), Instant.now());
+
+        evictPinnedMessagesAfterCommit(conversationId);
 
         outBoxService.pushEvent(
                 "MESSAGE",
@@ -355,13 +356,15 @@ public class MessageService {
                 .orElseThrow(() -> new NotFoundException("message.not.found"));
 
         Long conversationId = message.getConversation().getId();
-        conversationAccessPolicy.requireActiveParticipant(conversationId, currentUser.getId());
+        conversationAccessPolicy.assertCanReadConversation(conversationId, currentUser.getId());
 
         messageAccessPolicy.requireSender(message, currentUser, "Only message sender can delete this message");
         messageValidator.validateCanDeleteMessage(message);
 
         if (!message.isDeleted()) {
             message.deleteForEveryone(currentUser, Instant.now());
+
+            evictPinnedMessagesAfterCommit(conversationId);
 
             outBoxService.pushEvent(
                     "MESSAGE",
@@ -375,6 +378,32 @@ public class MessageService {
     }
 
 
+    private void evictPinnedMessagesAfterCommit(Long conversationId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            messagePinCacheService.evictPinnedMessages(conversationId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagePinCacheService.evictPinnedMessages(conversationId);
+            }
+        });
+    }
+    private void evictParticipantSnapshotsAfterCommit(Long conversationId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            conversationParticipantCacheService.evictParticipants(conversationId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                conversationParticipantCacheService.evictParticipants(conversationId);
+            }
+        });
+    }
     private MessageResponse toResponseWithAttachments(Message message) {
         return messageMapper.toResponse(
                 message,
@@ -433,6 +462,7 @@ public class MessageService {
                 .map(message -> MessageRead.create(message, reader, readAt))
                 .toList());
     }
+
     private Message resolveReplyToMessage(Long replyToMessageId, Long conversationId) {
         if (replyToMessageId == null) {
             return null;

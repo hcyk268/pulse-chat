@@ -22,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserResponse getMyProfile(String username) {
-        User user = userLookupService.getCurrentUser(username);
+        CachedUser user = userLookupService.getCurrentUserCached(username);
         return userMapper.toResponse(user);
     }
 
@@ -47,12 +49,13 @@ public class UserService {
     public UserResponse updateMyProfile(String username, UpdateMyProfileRequest request) {
         User user = userLookupService.getCurrentUser(username);
         user.updateProfile(request.displayName(), request.avatarUrl(), request.bio());
+        evictCachedUserAfterCommit(user);
         return userMapper.toResponse(user);
     }
 
     @Transactional(readOnly = true)
     public UserSearchResponse search(String currentUsername, String keyword, Short limit) {
-        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        Long currentUserId = userLookupService.getCurrentUserId(currentUsername);
         String normalizedKeyword = userValidator.normalizeSearchKeyword(keyword, MAX_SEARCH_KEYWORD_LENGTH);
         int normalizedLimit = userValidator.normalizeSearchLimit(
                 limit,
@@ -61,7 +64,7 @@ public class UserService {
         );
 
         List<User> users = userRepository.searchActiveUsers(
-                currentUser.getId(),
+                currentUserId,
                 normalizedKeyword,
                 AccountStatus.ACTIVE,
                 PageRequest.of(0, normalizedLimit + 1)
@@ -71,7 +74,7 @@ public class UserService {
         List<User> pageUsers = hasMore ? users.subList(0, normalizedLimit) : users;
         Map<Long, Presence> presenceByUserId = findPresenceByUserId(pageUsers);
         Map<Long, Long> directConversationIdByUserId = findDirectConversationIdByUserId(
-                currentUser.getId(),
+                currentUserId,
                 pageUsers
         );
 
@@ -87,6 +90,20 @@ public class UserService {
                 items,
                 new CursorPageResponse(normalizedLimit, null, hasMore, Instant.now())
         );
+    }
+
+    private void evictCachedUserAfterCommit(User user) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            userLookupService.evictCachedUser(user);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                userLookupService.evictCachedUser(user);
+            }
+        });
     }
 
     private Map<Long, Presence> findPresenceByUserId(List<User> users) {
@@ -122,4 +139,5 @@ public class UserService {
                         ConversationParticipantRepository.DirectConversationLookup::getUserId,
                         ConversationParticipantRepository.DirectConversationLookup::getConversationId
                 ));
-    }}
+    }
+}

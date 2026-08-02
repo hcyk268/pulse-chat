@@ -26,6 +26,7 @@ import backend.xxx.chat.config.properties.EmailVerificationProperties;
 
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
+import backend.xxx.chat.user.service.UserLookupService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -104,6 +105,9 @@ class AuthServiceTest {
 
     @Mock
     private CurrentUserProvider currentUserProvider;
+
+    @Mock
+    private UserLookupService userLookupService;
 
     @InjectMocks
     private AuthService authService;

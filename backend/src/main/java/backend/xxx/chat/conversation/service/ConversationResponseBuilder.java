@@ -119,6 +119,24 @@ public class ConversationResponseBuilder {
         );
     }
 
+    public ConversationDetailResponse buildCachedConversationDetailResponse(
+            Conversation conversation,
+            User currentUser,
+            List<CachedConversationParticipant> participants
+    ) {
+        Map<Long, Presence> presenceByUserId = findPresenceByCachedUserId(participants);
+        Message lastMessage = findLastMessage(conversation);
+        Map<Long, List<MessageAttachment>> attachmentsByMessageId = findAttachmentsByMessageId(singleMessage(lastMessage));
+
+        return conversationMapper.toCachedConversationDetailResponse(
+                conversation,
+                currentUser,
+                participants,
+                presenceByUserId,
+                lastMessage,
+                attachmentsByMessageId
+        );
+    }
     public DirectConversationResponse buildDirectConversationResponse(
             Conversation conversation,
             User currentUser,
@@ -158,6 +176,20 @@ public class ConversationResponseBuilder {
                 .collect(Collectors.groupingBy(participant -> participant.getConversation().getId()));
     }
 
+    private Map<Long, Presence> findPresenceByCachedUserId(List<CachedConversationParticipant> participants) {
+        List<Long> userIds = participants.stream()
+                .map(CachedConversationParticipant::userId)
+                .distinct()
+                .toList();
+
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return presenceRepository.findByUserIdIn(userIds)
+                .stream()
+                .collect(Collectors.toMap(Presence::getUserId, Function.identity()));
+    }
     private Map<Long, Presence> findPresenceByUserId(List<ConversationParticipant> participants) {
         List<Long> userIds = participants.stream()
                 .map(participant -> participant.getUser().getId())
