@@ -1,5 +1,8 @@
 package backend.xxx.chat.community.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import java.util.List;
 
 import backend.xxx.chat.common.dto.ResponseData;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Community", description = "Community discovery, membership, and channel APIs")
 @RestController
 @RequestMapping("/api/v1/community")
 @RequiredArgsConstructor
@@ -40,16 +44,19 @@ public class CommunityController {
     private final CurrentUserProvider currentUserProvider;
     private final CommunityService communityService;
 
+    @Operation(summary = "List community categories")
     @GetMapping("/categories")
     public ResponseData<List<CommunityCategoryResponse>> getCategories() {
         return new ResponseData<>(true, "community.category.list.success", communityService.getCategories());
     }
 
+    @Operation(summary = "List community tags")
     @GetMapping("/tags")
     public ResponseData<List<CommunityTagResponse>> getTags() {
         return new ResponseData<>(true, "community.tag.list.success", communityService.getTags());
     }
 
+    @Operation(summary = "Discover communities")
     @GetMapping("/communities")
     public ResponseData<List<CommunitySummaryResponse>> discoverCommunities(
             @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
@@ -66,6 +73,7 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Create community")
     @PostMapping("/communities")
     public ResponseEntity<ResponseData<CommunityDetailResponse>> createCommunity(
             @Valid @RequestBody CreateCommunityRequest request
@@ -77,6 +85,7 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Get community detail")
     @GetMapping("/communities/{slug}")
     public ResponseData<CommunityDetailResponse> getCommunityDetail(@PathVariable String slug) {
         return new ResponseData<>(true, "community.detail.success", communityService.getCommunityDetail(
@@ -85,6 +94,7 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Update community")
     @PatchMapping("/communities/{communityId}")
     public ResponseData<CommunityDetailResponse> updateCommunity(
             @Positive @PathVariable Long communityId,
@@ -97,6 +107,7 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Join community")
     @PostMapping("/communities/{communityId}/join")
     public ResponseData<CommunityDetailResponse> joinCommunity(@Positive @PathVariable Long communityId) {
         return new ResponseData<>(true, "community.join.success", communityService.joinCommunity(
@@ -105,12 +116,14 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Leave community")
     @PostMapping("/communities/{communityId}/leave")
     public ResponseData<Void> leaveCommunity(@Positive @PathVariable Long communityId) {
         communityService.leaveCommunity(currentUserProvider.getCurrentUsername(), communityId);
         return new ResponseData<>(true, "community.leave.success");
     }
 
+    @Operation(summary = "Create community channel")
     @PostMapping("/communities/{communityId}/channels")
     public ResponseEntity<ResponseData<CommunityChannelResponse>> createChannel(
             @Positive @PathVariable Long communityId,
@@ -123,6 +136,7 @@ public class CommunityController {
         ));
     }
 
+    @Operation(summary = "Update community channel")
     @PatchMapping("/channels/{channelId}")
     public ResponseData<CommunityChannelResponse> updateChannel(
             @Positive @PathVariable Long channelId,

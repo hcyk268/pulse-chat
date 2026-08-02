@@ -1,5 +1,8 @@
 package backend.xxx.chat.user.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.user.dto.UpdateMyProfileRequest;
@@ -13,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Users", description = "Current user profile and search APIs")
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -22,16 +26,19 @@ public class UserController {
     private final CurrentUserProvider currentUserProvider;
     private final UserService userService;
 
+    @Operation(summary = "Get my profile")
     @GetMapping("/me")
     public ResponseData<UserResponse> getMyProfile() {
         return new ResponseData<>(true, "user.profile.get.success", userService.getMyProfile(currentUserProvider.getCurrentUsername()));
     }
 
+    @Operation(summary = "Update my profile")
     @PatchMapping("/me")
     public ResponseData<UserResponse> updateMyProfile(@Valid @RequestBody UpdateMyProfileRequest request) {
         return new ResponseData<>(true, "user.profile.update.success", userService.updateMyProfile(currentUserProvider.getCurrentUsername(), request));
     }
 
+    @Operation(summary = "Search users")
     @GetMapping("/search")
     public ResponseData<UserSearchResponse> search(
             @RequestParam(name = "q") String keyword,
