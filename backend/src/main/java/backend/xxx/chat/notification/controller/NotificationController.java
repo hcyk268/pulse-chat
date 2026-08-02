@@ -1,5 +1,8 @@
 package backend.xxx.chat.notification.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.notification.dto.NotificationListResponse;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Notifications", description = "User notification APIs")
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class NotificationController {
     private final CurrentUserProvider currentUserProvider;
     private final NotificationService notificationService;
 
+    @Operation(summary = "List notifications")
     @GetMapping
     public ResponseData<NotificationListResponse> getNotifications(
             @RequestParam(required = false) Short limit,
@@ -39,6 +44,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Get unread notification count")
     @GetMapping("/unread-count")
     public ResponseData<NotificationUnreadCountResponse> getUnreadCount() {
         return new ResponseData<>(
@@ -48,6 +54,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Get notification detail")
     @GetMapping("/{id}")
     public ResponseData<NotificationResponse> getNotification(@Positive @PathVariable Long id) {
         return new ResponseData<>(
@@ -57,6 +64,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Mark notification read")
     @PatchMapping("/{id}/read")
     public ResponseData<NotificationResponse> markRead(@Positive @PathVariable Long id) {
         return new ResponseData<>(
@@ -66,6 +74,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Mark notification unread")
     @PatchMapping("/{id}/unread")
     public ResponseData<NotificationResponse> markUnread(@Positive @PathVariable Long id) {
         return new ResponseData<>(
@@ -75,6 +84,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Mark all notifications read")
     @PatchMapping("/read-all")
     public ResponseData<NotificationReadAllResponse> markAllRead() {
         return new ResponseData<>(
@@ -84,6 +94,7 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Delete notification")
     @DeleteMapping("/{id}")
     public ResponseData<Void> deleteNotification(@Positive @PathVariable Long id) {
         notificationService.deleteNotification(currentUserProvider.getCurrentUsername(), id);

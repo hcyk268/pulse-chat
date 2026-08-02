@@ -2,58 +2,88 @@ package backend.xxx.chat.common.ratelimit;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
 import backend.xxx.chat.common.exception.LimitExceedException;
 import backend.xxx.chat.common.exception.RateLimitUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.core.DefaultTypedTuple;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RateLimitProviderTest {
 
+    private static final String KEY = "rate-limit:v1:login:203.0.113.10";
+
     @Test
     void buildsRedisKey() {
-        StubRedisTemplate redis = new StubRedisTemplate(0L);
-        RateLimitProvider provider = new RateLimitProvider(redis);
+        RedisFixture redis = RedisFixture.create();
+        when(redis.zSetOperations.zCard(KEY)).thenReturn(0L);
+        when(redis.redisOperations.exec()).thenReturn(List.of(Boolean.TRUE, Boolean.TRUE));
+        RateLimitProvider provider = new TestRateLimitProvider(redis.redisTemplate, 60_000L);
 
         assertThatCode(() -> provider.rateLimit("203.0.113.10", "login", 5, Duration.ofMinutes(1)))
                 .doesNotThrowAnyException();
 
-        assertThat(redis.keys).containsExactly("rate-limit:v1:login:203.0.113.10");
-        assertThat(redis.arguments).containsExactly("60000", "5", redis.arguments[2]);
+        verify(redis.redisTemplate.opsForZSet()).removeRangeByScore(KEY, 0, 0);
+        verify(redis.redisOperations).watch(KEY);
+        verify(redis.zSetOperations).zCard(KEY);
+        verify(redis.redisOperations).multi();
+        verify(redis.zSetOperations).add(eq(KEY), anyString(), eq(60_000.0));
+        verify(redis.redisOperations).expire(KEY, Duration.ofMinutes(1));
+        verify(redis.redisOperations).exec();
     }
 
     @Test
     void roundsRetrySeconds() {
-        RateLimitProvider provider = new RateLimitProvider(new StubRedisTemplate(1_501L));
+        RedisFixture redis = RedisFixture.create();
+        when(redis.zSetOperations.zCard(KEY)).thenReturn(5L);
+        when(redis.zSetOperations.rangeWithScores(KEY, 0, 0))
+                .thenReturn(Set.of(new DefaultTypedTuple<>((Object) "oldest", 1_501.0)));
+        RateLimitProvider provider = new TestRateLimitProvider(redis.redisTemplate, 60_000L);
 
         assertThatThrownBy(() -> provider.rateLimit("203.0.113.10", "login", 5, Duration.ofMinutes(1)))
                 .isInstanceOfSatisfying(LimitExceedException.class,
                         exception -> assertThat(exception.getRetryAfterSeconds()).isEqualTo(2L));
+
+        verify(redis.redisOperations).unwatch();
     }
 
     @Test
     void failsWhenRedisUnavailable() {
-        StubRedisTemplate unavailable = new StubRedisTemplate(0L);
-        unavailable.failure = new DataAccessResourceFailureException("redis unavailable");
+        RedisFixture unavailable = RedisFixture.create();
+        when(unavailable.redisTemplate.opsForZSet().removeRangeByScore(KEY, 0, 0))
+                .thenThrow(new DataAccessResourceFailureException("redis unavailable"));
 
-        assertThatThrownBy(() -> new RateLimitProvider(unavailable)
+        assertThatThrownBy(() -> new TestRateLimitProvider(unavailable.redisTemplate, 60_000L)
                 .rateLimit("203.0.113.10", "login", 5, Duration.ofMinutes(1)))
                 .isInstanceOf(RateLimitUnavailableException.class);
 
-        assertThatThrownBy(() -> new RateLimitProvider(new StubRedisTemplate(null))
+        RedisFixture conflicted = RedisFixture.create();
+        when(conflicted.redisTemplate.execute(any(SessionCallback.class))).thenReturn(null);
+
+        assertThatThrownBy(() -> new TestRateLimitProvider(conflicted.redisTemplate, 60_000L)
                 .rateLimit("203.0.113.10", "login", 5, Duration.ofMinutes(1)))
                 .isInstanceOf(RateLimitUnavailableException.class);
     }
 
     @Test
     void rejectsInvalidPolicy() {
-        RateLimitProvider provider = new RateLimitProvider(new StubRedisTemplate(0L));
+        RedisFixture redis = RedisFixture.create();
+        RateLimitProvider provider = new TestRateLimitProvider(redis.redisTemplate, 60_000L);
 
         assertThatThrownBy(() -> provider.rateLimit("", "login", 5, Duration.ofMinutes(1)))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -63,26 +93,43 @@ class RateLimitProviderTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    private static final class StubRedisTemplate extends StringRedisTemplate {
+    private static final class TestRateLimitProvider extends RateLimitProvider {
 
-        private final Long result;
-        private RuntimeException failure;
-        private List<String> keys;
-        private Object[] arguments;
+        private final long nowMillis;
 
-        private StubRedisTemplate(Long result) {
-            this.result = result;
+        private TestRateLimitProvider(RedisTemplate<String, Object> redisTemplate, long nowMillis) {
+            super(redisTemplate);
+            this.nowMillis = nowMillis;
         }
 
         @Override
-        @SuppressWarnings("unchecked")
-        public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
-            if (failure != null) {
-                throw failure;
-            }
-            this.keys = keys;
-            this.arguments = args;
-            return (T) result;
+        protected long nowMillis() {
+            return nowMillis;
+        }
+    }
+
+    private record RedisFixture(
+            RedisTemplate<String, Object> redisTemplate,
+            RedisOperations<String, Object> redisOperations,
+            ZSetOperations<String, Object> zSetOperations
+    ) {
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static RedisFixture create() {
+            RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
+            RedisOperations<String, Object> redisOperations = mock(RedisOperations.class);
+            ZSetOperations<String, Object> zSetOperations = mock(ZSetOperations.class);
+
+            when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+            when(redisTemplate.opsForZSet().removeRangeByScore(anyString(), eq(0.0), any(Double.class)))
+                    .thenReturn(0L);
+            when(redisOperations.opsForZSet()).thenReturn(zSetOperations);
+            when(redisTemplate.execute(any(SessionCallback.class))).thenAnswer(invocation -> {
+                SessionCallback callback = invocation.getArgument(0);
+                return callback.execute(redisOperations);
+            });
+
+            return new RedisFixture(redisTemplate, redisOperations, zSetOperations);
         }
     }
 }

@@ -1,5 +1,8 @@
 package backend.xxx.chat.conversation.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import backend.xxx.chat.common.dto.ResponseData;
 import backend.xxx.chat.common.security.CurrentUserProvider;
 import backend.xxx.chat.conversation.dto.*;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 
+@Tag(name = "Conversations", description = "Direct and group conversation APIs")
 @RestController
 @RequestMapping("/api/v1/conversations")
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class ConversationController {
     private final ConversationService conversationService;
     private final MessageService messageService;
 
+    @Operation(summary = "Create or open direct conversation")
     @PostMapping("/direct")
     public ResponseEntity<ResponseData<DirectConversationResponse>> createOrOpenDirectConversation(@Valid @RequestBody CreateDirectConversationRequest request) {
         ConversationService.CreateOrOpenDirectConversationResult result =
@@ -37,6 +42,7 @@ public class ConversationController {
         return ResponseEntity.status(status).body(new ResponseData<>(true, message, result.response()));
     }
 
+    @Operation(summary = "Create group conversation")
     @PostMapping("/group")
     public ResponseEntity<ResponseData<ConversationDetailResponse>> createGroupConversation(@Valid @RequestBody CreateGroupConversationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -44,6 +50,7 @@ public class ConversationController {
         );
     }
 
+    @Operation(summary = "Invite group members")
     @PostMapping("/{conversationId}/members")
     public ResponseData<ConversationDetailResponse> inviteGroupMembers(
             @Positive @PathVariable Long conversationId,
@@ -56,6 +63,7 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "Accept group invitation")
     @PostMapping("/{conversationId}/invitations/accept")
     public ResponseData<ConversationDetailResponse> acceptGroupInvitation(@Positive @PathVariable Long conversationId) {
         return new ResponseData<>(true, "conversation.group.invitation.accept.success", conversationService.acceptGroupInvitation(
@@ -64,12 +72,14 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "Reject group invitation")
     @PostMapping("/{conversationId}/invitations/reject")
     public ResponseData<Void> rejectGroupInvitation(@Positive @PathVariable Long conversationId) {
         conversationService.rejectGroupInvitation(currentUserProvider.getCurrentUsername(), conversationId);
         return new ResponseData<>(true, "conversation.group.invitation.reject.success");
     }
 
+    @Operation(summary = "Remove group member")
     @DeleteMapping("/{conversationId}/members/{memberId}")
     public ResponseData<ConversationDetailResponse> removeGroupMember(
             @Positive @PathVariable Long conversationId,
@@ -82,12 +92,14 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "Leave group conversation")
     @PostMapping("/{conversationId}/leave")
     public ResponseData<Void> leaveGroup(@Positive @PathVariable Long conversationId) {
         conversationService.leaveGroup(currentUserProvider.getCurrentUsername(), conversationId);
         return new ResponseData<>(true, "conversation.group.leave.success");
     }
 
+    @Operation(summary = "Update group profile")
     @PatchMapping("/{conversationId}/group-profile")
     public ResponseData<ConversationDetailResponse> updateGroupProfile(
             @Positive @PathVariable Long conversationId,
@@ -100,6 +112,7 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "Update group member role")
     @PatchMapping("/{conversationId}/members/{memberId}/role")
     public ResponseData<ConversationDetailResponse> updateGroupMemberRole(
             @Positive @PathVariable Long conversationId,
@@ -114,6 +127,7 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "List conversations")
     @GetMapping
     public ResponseData<ConversationBoxResponse> getConversations(
             @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
@@ -128,11 +142,13 @@ public class ConversationController {
         ));
     }
 
+    @Operation(summary = "Get conversation detail")
     @GetMapping("/{conversationId}")
     public ResponseData<ConversationDetailResponse> getDetailConversation(@Positive @PathVariable Long conversationId) {
         return new ResponseData<>(true, "conversation.detail.success", conversationService.getDetailConversation(conversationId, currentUserProvider.getCurrentUsername()));
     }
 
+    @Operation(summary = "List pinned messages")
     @GetMapping("/{conversationId}/pins")
     public ResponseData<ConversationPinnedMessagesResponse> getPinnedMessages(@Positive @PathVariable Long conversationId) {
         return new ResponseData<>(true, "conversation.pinned.list.success", messageService.getPinnedMessages(

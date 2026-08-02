@@ -1,5 +1,8 @@
 package backend.xxx.chat.market.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import java.util.List;
 
 import backend.xxx.chat.common.dto.ResponseData;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Watchlist", description = "User market watchlist APIs")
 @RestController
 @RequestMapping("/api/v1/market/watchlist")
 @RequiredArgsConstructor
@@ -32,6 +36,7 @@ public class WatchlistController {
     private final CurrentUserProvider currentUserProvider;
     private final WatchlistService watchlistService;
 
+    @Operation(summary = "List watchlist")
     @GetMapping
     public ResponseData<List<WatchlistItemResponse>> getWatchlist() {
         return new ResponseData<>(
@@ -41,6 +46,7 @@ public class WatchlistController {
         );
     }
 
+    @Operation(summary = "Get watchlist item")
     @GetMapping("/{itemId}")
     public ResponseData<WatchlistItemResponse> getWatchlistItem(@Positive @PathVariable Long itemId) {
         return new ResponseData<>(
@@ -50,6 +56,7 @@ public class WatchlistController {
         );
     }
 
+    @Operation(summary = "Add watchlist item")
     @PostMapping
     public ResponseEntity<ResponseData<WatchlistItemResponse>> addWatchlistItem(
             @Valid @RequestBody WatchlistItemRequest request
@@ -61,6 +68,7 @@ public class WatchlistController {
         ));
     }
 
+    @Operation(summary = "Update watchlist item")
     @PatchMapping("/{itemId}")
     public ResponseData<WatchlistItemResponse> updateWatchlistItem(
             @Positive @PathVariable Long itemId,
@@ -73,12 +81,14 @@ public class WatchlistController {
         );
     }
 
+    @Operation(summary = "Remove watchlist item")
     @DeleteMapping("/{itemId}")
     public ResponseData<Void> removeWatchlistItem(@Positive @PathVariable Long itemId) {
         watchlistService.removeWatchlistItem(currentUserProvider.getCurrentUsername(), itemId);
         return new ResponseData<>(true, "market.watchlist.remove.success");
     }
 
+    @Operation(summary = "Remove watchlist item by symbol")
     @DeleteMapping("/symbols/{symbol}")
     public ResponseData<Void> removeWatchlistItemBySymbol(@NotBlank @PathVariable String symbol) {
         watchlistService.removeWatchlistItemBySymbol(currentUserProvider.getCurrentUsername(), symbol);

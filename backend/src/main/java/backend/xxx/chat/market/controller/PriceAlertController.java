@@ -1,5 +1,8 @@
 package backend.xxx.chat.market.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import java.util.List;
 
 import backend.xxx.chat.common.dto.ResponseData;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Price Alerts", description = "User price alert APIs")
 @RestController
 @RequestMapping("/api/v1/market/price-alerts")
 @RequiredArgsConstructor
@@ -32,6 +36,7 @@ public class PriceAlertController {
     private final CurrentUserProvider currentUserProvider;
     private final PriceAlertService priceAlertService;
 
+    @Operation(summary = "Create price alert")
     @PostMapping
     public ResponseEntity<ResponseData<PriceAlertResponse>> createPriceAlert(@Valid @RequestBody CreatePriceAlertRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(new ResponseData<>(
@@ -41,6 +46,7 @@ public class PriceAlertController {
         ));
     }
 
+    @Operation(summary = "List price alerts")
     @GetMapping
     public ResponseData<List<PriceAlertResponse>> getPriceAlerts() {
         return new ResponseData<>(
@@ -50,6 +56,7 @@ public class PriceAlertController {
         );
     }
 
+    @Operation(summary = "Get price alert detail")
     @GetMapping("/{id}")
     public ResponseData<PriceAlertResponse> getPriceAlert(@Positive @PathVariable Long id) {
         return new ResponseData<>(
@@ -59,6 +66,7 @@ public class PriceAlertController {
         );
     }
 
+    @Operation(summary = "Update price alert")
     @PatchMapping("/{id}")
     public ResponseData<PriceAlertResponse> updatePriceAlert(
             @Positive @PathVariable Long id,
@@ -71,6 +79,7 @@ public class PriceAlertController {
         );
     }
 
+    @Operation(summary = "Delete price alert")
     @DeleteMapping("/{id}")
     public ResponseData<Void> deletePriceAlert(@Positive @PathVariable Long id) {
         priceAlertService.deletePriceAlert(currentUserProvider.getCurrentUsername(), id);

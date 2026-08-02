@@ -1,62 +1,36 @@
 package backend.xxx.chat.common.ratelimit;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+
 import backend.xxx.chat.common.exception.LimitExceedException;
 import backend.xxx.chat.common.exception.RateLimitUnavailableException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
 public class RateLimitProvider {
 
-    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
-            """
-            local key = KEYS[1]
-            local windowMillis = tonumber(ARGV[1])
-            local maxRequests = tonumber(ARGV[2])
-            local member = ARGV[3]
-            local redisTime = redis.call('TIME')
-            local now = (tonumber(redisTime[1]) * 1000) + math.floor(tonumber(redisTime[2]) / 1000)
+    private static final int MAX_TRANSACTION_RETRIES = 3;
 
-            redis.call('ZREMRANGEBYSCORE', key, 0, now - windowMillis)
-            if redis.call('ZCARD', key) >= maxRequests then
-                local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-                if oldest[2] then
-                    return math.max(1, math.floor(tonumber(oldest[2]) + windowMillis - now))
-                end
-                return windowMillis
-            end
-
-            redis.call('ZADD', key, now, member)
-            redis.call('PEXPIRE', key, windowMillis)
-            return 0
-            """,
-            Long.class
-    );
-    private final StringRedisTemplate stringRedisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public void rateLimit(String ipClient, String action, int maxReq, Duration windowDuration) {
         validate(ipClient, action, maxReq, windowDuration);
         String key = "rate-limit:v1:" + action + ":" + ipClient;
         long windowMillis = windowDuration.toMillis();
-        String member = UUID.randomUUID().toString();
 
         final Long retryAfterMillis;
         try {
-            retryAfterMillis = stringRedisTemplate.execute(
-                    RATE_LIMIT_SCRIPT,
-                    List.of(key),
-                    Long.toString(windowMillis),
-                    Integer.toString(maxReq),
-                    member
-            );
+            retryAfterMillis = checkLimitWithRedisTemplate(key, maxReq, windowDuration, windowMillis);
         } catch (DataAccessException ex) {
             throw new RateLimitUnavailableException();
         }
@@ -67,6 +41,74 @@ public class RateLimitProvider {
         if (retryAfterMillis > 0) {
             throw new LimitExceedException(toRetryAfterSeconds(retryAfterMillis));
         }
+    }
+
+    private Long checkLimitWithRedisTemplate(
+            String key,
+            int maxReq,
+            Duration windowDuration,
+            long windowMillis
+    ) {
+        for (int attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt++) {
+            long nowMillis = nowMillis();
+            removeExpiredRequests(key, windowMillis, nowMillis);
+
+            Long retryAfterMillis = redisTemplate.execute(new SessionCallback<>() {
+                @Override
+                public Long execute(RedisOperations operations) {
+                    operations.watch(key);
+                    ZSetOperations<String, Object> zSetOps = operations.opsForZSet();
+
+                    Long requestCount = zSetOps.zCard(key);
+                    if (requestCount == null) {
+                        operations.unwatch();
+                        throw new RateLimitUnavailableException();
+                    }
+
+                    if (requestCount >= maxReq) {
+                        Long retryAfter = retryAfterMillis(key, zSetOps, windowMillis, nowMillis);
+                        operations.unwatch();
+                        return retryAfter;
+                    }
+
+                    operations.multi();
+                    zSetOps.add(key, UUID.randomUUID().toString(), nowMillis);
+                    operations.expire(key, windowDuration);
+                    return operations.exec() == null ? null : 0L;
+                }
+            });
+
+            if (retryAfterMillis != null) {
+                return retryAfterMillis;
+            }
+        }
+        return null;
+    }
+
+    private void removeExpiredRequests(String key, long windowMillis, long nowMillis) {
+        Long removedCount = redisTemplate.opsForZSet()
+                .removeRangeByScore(key, 0, nowMillis - windowMillis);
+        if (removedCount == null) {
+            throw new RateLimitUnavailableException();
+        }
+    }
+
+    private Long retryAfterMillis(
+            String key,
+            ZSetOperations<String, Object> zSetOps,
+            long windowMillis,
+            long nowMillis
+    ) {
+        Set<ZSetOperations.TypedTuple<Object>> oldestEntries = zSetOps.rangeWithScores(key, 0, 0);
+        if (oldestEntries == null) {
+            throw new RateLimitUnavailableException();
+        }
+        return oldestEntries.stream()
+                .findFirst()
+                .map(ZSetOperations.TypedTuple::getScore)
+                .map(Double::longValue)
+                .map(oldestScore -> Math.max(1L, oldestScore + windowMillis - nowMillis))
+                .orElse(windowMillis);
     }
 
     private void validate(String ipClient, String action, int maxReq, Duration windowDuration) {
@@ -82,6 +124,10 @@ public class RateLimitProvider {
         if (windowDuration == null || windowDuration.isZero() || windowDuration.isNegative()) {
             throw new IllegalArgumentException("Rate-limit window must be positive");
         }
+    }
+
+    protected long nowMillis() {
+        return Instant.now().toEpochMilli();
     }
 
     private long toRetryAfterSeconds(long retryAfterMillis) {
