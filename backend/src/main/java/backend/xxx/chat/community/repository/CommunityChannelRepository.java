@@ -48,6 +48,15 @@ public interface CommunityChannelRepository extends JpaRepository<CommunityChann
     Optional<CommunityChannel> findByIdWithCommunityAndConversation(@Param("channelId") Long channelId);
 
     @Query("""
+            from CommunityChannel channel
+            join fetch channel.community
+            where channel.conversation.id = :conversationId
+            """)
+    Optional<CommunityChannel> findByConversationIdWithCommunity(
+            @Param("conversationId") Long conversationId
+    );
+
+    @Query("""
             select coalesce(max(channel.sortOrder), 0)
             from CommunityChannel channel
             where channel.community.id = :communityId

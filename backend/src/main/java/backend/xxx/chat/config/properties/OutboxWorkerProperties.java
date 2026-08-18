@@ -11,8 +11,6 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "app.outbox.worker")
 public class OutboxWorkerProperties {
 
-    private boolean enabled = true;
-
     private long fixedDelayMs = 500;
 
     private long initialDelayMs = 1000;

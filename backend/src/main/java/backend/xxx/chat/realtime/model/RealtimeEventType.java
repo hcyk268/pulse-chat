@@ -10,6 +10,7 @@ public enum RealtimeEventType {
     MESSAGE_UNPINNED("message.unpinned"),
     MESSAGE_READ("message.read"),
     MESSAGE_STATUS_UPDATED("message.status.updated"),
+    MESSAGE_REACTION_UPDATED("message.reaction.updated"),
     CONVERSATION_UPDATED("conversation.updated"),
     TYPING_UPDATED("typing.updated"),
     PRESENCE_UPDATED("presence.updated"),

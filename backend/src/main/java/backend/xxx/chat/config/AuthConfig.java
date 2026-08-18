@@ -5,7 +5,6 @@ import backend.xxx.chat.config.properties.EmailVerificationProperties;
 import backend.xxx.chat.config.properties.PasswordResetProperties;
 import backend.xxx.chat.config.properties.SendGridProperties;
 import com.sendgrid.SendGrid;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +18,6 @@ import org.springframework.context.annotation.Configuration;
 public class AuthConfig {
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.mail.sendgrid", name = "enabled", havingValue = "true")
     public SendGrid sendGrid(SendGridProperties properties) {
         requireNotBlank(properties.apiKey(), "mail.sendgrid.api-key.blank");
         requireNotBlank(properties.fromEmail(), "mail.sendgrid.from-email.blank");

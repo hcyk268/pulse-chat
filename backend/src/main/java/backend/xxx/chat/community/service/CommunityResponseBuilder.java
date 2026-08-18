@@ -47,10 +47,12 @@ public class CommunityResponseBuilder {
 
         List<Long> communityIds = communities.stream().map(Community::getId).toList();
         Map<Long, List<CommunityTagResponse>> tagsByCommunityId = tagsByCommunityId(communityIds);
-        Map<Long, CommunityMember> membershipByCommunityId = communityMemberRepository
-                .findByCommunityIdInAndUserIdWithCommunity(communityIds, currentUser.getId())
-                .stream()
-                .collect(Collectors.toMap(member -> member.getId().getCommunityId(), Function.identity()));
+        Map<Long, CommunityMember> membershipByCommunityId = currentUser == null
+                ? Map.of()
+                : communityMemberRepository
+                        .findByCommunityIdInAndUserIdWithCommunity(communityIds, currentUser.getId())
+                        .stream()
+                        .collect(Collectors.toMap(member -> member.getId().getCommunityId(), Function.identity()));
         Map<Long, Long> onlineCounts = onlineCountsByCommunityId(communityIds);
 
         return communities.stream()
@@ -64,9 +66,11 @@ public class CommunityResponseBuilder {
     }
 
     public CommunityDetailResponse buildDetail(Community community, User currentUser) {
-        CommunityMember membership = communityMemberRepository
-                .findById(new CommunityMemberId(community.getId(), currentUser.getId()))
-                .orElse(null);
+        CommunityMember membership = currentUser == null
+                ? null
+                : communityMemberRepository
+                        .findById(new CommunityMemberId(community.getId(), currentUser.getId()))
+                        .orElse(null);
         return buildDetail(community, currentUser, membership);
     }
 
@@ -75,7 +79,11 @@ public class CommunityResponseBuilder {
             User currentUser,
             CommunityMember membership
     ) {
-        communityAccessPolicy.requireCanViewCommunity(community, membership);
+        if (currentUser == null) {
+            communityAccessPolicy.requireGuestCanViewCommunity(community);
+        } else {
+            communityAccessPolicy.requireCanViewCommunity(community, membership);
+        }
 
         List<CommunityChannel> channels = communityChannelRepository.findByCommunityIdAndStatusWithConversation(
                 community.getId(),
@@ -87,7 +95,9 @@ public class CommunityResponseBuilder {
                 PageRequest.of(0, MAX_MEMBER_PREVIEW)
         );
 
-        Map<Long, Long> unreadCounts = unreadCountsByConversationId(channels, currentUser.getId());
+        Map<Long, Long> unreadCounts = currentUser == null
+                ? Map.of()
+                : unreadCountsByConversationId(channels, currentUser.getId());
         Map<Long, Presence> presences = presenceByUserId(members.stream()
                 .map(member -> member.getUser().getId())
                 .toList());

@@ -16,6 +16,7 @@ import backend.xxx.chat.conversation.repository.ConversationParticipantRepositor
 import backend.xxx.chat.conversation.repository.ConversationRepository;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
 import backend.xxx.chat.conversation.service.ConversationParticipantCacheService;
+import backend.xxx.chat.community.service.CommunityAccessPolicy;
 import backend.xxx.chat.message.dto.*;
 import backend.xxx.chat.message.model.*;
 import backend.xxx.chat.message.repository.MessageAttachmentRepository;
@@ -57,6 +58,7 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository conversationParticipantRepository;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final CommunityAccessPolicy communityAccessPolicy;
     private final ConversationParticipantCacheService conversationParticipantCacheService;
     private final MessageMapper messageMapper;
     private final MessagePinMapper messagePinMapper;
@@ -70,14 +72,18 @@ public class MessageService {
 
     @Transactional(readOnly = true)
     public MessageHistoryResponse getHistory(String currentUsername, Long conversationId, Short limit, String cursor) {
-        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        User currentUser = currentUsername == null ? null : userLookupService.getCurrentUser(currentUsername);
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(
                         () -> new NotFoundException("conversation.not.found")
                 );
 
-        conversationAccessPolicy.assertCanReadConversation(conversation.getId(), currentUser.getId());
+        if (currentUser == null) {
+            communityAccessPolicy.requireGuestReadableConversation(conversation.getId());
+        } else {
+            conversationAccessPolicy.assertCanReadConversation(conversation.getId(), currentUser.getId());
+        }
 
         int pageLimit = messageValidator.normalizeLimit(
                 limit,
@@ -135,6 +141,7 @@ public class MessageService {
         List<ConversationParticipant> participants =
                 conversationAccessPolicy.requireParticipants(conversation.getId());
         conversationAccessPolicy.assertCanSendMessage(currentUser, participants);
+        communityAccessPolicy.requireCanPostToConversation(conversation.getId(), currentUser.getId());
 
         Message existingMessage = messageRepository.findByConversationIdAndClientMessageIdWithSender(
                         conversation.getId(),
@@ -494,3 +501,4 @@ public class MessageService {
     ) {
     }
 }
+

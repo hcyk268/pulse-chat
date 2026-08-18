@@ -1,7 +1,10 @@
 package backend.xxx.chat.message.service;
 
+import java.util.Map;
+
 import backend.xxx.chat.common.exception.NotFoundException;
 import backend.xxx.chat.conversation.service.ConversationAccessPolicy;
+import backend.xxx.chat.conversation.service.ConversationRealtimeNotifier;
 import backend.xxx.chat.message.dto.MessageReactionRequest;
 import backend.xxx.chat.message.dto.MessageReactionResponse;
 import backend.xxx.chat.message.dto.MessageReactionsResponse;
@@ -10,6 +13,7 @@ import backend.xxx.chat.message.model.MessageReaction;
 import backend.xxx.chat.message.model.MessageReactionEmoji;
 import backend.xxx.chat.message.repository.MessageReactionRepository;
 import backend.xxx.chat.message.repository.MessageRepository;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,7 @@ public class MessageReactionService {
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final MessageReactionMapper messageReactionMapper;
     private final MessageValidator messageValidator;
+    private final ConversationRealtimeNotifier conversationRealtimeNotifier;
 
     @Transactional
     public ReactMessageResult reactMessage(
@@ -51,6 +56,7 @@ public class MessageReactionService {
         MessageReaction savedReaction = messageReactionRepository.saveAndFlush(
                 MessageReaction.create(message, currentUser, request.emoji())
         );
+        notifyReactionUpdated(message);
 
         return new ReactMessageResult(messageReactionMapper.toResponse(savedReaction), true);
     }
@@ -67,9 +73,15 @@ public class MessageReactionService {
         Message message = getMessage(messageId);
         conversationAccessPolicy.requireActiveParticipant(message.getConversation().getId(), currentUser.getId());
 
-        messageReactionRepository
+        MessageReaction existingReaction = messageReactionRepository
                 .findByMessageIdAndUserIdAndEmojiWithDetails(messageId, currentUser.getId(), emoji)
-                .ifPresent(messageReactionRepository::delete);
+                .orElse(null);
+        if (existingReaction == null) {
+            return;
+        }
+
+        messageReactionRepository.delete(existingReaction);
+        notifyReactionUpdated(message);
     }
 
     @Transactional(readOnly = true)
@@ -86,6 +98,15 @@ public class MessageReactionService {
                 currentUser.getId()
         );
     }
+
+    private void notifyReactionUpdated(Message message) {
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                message.getConversation().getId(),
+                RealtimeEventType.MESSAGE_REACTION_UPDATED,
+                Map.of("messageId", message.getId())
+        );
+    }
+
 
     private Message getMessage(Long messageId) {
         return messageRepository.findByIdWithConversationAndSender(messageId)

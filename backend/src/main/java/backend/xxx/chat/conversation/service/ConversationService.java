@@ -19,6 +19,7 @@ import backend.xxx.chat.conversation.model.ConversationType;
 import backend.xxx.chat.conversation.model.ParticipantRole;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
 import backend.xxx.chat.conversation.repository.ConversationRepository;
+import backend.xxx.chat.realtime.model.RealtimeEventType;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.repository.UserRepository;
 import backend.xxx.chat.user.service.UserLookupService;
@@ -43,6 +44,7 @@ public class ConversationService {
     private final ConversationResponseBuilder conversationResponseBuilder;
     private final ConversationAccessPolicy conversationAccessPolicy;
     private final ConversationParticipantCacheService conversationParticipantCacheService;
+    private final ConversationRealtimeNotifier conversationRealtimeNotifier;
     private final ConversationValidator conversationValidator;
     private final CursorCodec cursorCodec;
 
@@ -87,6 +89,11 @@ public class ConversationService {
                 .toList());
         conversationParticipantRepository.saveAll(participants);
 
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversation.getId(),
+                RealtimeEventType.GROUP_CREATED,
+                Map.of("createdByUserId", currentUser.getId())
+        );
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -131,6 +138,11 @@ public class ConversationService {
             conversationParticipantRepository.saveAll(newParticipants);
         }
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_MEMBER_ADDED,
+                Map.of("affectedUserIds", invitedUsers.stream().map(User::getId).toList())
+        );
 
         return buildConversationDetailResponse(conversation, currentUser);
     }
@@ -145,6 +157,11 @@ public class ConversationService {
 
         participant.acceptInvitation();
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_MEMBER_ADDED,
+                Map.of("affectedUserId", currentUser.getId())
+        );
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -159,6 +176,11 @@ public class ConversationService {
         participant.markLeft(Instant.now());
         participant.hideFromList();
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_MEMBER_REMOVED,
+                Map.of("affectedUserId", currentUser.getId())
+        );
     }
 
     @Transactional
@@ -179,6 +201,11 @@ public class ConversationService {
         targetParticipant.markLeft(Instant.now());
         targetParticipant.hideFromList();
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_MEMBER_REMOVED,
+                Map.of("affectedUserId", memberId)
+        );
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -195,6 +222,11 @@ public class ConversationService {
             promoteNextOwnerIfNeeded(conversationId, currentUser.getId());
         }
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_MEMBER_REMOVED,
+                Map.of("affectedUserId", currentUser.getId())
+        );
     }
 
     @Transactional
@@ -215,6 +247,11 @@ public class ConversationService {
                 : conversationValidator.normalizeOptionalText(request.avatarUrl());
 
         conversation.updateProfile(name, avatarUrl);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_UPDATED,
+                Map.of("updatedByUserId", currentUser.getId())
+        );
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -238,6 +275,11 @@ public class ConversationService {
 
         targetParticipant.changeRole(request.role());
         evictParticipantSnapshotsAfterCommit(conversationId);
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversationId,
+                RealtimeEventType.GROUP_UPDATED,
+                Map.of("affectedUserId", memberId)
+        );
         return buildConversationDetailResponse(conversation, currentUser);
     }
 
@@ -270,6 +312,11 @@ public class ConversationService {
                 ConversationParticipant.create(conversation, targetUser, false)
         ));
 
+        conversationRealtimeNotifier.notifyParticipantsAfterCommit(
+                conversation.getId(),
+                RealtimeEventType.CONVERSATION_UPDATED,
+                Map.of("created", true)
+        );
         return new CreateOrOpenDirectConversationResult(
                 conversationResponseBuilder.buildDirectConversationResponse(conversation, currentUser, targetUser),
                 true

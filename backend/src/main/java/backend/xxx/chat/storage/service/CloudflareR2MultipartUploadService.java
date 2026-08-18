@@ -31,7 +31,6 @@ import backend.xxx.chat.storage.repository.UploadedAssetRepository;
 import backend.xxx.chat.user.model.User;
 import backend.xxx.chat.user.service.UserLookupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -49,7 +48,6 @@ import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignReque
 
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "app.storage.r2", name = "enabled", havingValue = "true")
 public class CloudflareR2MultipartUploadService implements MultipartUploadService {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.BASIC_ISO_DATE;

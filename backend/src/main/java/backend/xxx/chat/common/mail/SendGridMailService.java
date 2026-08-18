@@ -15,13 +15,11 @@ import com.sendgrid.helpers.mail.objects.Content;
 import com.sendgrid.helpers.mail.objects.Email;
 import com.sendgrid.helpers.mail.objects.Personalization;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
 @Service
-@ConditionalOnProperty(prefix = "app.mail.sendgrid", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class SendGridMailService implements MailService {
 

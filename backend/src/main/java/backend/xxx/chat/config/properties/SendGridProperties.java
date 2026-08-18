@@ -4,7 +4,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.mail.sendgrid")
 public record SendGridProperties(
-        boolean enabled,
         String apiKey,
         String fromEmail,
         String fromName,

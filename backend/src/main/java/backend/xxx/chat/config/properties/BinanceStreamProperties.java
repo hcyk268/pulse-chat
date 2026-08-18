@@ -15,8 +15,6 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.market.stream")
 public class BinanceStreamProperties {
 
-    private boolean enabled = true;
-
     private String baseUrl = "wss://stream.binance.com:9443/ws";
 
     private String restBaseUrl = "https://api.binance.com";

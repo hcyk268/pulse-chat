@@ -150,4 +150,17 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("deliveredAt") Instant deliveredAt
     );
 
+    @Query("""
+            from Message message
+            join fetch message.sender
+            where message.conversation.id = :conversationId
+                and message.deletedAt is null
+                and lower(coalesce(message.content, '')) like lower(concat('%', :keyword, '%')) escape '\\'
+            order by message.createdAt desc, message.id desc
+            """)
+    List<Message> searchByConversationIdAndKeyword(
+            @Param("conversationId") Long conversationId,
+            @Param("keyword") String keyword,
+            Pageable pageable
+    );
 }

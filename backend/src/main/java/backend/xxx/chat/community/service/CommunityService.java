@@ -122,7 +122,7 @@ public class CommunityService {
             String tagSlug,
             String search
     ) {
-        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        User currentUser = currentUsername == null ? null : userLookupService.getCurrentUser(currentUsername);
         int pageLimit = communityValidator.normalizeLimit(limit);
         String normalizedCategorySlug = communityValidator.normalizeOptionalSlug(categorySlug);
         String normalizedTagSlug = communityValidator.normalizeOptionalSlug(tagSlug);
@@ -130,6 +130,7 @@ public class CommunityService {
 
         List<Community> communities = communityRepository.findDiscoverable(
                 CommunityStatus.ACTIVE,
+                currentUser == null ? CommunityVisibility.PUBLIC : null,
                 normalizedCategorySlug,
                 normalizedTagSlug,
                 searchPattern,
@@ -145,7 +146,7 @@ public class CommunityService {
             key = "T(backend.xxx.chat.community.service.CommunityService).detailCacheKey(#currentUsername, #slug)"
     )
     public CommunityDetailResponse getCommunityDetail(String currentUsername, String slug) {
-        User currentUser = userLookupService.getCurrentUser(currentUsername);
+        User currentUser = currentUsername == null ? null : userLookupService.getCurrentUser(currentUsername);
         Community community = communityAccessPolicy.requireCommunityBySlug(slug);
         return communityResponseBuilder.buildDetail(community, currentUser);
     }

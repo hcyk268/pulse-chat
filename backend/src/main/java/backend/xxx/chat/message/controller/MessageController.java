@@ -37,7 +37,7 @@ public class MessageController {
             @Min(1) @Max(50) @RequestParam(name = "limit", required = false, defaultValue = "20") Short limit,
             @RequestParam(name = "cursor", required = false) String cursor
     ) {
-        return new ResponseData<>(true, "message.history.success", messageService.getHistory(currentUserProvider.getCurrentUsername(), conversationId, limit, cursor));
+        return new ResponseData<>(true, "message.history.success", messageService.getHistory(currentUserProvider.getCurrentUsernameOrNull(), conversationId, limit, cursor));
     }
 
     @Operation(summary = "Send message")

@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import backend.xxx.chat.community.model.Community;
 import backend.xxx.chat.community.model.CommunityStatus;
+import backend.xxx.chat.community.model.CommunityVisibility;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -51,6 +52,7 @@ public interface CommunityRepository extends JpaRepository<Community, Long> {
             left join fetch community.coverAsset
             left join fetch community.defaultChannel
             where community.status = :status
+                and (:visibility is null or community.visibility = :visibility)
                 and (:categorySlug is null or category.slug = :categorySlug)
                 and (:tagSlug is null or exists (
                     select 1
@@ -67,6 +69,7 @@ public interface CommunityRepository extends JpaRepository<Community, Long> {
             """)
     List<Community> findDiscoverable(
             @Param("status") CommunityStatus status,
+            @Param("visibility") CommunityVisibility visibility,
             @Param("categorySlug") String categorySlug,
             @Param("tagSlug") String tagSlug,
             @Param("searchPattern") String searchPattern,

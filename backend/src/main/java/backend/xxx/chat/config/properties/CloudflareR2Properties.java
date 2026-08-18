@@ -8,7 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.storage.r2")
 public record CloudflareR2Properties(
-        boolean enabled,
         String accountId,
         String accessKeyId,
         String secretAccessKey,

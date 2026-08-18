@@ -65,7 +65,7 @@ public class CommunityController {
             @RequestParam(name = "q", required = false) String search
     ) {
         return new ResponseData<>(true, "community.list.success", communityService.discoverCommunities(
-                currentUserProvider.getCurrentUsername(),
+                currentUserProvider.getCurrentUsernameOrNull(),
                 limit,
                 categorySlug,
                 tagSlug,
@@ -89,7 +89,7 @@ public class CommunityController {
     @GetMapping("/communities/{slug}")
     public ResponseData<CommunityDetailResponse> getCommunityDetail(@PathVariable String slug) {
         return new ResponseData<>(true, "community.detail.success", communityService.getCommunityDetail(
-                currentUserProvider.getCurrentUsername(),
+                currentUserProvider.getCurrentUsernameOrNull(),
                 slug
         ));
     }

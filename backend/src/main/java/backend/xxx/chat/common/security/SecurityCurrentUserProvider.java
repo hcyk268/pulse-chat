@@ -11,12 +11,21 @@ public class SecurityCurrentUserProvider implements CurrentUserProvider {
 
     @Override
     public String getCurrentUsername() {
+        String username = getCurrentUsernameOrNull();
+        if (username == null) {
+            throw new UnauthorizedException("auth.unauthorized");
+        }
+        return username;
+    }
+
+    @Override
+    public String getCurrentUsernameOrNull() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || authentication instanceof AnonymousAuthenticationToken) {
-            throw new UnauthorizedException("auth.unauthorized");
+            return null;
         }
 
         return authentication.getName();
