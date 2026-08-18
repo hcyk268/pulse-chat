@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -33,12 +32,6 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 
 @Slf4j
 @Component
-@ConditionalOnProperty(
-        prefix = "app.market.stream",
-        name = "enabled",
-        havingValue = "true",
-        matchIfMissing = true
-)
 public class BinanceMarketStreamService {
 
     public static final String BINANCE_EXCHANGE = "BINANCE";

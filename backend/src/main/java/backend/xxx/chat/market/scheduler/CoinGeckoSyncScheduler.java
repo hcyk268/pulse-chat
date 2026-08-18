@@ -4,19 +4,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-        prefix = "app.market.sync",
-        name = "enabled",
-        havingValue = "true",
-        matchIfMissing = true
-)
 public class CoinGeckoSyncScheduler {
 
     private final CoinGeckoSyncService coinGeckoSyncService;

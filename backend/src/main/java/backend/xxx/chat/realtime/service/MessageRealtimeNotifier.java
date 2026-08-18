@@ -1,5 +1,6 @@
 package backend.xxx.chat.realtime.service;
 
+import backend.xxx.chat.community.service.CommunityAccessPolicy;
 import backend.xxx.chat.conversation.dto.ConversationResponse;
 import backend.xxx.chat.conversation.model.ConversationParticipant;
 import backend.xxx.chat.conversation.repository.ConversationParticipantRepository;
@@ -50,6 +51,7 @@ public class MessageRealtimeNotifier {
     private final MessagePinMapper messagePinMapper;
     private final ConversationResponseBuilder conversationResponseBuilder;
     private final ConversationAccessPolicy conversationAccessPolicy;
+    private final CommunityAccessPolicy communityAccessPolicy;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Transactional(readOnly = true)
@@ -72,6 +74,8 @@ public class MessageRealtimeNotifier {
                 );
 
         MessageCreatedEventData messageData = new MessageCreatedEventData(messageResponse);
+
+        sendToPublicCommunity(outboxEventId, conversationId, RealtimeEventType.MESSAGE_CREATED, messageData);
 
         for (ConversationParticipant participant : participants) {
             String username = participant.getUser().getUsername();
@@ -108,6 +112,7 @@ public class MessageRealtimeNotifier {
         MessageUpdatedEventData messageData = new MessageUpdatedEventData(
                 messageMapper.toResponse(message, attachmentsByMessageId)
         );
+        sendToPublicCommunity(outboxEventId, conversationId, RealtimeEventType.MESSAGE_UPDATED, messageData);
 
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
@@ -158,6 +163,7 @@ public class MessageRealtimeNotifier {
         MessageDeletedEventData messageData = new MessageDeletedEventData(
                 messageMapper.toResponse(message, attachmentsByMessageId)
         );
+        sendToPublicCommunity(outboxEventId, conversationId, RealtimeEventType.MESSAGE_DELETED, messageData);
 
         List<ConversationParticipant> participants =
                 findActiveParticipants(conversationId);
@@ -270,6 +276,23 @@ public class MessageRealtimeNotifier {
         sendToConversationParticipants(outboxEventId, participants, conversationId, RealtimeEventType.MESSAGE_UNPINNED, data);
     }
 
+    private void sendToPublicCommunity(
+            Long outboxEventId,
+            Long conversationId,
+            RealtimeEventType eventType,
+            Object data
+    ) {
+        if (!communityAccessPolicy.isGuestReadableConversation(conversationId)) {
+            return;
+        }
+
+        realtimeEventPublisher.sendToTopic(
+                "/topic/community/conversations/" + conversationId,
+                buildOutboxEventId(outboxEventId, eventType),
+                eventType,
+                data
+        );
+    }
 
     private Set<Long> collectMessageAndReplyIds(Collection<Message> messages) {
         Set<Long> messageIds = messages.stream()

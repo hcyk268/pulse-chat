@@ -6,6 +6,7 @@ import backend.xxx.chat.community.model.Community;
 import backend.xxx.chat.community.model.CommunityMember;
 import backend.xxx.chat.community.model.CommunityMemberId;
 import backend.xxx.chat.community.model.CommunityVisibility;
+import backend.xxx.chat.community.repository.CommunityChannelRepository;
 import backend.xxx.chat.community.repository.CommunityMemberRepository;
 import backend.xxx.chat.community.repository.CommunityRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 public class CommunityAccessPolicy {
 
     private final CommunityRepository communityRepository;
+    private final CommunityChannelRepository communityChannelRepository;
     private final CommunityMemberRepository communityMemberRepository;
     private final CommunityValidator communityValidator;
 
@@ -38,6 +40,12 @@ public class CommunityAccessPolicy {
     public void requireCanViewCommunity(Community community, CommunityMember membership) {
         if (community.getVisibility() == CommunityVisibility.PRIVATE
                 && (membership == null || !membership.isActive())) {
+            throw new ForbiddenException("community.private.member.required");
+        }
+    }
+
+    public void requireGuestCanViewCommunity(Community community) {
+        if (community.getVisibility() != CommunityVisibility.PUBLIC) {
             throw new ForbiddenException("community.private.member.required");
         }
     }
@@ -65,5 +73,31 @@ public class CommunityAccessPolicy {
             throw new ForbiddenException("community.channel.manager.required");
         }
         return member;
+    }
+
+    public void requireCanPostToConversation(Long conversationId, Long userId) {
+        communityChannelRepository.findByConversationIdWithCommunity(conversationId)
+                .filter(channel -> channel.isActive() && channel.isReadOnly())
+                .ifPresent(channel -> requireChannelManager(channel.getCommunity().getId(), userId));
+    }
+
+    public boolean isGuestReadableConversation(Long conversationId) {
+        if (conversationId == null) {
+            return false;
+        }
+
+        return communityChannelRepository.findByConversationIdWithCommunity(conversationId)
+                .filter(channel -> channel.isActive() && channel.getCommunity().isActive())
+                .map(channel -> channel.getCommunity().getVisibility() == CommunityVisibility.PUBLIC)
+                .orElse(false);
+    }
+
+    public void requireGuestReadableConversation(Long conversationId) {
+        Community community = communityChannelRepository.findByConversationIdWithCommunity(conversationId)
+                .filter(channel -> channel.isActive() && channel.getCommunity().isActive())
+                .map(channel -> channel.getCommunity())
+                .orElseThrow(() -> new ForbiddenException("community.private.member.required"));
+
+        requireGuestCanViewCommunity(community);
     }
 }

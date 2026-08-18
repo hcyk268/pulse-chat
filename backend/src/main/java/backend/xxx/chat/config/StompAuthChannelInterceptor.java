@@ -5,6 +5,7 @@ import java.util.Set;
 
 import backend.xxx.chat.auth.service.CustomUserDetailsService;
 import backend.xxx.chat.auth.service.JwtService;
+import backend.xxx.chat.community.service.CommunityAccessPolicy;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -31,9 +32,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             "/user/queue/errors"
     );
     private static final String PUBLIC_MARKET_TOPIC_PREFIX = "/topic/market/";
+    private static final String PUBLIC_COMMUNITY_TOPIC_PREFIX = "/topic/community/conversations/";
 
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final CommunityAccessPolicy communityAccessPolicy;
 
     @Override
     public Message<?> preSend(@NonNull Message<?> message, @NonNull MessageChannel channel) {
@@ -76,7 +79,25 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     private boolean isPublicDestination(String destination) {
-        return destination != null && destination.startsWith(PUBLIC_MARKET_TOPIC_PREFIX);
+        if (destination == null) {
+            return false;
+        }
+        if (destination.startsWith(PUBLIC_MARKET_TOPIC_PREFIX)) {
+            return true;
+        }
+        if (!destination.startsWith(PUBLIC_COMMUNITY_TOPIC_PREFIX)) {
+            return false;
+        }
+
+        String conversationIdValue = destination.substring(PUBLIC_COMMUNITY_TOPIC_PREFIX.length());
+        if (conversationIdValue.isBlank() || conversationIdValue.contains("/")) {
+            return false;
+        }
+        try {
+            return communityAccessPolicy.isGuestReadableConversation(Long.valueOf(conversationIdValue));
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private void authenticateConnectIfPresent(StompHeaderAccessor accessor) {

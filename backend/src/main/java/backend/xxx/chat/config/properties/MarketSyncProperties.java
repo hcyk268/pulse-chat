@@ -9,8 +9,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.market.sync")
 public class MarketSyncProperties {
 
-    private boolean enabled = true;
-
     private long marketsDelayMs = 1_800_000;
 
     private long trendingDelayMs = 3_600_000;

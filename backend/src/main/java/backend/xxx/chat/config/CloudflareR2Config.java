@@ -2,7 +2,6 @@ package backend.xxx.chat.config;
 
 import backend.xxx.chat.common.exception.ValidationException;
 import backend.xxx.chat.config.properties.CloudflareR2Properties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,7 +16,6 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 public class CloudflareR2Config {
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.storage.r2", name = "enabled", havingValue = "true")
     public S3Presigner s3Presigner(CloudflareR2Properties properties) {
         validateRequiredProperties(properties);
 
@@ -29,7 +27,6 @@ public class CloudflareR2Config {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.storage.r2", name = "enabled", havingValue = "true")
     public S3Client s3Client(CloudflareR2Properties properties) {
         validateRequiredProperties(properties);
 
