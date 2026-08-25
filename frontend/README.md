@@ -10,23 +10,18 @@ React 18 frontend built with Vite. The production build intentionally fails when
 | Market, coin detail, watchlist | `/api/v1/market/**` plus the `/topic/market/**` STOMP topics |
 | Chat workspace | `/api/v1/conversations`, `/api/v1/messages`, `/user/queue/events` |
 | Auth, profile | `/api/v1/auth/**`, `/api/v1/users/me` (access tokens refresh automatically) |
-| Home feed, communities, notifications | Mock data in `src/data/traderHubData.js` (no backend endpoint yet) |
-
-Mock-backed screens keep their state in Redux slices, so interactions such as
-posting, joining a group, or marking a notification read behave like the real
-thing and can be swapped to an API without touching the components.
+| Communities | `/api/v1/community/**` plus its realtime events |
+| Notifications | `/api/v1/notifications/**` plus `/user/queue/events` |
+| Home feed | Local sample content in `src/data/traderHubData.js` |
 
 ## Admin console
 
-`/admin` holds an operator console: overview, users, moderation queue, communities
-and an audit log. The backend exposes no admin endpoints, so it runs entirely on
-`src/data/adminMockData.js` through `adminSlice` — actions such as suspending a
-user or resolving a report mutate local state and append an audit entry, which is
-what the real flow would do. The shell says "sample data" on screen so it can
-never be mistaken for live operations.
+The operator console uses local sample data because the backend exposes no admin
+contract or authorization role. It is excluded from routes and navigation by
+default. Set `VITE_ENABLE_ADMIN_DEMO=true` only for an explicit demo build.
 
-Row shapes match what an API would plausibly return, so wiring it up later means
-replacing the reducers with thunks, not rewriting the tables.
+The mock pages remain available for UI development, but must not be enabled in a
+normal production deployment.
 
 ## Quality gates in detail
 
@@ -47,8 +42,8 @@ The chosen language is stored under `chatapp.locale` and sent to the backend as
 `Accept-Language`, so server messages come back from `messages_{en,vi}.properties`
 in the same language. Numbers, dates and relative times follow the locale too.
 
-Mock **content** (post bodies, news, community descriptions) stays in English:
-it stands in for user-generated content, which is never translated.
+Sample **content** (post bodies and news) stays in English: it stands in for
+user-generated content, which is never translated.
 
 ## Local development
 
@@ -75,6 +70,7 @@ endpoints:
 ```bash
 VITE_API_BASE_URL=https://api.example.com \
 VITE_WS_URL=wss://api.example.com/ws \
+VITE_APP_ORIGIN=https://app.example.com \
 npm run check
 ```
 
@@ -83,6 +79,7 @@ On PowerShell:
 ```powershell
 $env:VITE_API_BASE_URL = "https://api.example.com"
 $env:VITE_WS_URL = "wss://api.example.com/ws"
+$env:VITE_APP_ORIGIN = "https://app.example.com"
 npm run check
 ```
 
@@ -92,6 +89,8 @@ npm run check
 docker build \
   --build-arg VITE_API_BASE_URL=https://api.example.com \
   --build-arg VITE_WS_URL=wss://api.example.com/ws \
+  --build-arg VITE_APP_ORIGIN=https://app.example.com \
+  --build-arg VITE_ENABLE_ADMIN_DEMO=false \
   -t pulse-chat-frontend .
 ```
 

@@ -1,4 +1,4 @@
-﻿package backend.xxx.chat.ai.memory;
+package backend.xxx.chat.ai.memory;
 
 import backend.xxx.chat.ai.client.AiChatMessage;
 import backend.xxx.chat.ai.orchestration.AiExecutionContext;

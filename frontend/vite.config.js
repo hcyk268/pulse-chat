@@ -9,6 +9,7 @@ export default defineConfig(({ command, mode, isSsrBuild }) => {
     buildRuntimeConfig({
       apiBaseUrl: env.VITE_API_BASE_URL,
       websocketUrl: env.VITE_WS_URL,
+      enableAdminDemo: env.VITE_ENABLE_ADMIN_DEMO === "true",
       appOrigin: "https://chat.example.com",
       isProduction: true,
     });

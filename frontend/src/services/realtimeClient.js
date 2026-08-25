@@ -1,14 +1,19 @@
 import { Client } from "@stomp/stompjs";
+import { refreshAuthSession } from "../api/httpClient.js";
 import { runtimeConfig } from "../config/runtimeConfig.js";
-import { getAccessToken } from "../utils/authStorage.js";
+import { getFreshAccessToken } from "../utils/authStorage.js";
 
 const IDLE_DEACTIVATE_DELAY = 250;
+const PUBLIC_TOPIC_PREFIXES = ["/topic/market/", "/topic/community/"];
 
 const channels = new Map();
 const statusListeners = new Set();
+const pendingPublishes = new Map();
+const MAX_PENDING_PUBLISHES = 200;
 let client;
 let status = "idle";
 let deactivateTimer;
+let authenticatedConnection = false;
 
 function emitStatus(nextStatus) {
   status = nextStatus;
@@ -23,8 +28,20 @@ function parseEnvelope(message) {
   }
 }
 
+function isPublicTopic(destination) {
+  return PUBLIC_TOPIC_PREFIXES.some((prefix) => destination?.startsWith(prefix));
+}
+
+function needsAuthenticatedConnection(destination) {
+  return !isPublicTopic(destination);
+}
+
+function canUseDestination(destination) {
+  return !needsAuthenticatedConnection(destination) || authenticatedConnection;
+}
+
 function attachChannel(destination, channel) {
-  if (!client?.connected || channel.subscription) return;
+  if (!client?.connected || channel.subscription || !canUseDestination(destination)) return;
 
   channel.subscription = client.subscribe(destination, (message) => {
     const envelope = parseEnvelope(message);
@@ -39,6 +56,48 @@ function detachChannels() {
   });
 }
 
+function hasAuthenticatedRealtimeWork() {
+  if (pendingPublishes.size > 0) return true;
+
+  return [...channels.keys()].some(needsAuthenticatedConnection);
+}
+
+async function resolveConnectHeaders() {
+  let accessToken = getFreshAccessToken();
+
+  if (!accessToken && hasAuthenticatedRealtimeWork()) {
+    const session = await refreshAuthSession().catch(() => null);
+    accessToken = session?.accessToken ?? getFreshAccessToken();
+  }
+
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+}
+
+function publishPendingMessages() {
+  if (!authenticatedConnection) return;
+
+  pendingPublishes.forEach((body, destination) => {
+    client.publish({ destination, body });
+  });
+  pendingPublishes.clear();
+}
+
+function reconnectActiveClient() {
+  if (!client?.active) return;
+
+  detachChannels();
+  authenticatedConnection = false;
+
+  void client.deactivate().then(() => {
+    if (channels.size > 0) {
+      client.activate();
+      return;
+    }
+
+    emitStatus("idle");
+  });
+}
+
 function ensureClient() {
   if (client) return client;
 
@@ -49,17 +108,22 @@ function ensureClient() {
     heartbeatOutgoing: 10000,
     connectionTimeout: 10000,
     beforeConnect: async () => {
-      const accessToken = getAccessToken();
-      client.connectHeaders = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      client.connectHeaders = await resolveConnectHeaders();
       emitStatus("connecting");
     },
     onConnect: () => {
+      authenticatedConnection = Boolean(client.connectHeaders?.Authorization);
       emitStatus("connected");
       channels.forEach((channel, destination) => attachChannel(destination, channel));
+      publishPendingMessages();
     },
-    onDisconnect: () => emitStatus("disconnected"),
+    onDisconnect: () => {
+      authenticatedConnection = false;
+      emitStatus("disconnected");
+    },
     onWebSocketClose: () => {
       detachChannels();
+      authenticatedConnection = false;
       emitStatus("disconnected");
     },
     onStompError: () => emitStatus("error"),
@@ -85,7 +149,11 @@ export function subscribeRealtimeTopic(destination, listener) {
 
   channel.listeners.add(listener);
   const stompClient = ensureClient();
-  attachChannel(destination, channel);
+  if (stompClient.connected && needsAuthenticatedConnection(destination) && !authenticatedConnection) {
+    reconnectActiveClient();
+  } else {
+    attachChannel(destination, channel);
+  }
   if (!stompClient.active) stompClient.activate();
 
   return () => {
@@ -108,10 +176,26 @@ export function subscribeRealtimeTopic(destination, listener) {
   };
 }
 
-export function publishRealtime(destination, body) {
-  if (!destination || !client?.connected) return false;
+export function publishRealtime(destination, body, { queueIfDisconnected = false } = {}) {
+  if (!destination) return false;
+  const serializedBody = JSON.stringify(body ?? {});
 
-  client.publish({ destination, body: JSON.stringify(body ?? {}) });
+  if (!client?.connected || (needsAuthenticatedConnection(destination) && !authenticatedConnection)) {
+    if (queueIfDisconnected) {
+      if (pendingPublishes.size >= MAX_PENDING_PUBLISHES) {
+        pendingPublishes.delete(pendingPublishes.keys().next().value);
+      }
+      pendingPublishes.set(destination, serializedBody);
+    }
+
+    if (client?.connected && needsAuthenticatedConnection(destination) && !authenticatedConnection) {
+      reconnectActiveClient();
+    }
+
+    return false;
+  }
+
+  client.publish({ destination, body: serializedBody });
   return true;
 }
 
@@ -126,9 +210,11 @@ export function observeRealtimeStatus(listener) {
  * the identity it was opened with. Sign-in and sign-out must therefore reconnect.
  */
 export function resetRealtimeConnection() {
+  pendingPublishes.clear();
   if (!client) return;
 
   detachChannels();
+  authenticatedConnection = false;
 
   if (!client.active) return;
 

@@ -47,3 +47,22 @@ export function isAuthSessionUsable(session, now = Date.now()) {
   // Older sessions did not store expiry metadata; the backend verification remains authoritative.
   return true;
 }
+
+export function isAccessTokenUsable(session, now = Date.now(), expirySkewMs = 30_000) {
+  if (!session?.accessToken) return false;
+
+  const skewMs = Math.max(0, Number(expirySkewMs) || 0);
+  const explicitAccessExpiry = parseTimestamp(session.accessTokenExpiresAt);
+  if (explicitAccessExpiry !== null) {
+    return explicitAccessExpiry - skewMs > now;
+  }
+
+  const savedAt = parseTimestamp(session.savedAt);
+  const accessDuration = Number(session.accessTokenExpiresInMs);
+  if (savedAt !== null && Number.isFinite(accessDuration) && accessDuration > 0) {
+    return savedAt + accessDuration - skewMs > now;
+  }
+
+  // Older sessions did not store access-token expiry metadata.
+  return true;
+}

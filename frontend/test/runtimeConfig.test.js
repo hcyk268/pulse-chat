@@ -48,5 +48,15 @@ test("normalizes production API and realtime endpoints", () => {
     absoluteApiBaseUrl: "https://api.example.com",
     realtimeUrl: "wss://realtime.example.com/socket",
     realtimeHost: "realtime.example.com",
+    enableAdminDemo: false,
   });
+});
+
+test("enables the mock admin console only through an explicit flag", () => {
+  const config = buildRuntimeConfig({
+    appOrigin: "http://localhost:5173",
+    enableAdminDemo: true,
+  });
+
+  assert.equal(config.enableAdminDemo, true);
 });

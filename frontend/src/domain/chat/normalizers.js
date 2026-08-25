@@ -1,4 +1,4 @@
-﻿import { isSameId } from "../../utils/chat.js";
+import { isSameId } from "../../utils/chat.js";
 
 export const DEFAULT_USER_ACCENT = "from-cyan-300 to-emerald-400";
 
@@ -142,6 +142,10 @@ export function normalizeMessage(message) {
     deletedAt: message.deletedAt,
     deliveredAt: message.deliveredAt,
     readAt: message.readAt,
+    pinned: Boolean(message.pinned),
+    pin: message.pin ?? null,
+    reactions: message.reactions ?? [],
+    readReceipts: message.readReceipts ?? [],
   };
 }
 
