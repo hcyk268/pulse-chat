@@ -1,5 +1,6 @@
 import {
   createStoredAuthSession,
+  isAccessTokenUsable,
   isAuthSessionUsable,
 } from "../domain/auth/session.js";
 
@@ -98,6 +99,11 @@ export function getAuthSession() {
 
 export function getAccessToken() {
   return getAuthSession()?.accessToken ?? null;
+}
+
+export function getFreshAccessToken() {
+  const session = getAuthSession();
+  return isAccessTokenUsable(session) ? session.accessToken : null;
 }
 
 export function getRefreshToken() {

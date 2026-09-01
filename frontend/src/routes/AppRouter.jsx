@@ -2,7 +2,11 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import RequireAuth from "../components/auth/RequireAuth";
 import LoginPage from "../pages/LoginPage";
+import LandingPage from "../pages/LandingPage";
 import NotFoundPage from "../pages/NotFoundPage";
+import { useTranslation } from "../i18n/useTranslation.js";
+
+const ADMIN_DEMO_ENABLED = import.meta.env.VITE_ENABLE_ADMIN_DEMO === "true";
 
 const CHUNK_RELOAD_KEY = "chatapp.chunkReload";
 
@@ -53,9 +57,12 @@ const WatchlistPage = lazyPage(() => import("../pages/WatchlistPage"));
 const CommunityPage = lazyPage(() => import("../pages/CommunityPage"));
 const CommunityDetailPage = lazyPage(() => import("../pages/CommunityDetailPage"));
 const ChatPage = lazyPage(() => import("../pages/ChatPage"));
+const AiPage = lazyPage(() => import("../pages/AiPage"));
 const NotificationPage = lazyPage(() => import("../pages/NotificationPage"));
 const ProfilePage = lazyPage(() => import("../pages/ProfilePage"));
-const AdminOverviewPage = lazyPage(() => import("../pages/admin/AdminOverviewPage"));
+const AdminOverviewPage = ADMIN_DEMO_ENABLED
+  ? lazyPage(() => import("../pages/admin/AdminOverviewPage"))
+  : null;
 const VerifyEmailPage = lazyPage(() =>
   import("../features/auth/AuthActionPages.jsx").then(({ VerifyEmailPage: page }) => ({ default: page })),
 );
@@ -68,15 +75,25 @@ const ResetPasswordPage = lazyPage(() =>
 const ChangePasswordPage = lazyPage(() =>
   import("../features/auth/AuthActionPages.jsx").then(({ ChangePasswordPage: page }) => ({ default: page })),
 );
-const AdminUsersPage = lazyPage(() => import("../pages/admin/AdminUsersPage"));
-const AdminModerationPage = lazyPage(() => import("../pages/admin/AdminModerationPage"));
-const AdminCommunitiesPage = lazyPage(() => import("../pages/admin/AdminCommunitiesPage"));
-const AdminAuditPage = lazyPage(() => import("../pages/admin/AdminAuditPage"));
+const AdminUsersPage = ADMIN_DEMO_ENABLED
+  ? lazyPage(() => import("../pages/admin/AdminUsersPage"))
+  : null;
+const AdminModerationPage = ADMIN_DEMO_ENABLED
+  ? lazyPage(() => import("../pages/admin/AdminModerationPage"))
+  : null;
+const AdminCommunitiesPage = ADMIN_DEMO_ENABLED
+  ? lazyPage(() => import("../pages/admin/AdminCommunitiesPage"))
+  : null;
+const AdminAuditPage = ADMIN_DEMO_ENABLED
+  ? lazyPage(() => import("../pages/admin/AdminAuditPage"))
+  : null;
 
 function RouteFallback() {
+  const { t } = useTranslation();
+
   return (
     <main className="page-shell">
-      <div className="market-page-state">Loading...</div>
+      <div className="market-page-state">{t("common.loading")}</div>
     </main>
   );
 }
@@ -86,28 +103,15 @@ export default function AppRouter() {
     <BrowserRouter>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path="/" element={<Navigate to="/market" replace />} />
-          <Route path="/home" element={<Navigate to="/market" replace />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/home" element={<LandingPage />} />
           <Route path="/market" element={<MarketPage />} />
           <Route path="/coins/:symbol" element={<CoinDetailPage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/community/:slug" element={<CommunityDetailPage />} />
-          <Route
-            path="/watchlist"
-            element={
-              <RequireAuth>
-                <WatchlistPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/chat"
-            element={
-              <RequireAuth>
-                <ChatPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/ai" element={<AiPage />} />
           <Route
             path="/notifications"
             element={
@@ -132,13 +136,13 @@ export default function AppRouter() {
               </RequireAuth>
             }
           />
-          {[
+          {(ADMIN_DEMO_ENABLED ? [
             { path: "/admin", element: <AdminOverviewPage /> },
             { path: "/admin/users", element: <AdminUsersPage /> },
             { path: "/admin/moderation", element: <AdminModerationPage /> },
             { path: "/admin/communities", element: <AdminCommunitiesPage /> },
             { path: "/admin/audit", element: <AdminAuditPage /> },
-          ].map((route) => (
+          ] : []).map((route) => (
             <Route
               key={route.path}
               path={route.path}

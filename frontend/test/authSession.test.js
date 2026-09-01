@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createStoredAuthSession,
+  isAccessTokenUsable,
   isAuthSessionUsable,
 } from "../src/domain/auth/session.js";
 
@@ -35,9 +36,29 @@ test("rejects incomplete or expired sessions", () => {
   assert.equal(isAuthSessionUsable(session, Date.parse("2026-01-01T00:02:00.000Z")), false);
 });
 
+test("detects expired access tokens separately from refresh-token usability", () => {
+  const session = createStoredAuthSession(
+    baseSession,
+    new Date("2026-01-01T00:00:00.000Z"),
+  );
+
+  assert.equal(isAuthSessionUsable(session, Date.parse("2026-01-01T00:01:30.000Z")), true);
+  assert.equal(isAccessTokenUsable(session, Date.parse("2026-01-01T00:00:29.000Z")), true);
+  assert.equal(isAccessTokenUsable(session, Date.parse("2026-01-01T00:00:30.000Z")), false);
+});
+
 test("keeps backward compatibility for sessions without expiry metadata", () => {
   assert.equal(
     isAuthSessionUsable({
+      accessToken: "access",
+      refreshToken: "refresh",
+      user: { id: 1 },
+    }),
+    true,
+  );
+
+  assert.equal(
+    isAccessTokenUsable({
       accessToken: "access",
       refreshToken: "refresh",
       user: { id: 1 },

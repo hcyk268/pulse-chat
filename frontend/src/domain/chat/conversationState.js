@@ -303,3 +303,36 @@ export function applyReadReceiptToList(
     };
   });
 }
+
+export function applyMessagePinToList(conversations, messageId, pin = null) {
+  return conversations.map((conversation) => ({
+    ...conversation,
+    messages: (conversation.messages ?? []).map((message) =>
+      isSameId(message.id, messageId)
+        ? { ...message, pinned: Boolean(pin), pin }
+        : message,
+    ),
+  }));
+}
+
+export function applyMessageReactionsToList(conversations, messageId, reactions) {
+  return conversations.map((conversation) => ({
+    ...conversation,
+    messages: (conversation.messages ?? []).map((message) =>
+      isSameId(message.id, messageId)
+        ? { ...message, reactions: reactions ?? [] }
+        : message,
+    ),
+  }));
+}
+
+export function applyMessageReadReceiptsToList(conversations, messageId, readReceipts) {
+  return conversations.map((conversation) => ({
+    ...conversation,
+    messages: (conversation.messages ?? []).map((message) =>
+      isSameId(message.id, messageId)
+        ? { ...message, readReceipts: readReceipts ?? [] }
+        : message,
+    ),
+  }));
+}

@@ -19,6 +19,7 @@ export function buildRuntimeConfig({
   apiBaseUrl,
   websocketUrl,
   appOrigin,
+  enableAdminDemo = false,
   isProduction = false,
 }) {
   const origin = resolveUrl(appOrigin, "http://localhost", "Application origin");
@@ -58,6 +59,7 @@ export function buildRuntimeConfig({
     absoluteApiBaseUrl: apiBase,
     realtimeUrl: absoluteRealtimeUrl.toString(),
     realtimeHost: absoluteRealtimeUrl.host,
+    enableAdminDemo: Boolean(enableAdminDemo),
   });
 }
 
@@ -66,6 +68,7 @@ const viteEnv = import.meta.env ?? {};
 export const runtimeConfig = buildRuntimeConfig({
   apiBaseUrl: viteEnv.VITE_API_BASE_URL,
   websocketUrl: viteEnv.VITE_WS_URL,
+  enableAdminDemo: viteEnv.VITE_ENABLE_ADMIN_DEMO === "true",
   appOrigin:
     viteEnv.VITE_APP_ORIGIN ??
     (typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"),
